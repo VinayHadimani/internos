@@ -10,7 +10,7 @@ import {
 // ─── Animation Variants ────────────────────────────────────────
 const fadeUp = {
   hidden: { opacity: 0, y: 24 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
 }
 
 const staggerContainer = {
@@ -20,15 +20,15 @@ const staggerContainer = {
 
 const staggerItem = {
   hidden: { opacity: 0, y: 24 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
 }
 
 // ─── Animated Counter ──────────────────────────────────────────
 function AnimatedCounter({ target, suffix = '', prefix = '' }: { target: number; suffix?: string; prefix?: string }) {
   const ref = useRef(null)
-  const isInView = useInView(ref, { once: true, margin: '-20%' })
+  const isInView = useInView(ref, { once: true, amount: 0.5 })
   const motionVal = useMotionValue(0)
-  const spring = useSpring(motionVal, { stiffness: 60, damping: 20 })
+  const spring = useSpring(motionVal, { stiffness: 50, damping: 20 })
   const display = useTransform(spring, (v) => `${prefix}${Math.floor(v).toLocaleString('en-IN')}${suffix}`)
   const [val, setVal] = useState(`${prefix}0${suffix}`)
 
@@ -40,16 +40,14 @@ function AnimatedCounter({ target, suffix = '', prefix = '' }: { target: number;
 
 // ─── Section Wrapper ───────────────────────────────────────────
 function Section({ children, className = '', id }: { children: React.ReactNode; className?: string; id?: string }) {
-  const ref = useRef(null)
-  const isInView = useInView(ref, { once: true, margin: '-20%' })
   const prefersReducedMotion = useReducedMotion()
 
   return (
     <motion.section
-      ref={ref}
       id={id}
       initial={prefersReducedMotion ? 'visible' : 'hidden'}
-      animate={isInView ? 'visible' : 'hidden'}
+      whileInView="visible"
+      viewport={{ once: true, amount: 0.15 }}
       variants={staggerContainer}
       className={className}
     >
@@ -126,24 +124,24 @@ export default function LandingPage() {
   ]
 
   return (
-    <div className="relative min-h-screen bg-[#050505] text-[#F5F5F5] overflow-x-hidden" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="relative min-h-screen bg-[#030303] text-white overflow-x-hidden font-sans">
       {/* Noise overlay */}
       <div
-        className="fixed inset-0 pointer-events-none z-50 opacity-[0.025]"
+        className="fixed inset-0 pointer-events-none z-50 opacity-[0.015]"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E")`,
         }}
       />
 
       {/* Background radial gradient */}
-      <div className="fixed inset-0 pointer-events-none z-0" style={{ background: 'radial-gradient(ellipse at center, #0A0A14 0%, #050505 70%)' }} />
+      <div className="fixed inset-0 pointer-events-none z-0" style={{ background: 'radial-gradient(120% 100% at 50% -10%, #0A1128 0%, #030303 60%, #030303 100%)' }} />
 
       {/* ══════════════ NAVBAR ══════════════ */}
       <motion.nav
         initial={prefersReducedMotion ? {} : { opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="fixed top-0 left-0 right-0 z-40 backdrop-blur-xl bg-black/60 border-b border-[#1F1F1F]"
+        className="fixed top-0 left-0 right-0 z-40 backdrop-blur-2xl bg-[#030303]/70 border-b border-white/[0.05] supports-[backdrop-filter]:bg-black/40"
       >
         <div className="max-w-[1100px] mx-auto px-6 h-[60px] flex items-center justify-between">
           {/* Logo */}
@@ -167,10 +165,10 @@ export default function LandingPage() {
 
           {/* Right buttons */}
           <div className="hidden md:flex items-center gap-3">
-            <button className="text-white text-sm hover:bg-white/5 px-4 py-1.5 rounded-md transition-all duration-150 cursor-pointer">
+            <button className="text-[#A1A1AA] text-sm hover:text-white px-4 py-1.5 transition-colors cursor-pointer">
               Log in
             </button>
-            <button className="bg-[#3B82F6] hover:bg-[#60A5FA] text-black font-semibold text-sm px-4 py-1.5 rounded-md transition-all duration-150 hover:shadow-[0_0_20px_rgba(59,130,246,0.4)] cursor-pointer">
+            <button className="bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] font-medium text-sm px-4 py-2 rounded-lg transition-all duration-200 hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:scale-[1.02] cursor-pointer">
               Get Started Free
             </button>
           </div>
@@ -211,15 +209,15 @@ export default function LandingPage() {
       </motion.nav>
 
       {/* ══════════════ HERO ══════════════ */}
-      <section className="relative min-h-screen flex flex-col items-center justify-center pt-[60px] px-6 overflow-hidden">
+      <section className="relative min-h-screen flex flex-col items-center justify-center pt-[80px] px-6 overflow-hidden">
         {/* Grid pattern */}
-        <div className="absolute inset-0 opacity-40 z-0" style={{ backgroundImage: 'radial-gradient(circle, #1F1F1F 1px, transparent 1px)', backgroundSize: '28px 28px' }} />
+        <div className="absolute inset-0 opacity-[0.15] z-0" style={{ backgroundImage: 'radial-gradient(circle, #555 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
 
         {/* Blue blob */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-blue-500/10 blur-[120px] z-0" style={{ animation: 'float 6s ease-in-out infinite' }} />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-[100%] bg-blue-600/10 blur-[120px] z-0 pointer-events-none" style={{ animation: 'float 8s ease-in-out infinite' }} />
 
         {/* Bottom fade */}
-        <div className="absolute bottom-0 left-0 right-0 h-[200px] z-10" style={{ background: 'linear-gradient(to bottom, transparent, #050505)' }} />
+        <div className="absolute bottom-0 left-0 right-0 h-[250px] z-10 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent, #030303)' }} />
 
         <div className="relative z-20 max-w-[780px] text-center">
           {/* Badge */}
@@ -268,12 +266,12 @@ export default function LandingPage() {
             initial={prefersReducedMotion ? 'visible' : 'hidden'}
             animate="visible"
             transition={{ delay: 0.3 }}
-            className="flex flex-col sm:flex-row gap-3 justify-center"
+            className="flex flex-col sm:flex-row gap-4 justify-center items-center"
           >
-            <button className="bg-[#3B82F6] text-black font-semibold px-6 py-3 rounded-lg text-[15px] hover:bg-[#60A5FA] hover:shadow-[0_0_30px_rgba(59,130,246,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-150 cursor-pointer">
+            <button className="bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium px-8 py-3.5 rounded-xl text-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.25)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_60px_rgba(37,99,235,0.4)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer">
               Tailor My Resume Free →
             </button>
-            <button className="border border-[#2A2A2A] text-white px-6 py-3 rounded-lg text-[15px] hover:border-[#444] hover:bg-white/[0.03] transition-all duration-150 cursor-pointer">
+            <button className="bg-white/5 border border-white/10 text-[#E4E4E7] font-medium px-8 py-3.5 rounded-xl text-[15px] hover:bg-white/10 hover:border-white/20 transition-all duration-300 cursor-pointer backdrop-blur-sm">
               Browse Internships
             </button>
           </motion.div>
@@ -302,13 +300,13 @@ export default function LandingPage() {
             className="mt-12 mx-auto max-w-[480px]"
             style={{ animation: prefersReducedMotion ? 'none' : 'float 4s ease-in-out infinite' }}
           >
-            <div className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-xl p-5 flex items-center gap-4 shadow-[0_20px_60px_rgba(59,130,246,0.1)]">
-              <div className="w-10 h-10 rounded-lg bg-[#1F1F1F] flex items-center justify-center shrink-0">
-                <span className="text-xs text-[#555]">FK</span>
+            <div className="bg-gradient-to-b from-[#111111] to-[#0A0A0A] border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_20px_60px_rgba(37,99,235,0.15)] rounded-2xl p-5 flex items-center gap-4">
+              <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-[#27272A] to-[#18181B] border border-white/10 flex items-center justify-center shrink-0 shadow-inner">
+                <span className="text-xs font-semibold text-white">FK</span>
               </div>
               <div className="text-left flex-1 min-w-0">
-                <p className="text-white text-sm font-medium">Flipkart · Frontend Intern</p>
-                <p className="text-[#555] text-xs">React, TypeScript, Node.js</p>
+                <p className="text-white text-[15px] font-medium tracking-tight">Flipkart · Frontend Intern</p>
+                <p className="text-[#A1A1AA] text-[13px] mt-0.5">React, TypeScript, Node.js</p>
               </div>
               <div className="text-right shrink-0">
                 <p className="text-2xl font-bold text-[#3B82F6]" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
@@ -322,7 +320,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════════ SOCIAL PROOF ══════════════ */}
-      <section className="relative z-10 border-t border-b border-[#1F1F1F] bg-[#080808] py-12">
+      <section className="relative z-10 border-t border-b border-white/[0.05] bg-[#030303] py-16">
         <p className="text-center text-[#444] text-[11px] uppercase tracking-[0.15em] mb-6">
           Trusted by students from
         </p>
@@ -354,14 +352,14 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════════ FEATURES ══════════════ */}
-      <Section id="features" className="py-24 px-6">
+      <Section id="features" className="py-32 px-6">
         <div className="max-w-[1100px] mx-auto">
-          <motion.p variants={staggerItem} className="text-[11px] uppercase tracking-[0.15em] text-[#444] mb-3">FEATURES</motion.p>
-          <motion.h2 variants={staggerItem} className="text-3xl md:text-[36px] font-bold text-white mb-3" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
-            Everything you need to get hired
+          <motion.p variants={staggerItem} className="text-xs uppercase tracking-[0.2em] text-[#A1A1AA] font-semibold mb-3">FEATURES</motion.p>
+          <motion.h2 variants={staggerItem} className="text-3xl md:text-[40px] font-bold text-white mb-4 tracking-tight" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+            Everything you need to get hired.
           </motion.h2>
-          <motion.p variants={staggerItem} className="text-[#666] text-base mb-12">
-            One platform. AI-powered. Built for Indian students.
+          <motion.p variants={staggerItem} className="text-[#A1A1AA] text-lg mb-16 max-w-2xl">
+            Our platform does the heavy lifting so you can focus on building your skills. AI-powered and specifically built for Indian college students.
           </motion.p>
 
           <motion.div variants={staggerContainer} className="grid md:grid-cols-3 gap-4">
@@ -388,14 +386,14 @@ export default function LandingPage() {
               <motion.div
                 key={i}
                 variants={staggerItem}
-                className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-xl p-6 hover:border-[#2A2A2A] hover:bg-[#111] hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(59,130,246,0.05)] transition-all duration-200 group"
+                className="bg-gradient-to-b from-[#0E0E11] to-[#050505] border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] rounded-2xl p-8 hover:border-white/[0.15] hover:bg-gradient-to-b hover:from-[#131318] hover:to-[#08080A] hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(37,99,235,0.08)] transition-all duration-300 group"
               >
-                <div className="w-10 h-10 rounded-lg bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 shadow-inner flex items-center justify-center">
                   {card.icon}
                 </div>
-                <h3 className="text-base font-semibold text-white mt-4">{card.title}</h3>
-                <p className="text-[#666] text-sm mt-2 leading-relaxed">{card.body}</p>
-                <span className="inline-block border border-[#1F1F1F] text-[#444] text-[11px] rounded-full px-3 py-1 mt-4">
+                <h3 className="text-lg font-bold text-white tracking-tight mt-6">{card.title}</h3>
+                <p className="text-[#A1A1AA] text-[15px] mt-3 leading-relaxed">{card.body}</p>
+                <span className="inline-block border border-white/10 bg-white/5 text-[#E4E4E7] text-[11px] rounded-full px-3 py-1 mt-6 shadow-inner font-medium">
                   {card.pill}
                 </span>
               </motion.div>
@@ -422,16 +420,16 @@ export default function LandingPage() {
               { icon: <Sparkles size={20} className="text-[#777]" />, step: '03', label: 'STEP 03', title: 'Download your tailored resume', body: 'Your resume is rewritten in seconds — keywords injected, ATS optimized, ready to send. Your facts, our formatting.' },
             ].map((s, i) => (
               <motion.div key={i} variants={staggerItem} className="relative text-center">
-                <span className="absolute -top-4 left-1/2 -translate-x-1/2 text-[64px] font-bold text-[#111] pointer-events-none select-none" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+                <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-[72px] font-bold text-white/[0.03] pointer-events-none select-none tracking-tighter" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
                   {s.step}
                 </span>
-                <div className="relative z-10 bg-[#0D0D0D] border border-[#1F1F1F] rounded-xl p-6">
-                  <div className="w-12 h-12 border border-[#2A2A2A] rounded-full flex items-center justify-center mx-auto">
+                <div className="relative z-10 bg-gradient-to-b from-[#0E0E11] to-[#050505] border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] rounded-2xl p-8 h-full">
+                  <div className="w-14 h-14 bg-gradient-to-br from-[#18181B] to-[#09090B] border border-white/10 shadow-inner rounded-full flex items-center justify-center mx-auto">
                     {s.icon}
                   </div>
-                  <p className="text-[10px] uppercase tracking-[0.15em] text-[#3B82F6] mt-4">{s.label}</p>
-                  <h3 className="text-base font-semibold text-white mt-2">{s.title}</h3>
-                  <p className="text-[#666] text-sm mt-2 leading-relaxed">{s.body}</p>
+                  <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#3B82F6] mt-6">{s.label}</p>
+                  <h3 className="text-lg font-bold text-white tracking-tight mt-2">{s.title}</h3>
+                  <p className="text-[#A1A1AA] text-[15px] mt-3 leading-relaxed">{s.body}</p>
                 </div>
               </motion.div>
             ))}
@@ -469,93 +467,96 @@ export default function LandingPage() {
 
           <motion.div variants={staggerContainer} className="grid md:grid-cols-3 gap-4 items-start">
             {/* FREE */}
-            <motion.div variants={staggerItem} className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-xl p-6">
-              <p className="text-[10px] uppercase tracking-[0.15em] text-[#555]">FREE</p>
-              <p className="mt-3">
-                <span className="text-[40px] font-bold text-white" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>₹0</span>
-                <span className="text-[#555] text-sm ml-1"> / month</span>
+            <motion.div variants={staggerItem} className="bg-gradient-to-b from-[#0E0E11] to-[#050505] border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] rounded-2xl p-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#A1A1AA]">FREE</p>
+              <p className="mt-4">
+                <span className="text-[44px] font-bold text-white tracking-tighter" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>₹0</span>
+                <span className="text-[#A1A1AA] text-[15px] ml-1">/ month</span>
               </p>
-              <div className="border-t border-[#1F1F1F] my-4" />
-              <ul className="space-y-3">
+              <div className="border-t border-white/10 my-6" />
+              <ul className="space-y-4">
                 {['2 resume tailors total', '10 internship matches', 'Basic application tracking', 'No cover letters'].map((f, i) => (
-                  <li key={i} className="text-[#666] text-sm flex items-start gap-2">
-                    <ArrowRight size={14} className="mt-0.5 shrink-0 text-[#444]" /> {f}
+                  <li key={i} className="text-[#E4E4E7] text-[15px] flex items-start gap-3">
+                    <ArrowRight size={16} className="mt-0.5 shrink-0 text-[#71717A]" /> {f}
                   </li>
                 ))}
               </ul>
-              <button className="mt-6 w-full border border-[#2A2A2A] text-white py-2.5 rounded-lg text-sm hover:border-[#444] hover:bg-white/[0.03] transition-all cursor-pointer">
+              <button className="mt-8 w-full border border-white/10 bg-white/5 shadow-inner text-white py-3 rounded-xl text-[15px] font-medium hover:bg-white/10 transition-all cursor-pointer">
                 Get started free
               </button>
             </motion.div>
 
             {/* PRO */}
-            <motion.div variants={staggerItem} className="bg-gradient-to-br from-[#0D0D0D] to-[#0D1220] border border-blue-500/40 rounded-xl p-6 scale-[1.02] shadow-[0_0_60px_rgba(59,130,246,0.12)] relative">
-              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-500/10 text-[#60A5FA] border border-blue-500/20 text-[10px] uppercase tracking-[0.1em] px-3 py-1 rounded-full font-medium">
+            <motion.div variants={staggerItem} className="bg-gradient-to-b from-[#1E293B]/40 to-[#0F172A]/80 border border-[#3B82F6]/50 rounded-2xl p-8 scale-[1.03] shadow-[inset_0_1px_0_rgba(255,255,255,0.1),0_0_60px_rgba(37,99,235,0.2)] relative z-10 backdrop-blur-xl">
+              <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-inner text-[10px] uppercase tracking-[0.15em] px-4 py-1.5 rounded-full font-bold">
                 Most Popular
               </span>
-              <p className="text-[10px] uppercase tracking-[0.15em] text-[#555] mt-2">PRO</p>
-              <p className="mt-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#93C5FD] mt-2">PRO</p>
+              <p className="mt-4">
                 {annual ? (
                   <>
-                    <span className="text-[40px] font-bold text-white" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>₹166</span>
-                    <span className="text-[#555] text-sm ml-2 line-through decoration-red-500">₹299</span>
-                    <span className="text-[#555] text-sm"> / mo</span>
+                    <span className="text-[44px] font-bold text-white tracking-tighter" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>₹166</span>
+                    <span className="text-[#94A3B8] text-[15px] ml-2 line-through decoration-red-500/70">₹299</span>
+                    <span className="text-[#94A3B8] text-[15px]"> / mo</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-[40px] font-bold text-white" style={{ fontFamily: "'Geist Mono', monospace" }}>₹299</span>
-                    <span className="text-[#555] text-sm ml-1"> / month</span>
+                    <span className="text-[44px] font-bold text-white tracking-tighter" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>₹299</span>
+                    <span className="text-[#94A3B8] text-[15px] ml-1">/ month</span>
                   </>
                 )}
               </p>
-              <div className="border-t border-[#1F1F1F] my-4" />
-              <ul className="space-y-3">
+              <div className="border-t border-[#3B82F6]/30 my-6" />
+              <ul className="space-y-4">
                 {[
                   'Unlimited tailoring', 'Unlimited internship matches', 'AI cover letter generation',
                   'Full application tracker', 'Email alerts for new matches', 'Priority matching algorithm',
                 ].map((f, i) => (
-                  <li key={i} className="text-[#ccc] text-sm flex items-start gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#3B82F6] mt-1.5 shrink-0" /> {f}
+                  <li key={i} className="text-white text-[15px] flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <div className="w-2 h-2 rounded-full bg-blue-400" />
+                    </div>
+                    {f}
                   </li>
                 ))}
               </ul>
-              <button className="mt-6 w-full bg-[#3B82F6] text-black font-semibold py-2.5 rounded-lg text-sm hover:bg-[#60A5FA] hover:shadow-[0_0_30px_rgba(59,130,246,0.4)] transition-all cursor-pointer">
+              <button className="mt-8 w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_20px_rgba(37,99,235,0.3)] font-semibold py-3 rounded-xl text-[15px] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.5)] hover:scale-[1.02] transition-all cursor-pointer">
                 Upgrade to Pro
               </button>
             </motion.div>
 
             {/* ANNUAL */}
-            <motion.div variants={staggerItem} className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-xl p-6">
-              <p className="text-[10px] uppercase tracking-[0.15em] text-[#555]">ANNUAL</p>
-              <p className="mt-3">
-                <span className="text-[40px] font-bold text-white" style={{ fontFamily: "'Geist Mono', monospace" }}>₹1,999</span>
-                <span className="text-[#555] text-sm ml-1"> / year</span>
+            <motion.div variants={staggerItem} className="bg-gradient-to-b from-[#0E0E11] to-[#050505] border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] rounded-2xl p-8">
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#A1A1AA]">ANNUAL</p>
+              <p className="mt-4">
+                <span className="text-[44px] font-bold text-white tracking-tighter" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>₹1,999</span>
+                <span className="text-[#A1A1AA] text-[15px] ml-1">/ year</span>
               </p>
-              <p className="text-[#555] text-xs">₹166/mo</p>
-              <span className="inline-block bg-blue-500/10 text-[#60A5FA] text-[10px] px-3 py-1 rounded-full mt-2 font-medium">
+              <p className="text-[#71717A] text-[13px] mt-1">₹166/mo</p>
+              <span className="inline-block bg-white/10 text-white border border-white/10 shadow-inner text-xs px-3 py-1.5 rounded-full mt-3 font-semibold tracking-tight">
                 Best value · Save ₹1,589
               </span>
-              <div className="border-t border-[#1F1F1F] my-4" />
-              <ul className="space-y-3">
+              <div className="border-t border-white/10 my-6" />
+              <ul className="space-y-4">
                 {[
                   'Unlimited tailoring', 'Unlimited internship matches', 'AI cover letter generation',
                   'Full application tracker', 'Email alerts for new matches', 'Priority matching algorithm',
                   'Early access to new features',
                 ].map((f, i) => (
-                  <li key={i} className="text-[#666] text-sm flex items-start gap-2">
-                    <ArrowRight size={14} className="mt-0.5 shrink-0 text-[#444]" /> {f}
+                  <li key={i} className="text-[#E4E4E7] text-[15px] flex items-start gap-3">
+                    <ArrowRight size={16} className="mt-0.5 shrink-0 text-[#71717A]" /> {f}
                   </li>
                 ))}
               </ul>
-              <button className="mt-6 w-full border border-[#2A2A2A] text-white py-2.5 rounded-lg text-sm hover:border-[#444] hover:bg-white/[0.03] transition-all cursor-pointer">
+              <button className="mt-8 w-full border border-white/10 bg-white/5 shadow-inner text-white py-3 rounded-xl text-[15px] font-medium hover:bg-white/10 transition-all cursor-pointer">
                 Get annual plan
               </button>
             </motion.div>
           </motion.div>
 
-          <p className="text-center text-[#555] text-sm mt-8 flex items-center justify-center gap-1.5">
-            <Zap size={14} className="text-[#555]" />
-            First month 50% off — pay just ₹149 to start
+          <p className="text-center text-[#A1A1AA] text-[15px] mt-12 flex items-center justify-center gap-2 font-medium">
+            <Zap size={16} className="text-blue-500 fill-blue-500" />
+            First month 50% off — pay just <span className="text-white font-semibold">₹149</span> to start
           </p>
         </div>
       </Section>
@@ -577,21 +578,20 @@ export default function LandingPage() {
       </Section>
 
       {/* ══════════════ FOOTER CTA ══════════════ */}
-      <section className="relative py-24 px-6 border-t border-[#1F1F1F]" style={{ background: 'radial-gradient(ellipse 60% 50% at 50% 50%, rgba(59,130,246,0.08) 0%, transparent 70%)' }}>
-        <div className="max-w-[600px] mx-auto text-center relative z-10">
-          <div className="inline-flex items-center border border-blue-500/20 text-[#60A5FA] text-[13px] rounded-full px-4 py-1.5 mb-6">
-            ✦ Free to start
+      <section className="relative py-32 px-6 border-t border-white/[0.05]" style={{ background: 'radial-gradient(ellipse 60% 60% at 50% 100%, rgba(37,99,235,0.1) 0%, transparent 80%)' }}>
+        <div className="max-w-[700px] mx-auto text-center relative z-10">
+          <div className="inline-flex items-center border border-blue-500/20 bg-blue-500/5 text-[#93C5FD] text-[13px] rounded-full px-5 py-2 mb-8 font-medium tracking-wide shadow-inner">
+            ✦ Free to start. No credit card required.
           </div>
-          <h2 className="text-3xl md:text-[48px] font-bold text-white leading-tight" style={{ fontFamily: "'Geist Mono', monospace" }}>
+          <h2 className="text-4xl md:text-[56px] font-bold text-white leading-[1.1] tracking-tight" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
             Your dream internship is 60 seconds away.
           </h2>
-          <p className="text-[#666] text-base mt-4 leading-relaxed">
+          <p className="text-[#A1A1AA] text-lg mt-6 leading-relaxed max-w-[600px] mx-auto">
             Join 500+ students from tier-2 colleges who stopped getting rejected and started getting interviews.
           </p>
-          <button className="mt-8 bg-[#3B82F6] text-black font-semibold px-8 py-4 rounded-lg text-[16px] hover:bg-[#60A5FA] hover:shadow-[0_0_50px_rgba(59,130,246,0.35)] hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer">
+          <button className="mt-10 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium px-10 py-4 rounded-xl text-[17px] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.3)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_60px_rgba(37,99,235,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer">
             Tailor My Resume Free →
           </button>
-          <p className="text-[#444] text-xs mt-3">No credit card. No setup. Just paste your JD.</p>
         </div>
       </section>
 
