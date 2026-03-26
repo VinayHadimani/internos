@@ -14,12 +14,16 @@ const fadeUp: Variants = {
 }
 
 const staggerContainer: Variants = {
-  hidden: {},
-  visible: { transition: { staggerChildren: 0.1 } },
+  visible: { 
+    transition: { 
+      staggerChildren: 0.1,
+      delayChildren: 0.1
+    } 
+  },
 }
 
 const staggerItem: Variants = {
-  hidden: { opacity: 0, y: 24 },
+  hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
 }
 
@@ -40,19 +44,17 @@ function AnimatedCounter({ target, suffix = '', prefix = '' }: { target: number;
 
 // ─── Section Wrapper ───────────────────────────────────────────
 function Section({ children, className = '', id }: { children: React.ReactNode; className?: string; id?: string }) {
-  const prefersReducedMotion = useReducedMotion()
-
   return (
-    <motion.section
-      id={id}
-      initial={prefersReducedMotion ? 'visible' : 'hidden'}
-      whileInView="visible"
-      viewport={{ once: true, amount: 0.15 }}
-      variants={staggerContainer}
-      className={className}
-    >
-      {children}
-    </motion.section>
+    <section id={id} className={`relative z-10 ${className}`}>
+      <motion.div
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true, amount: 0.01 }}
+        variants={staggerContainer}
+      >
+        {children}
+      </motion.div>
+    </section>
   )
 }
 
@@ -362,7 +364,7 @@ export default function LandingPage() {
             Our platform does the heavy lifting so you can focus on building your skills. AI-powered and specifically built for Indian college students.
           </motion.p>
 
-          <motion.div variants={staggerContainer} className="grid md:grid-cols-3 gap-4">
+          <div className="grid md:grid-cols-3 gap-4">
             {[
               {
                 icon: <FileEdit size={18} className="text-[#3B82F6]" />,
@@ -398,7 +400,7 @@ export default function LandingPage() {
                 </span>
               </motion.div>
             ))}
-          </motion.div>
+          </div>
         </div>
       </Section>
 
@@ -410,7 +412,7 @@ export default function LandingPage() {
             From resume to tailored application in 3 steps
           </motion.h2>
 
-          <motion.div variants={staggerContainer} className="grid md:grid-cols-3 gap-8 relative">
+          <div className="grid md:grid-cols-3 gap-8 relative">
             {/* Dashed connection line (desktop only) */}
             <div className="hidden md:block absolute top-12 left-[16.5%] right-[16.5%] h-[1px] border-t-2 border-dashed border-[#1F1F1F] z-0" />
 
@@ -433,7 +435,7 @@ export default function LandingPage() {
                 </div>
               </motion.div>
             ))}
-          </motion.div>
+          </div>
         </div>
       </Section>
 
@@ -465,7 +467,7 @@ export default function LandingPage() {
             </div>
           </motion.div>
 
-          <motion.div variants={staggerContainer} className="grid md:grid-cols-3 gap-4 items-start">
+          <div className="grid md:grid-cols-3 gap-4 items-start">
             {/* FREE */}
             <motion.div variants={staggerItem} className="bg-gradient-to-b from-[#0E0E11] to-[#050505] border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] rounded-2xl p-8">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#A1A1AA]">FREE</p>
@@ -552,7 +554,7 @@ export default function LandingPage() {
                 Get annual plan
               </button>
             </motion.div>
-          </motion.div>
+          </div>
 
           <p className="text-center text-[#A1A1AA] text-[15px] mt-12 flex items-center justify-center gap-2 font-medium">
             <Zap size={16} className="text-blue-500 fill-blue-500" />
@@ -569,11 +571,13 @@ export default function LandingPage() {
             Questions? Answered.
           </motion.h2>
 
-          <motion.div variants={staggerItem}>
+          <div className="flex flex-col">
             {faqs.map((faq, i) => (
-              <FAQItem key={i} question={faq.q} answer={faq.a} />
+              <motion.div key={i} variants={staggerItem}>
+                <FAQItem question={faq.q} answer={faq.a} />
+              </motion.div>
             ))}
-          </motion.div>
+          </div>
         </div>
       </Section>
 
