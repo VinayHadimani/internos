@@ -62,7 +62,7 @@ function Section({ children, className = '', id }: { children: React.ReactNode; 
 function FAQItem({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = useState(false)
   return (
-    <div className="border-b border-[#1F1F1F] py-5">
+    <div className="border-b border-border-default py-5">
       <button
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between text-left cursor-pointer group"
@@ -143,7 +143,7 @@ export default function LandingPage() {
         initial={prefersReducedMotion ? {} : { opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="fixed top-0 left-0 right-0 z-40 backdrop-blur-2xl bg-[#030303]/70 border-b border-white/[0.05] supports-[backdrop-filter]:bg-black/40"
+        className="fixed top-0 left-0 right-0 z-40 backdrop-blur-2xl bg-black/70 border-b border-white/[0.05] supports-[backdrop-filter]:bg-black/40"
       >
         <div className="max-w-[1100px] mx-auto px-6 h-[60px] flex items-center justify-between">
           {/* Logo */}
@@ -189,7 +189,7 @@ export default function LandingPage() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: '100%' }}
               transition={{ duration: 0.25 }}
-              className="fixed top-[60px] right-0 bottom-0 w-[280px] bg-[#0D0D0D] border-l border-[#1F1F1F] p-6 flex flex-col gap-4 md:hidden z-50"
+              className="fixed top-[60px] right-0 bottom-0 w-[280px] bg-surface border-l border-border-default p-6 flex flex-col gap-4 md:hidden z-50"
             >
               {['Features', 'How it works', 'Pricing', 'FAQ'].map((item) => (
                 <a
@@ -322,7 +322,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════════ SOCIAL PROOF ══════════════ */}
-      <section className="relative z-10 border-t border-b border-white/[0.05] bg-[#030303] py-16">
+      <section className="relative z-10 border-t border-b border-white/[0.05] bg-black py-16">
         <p className="text-center text-[#444] text-[11px] uppercase tracking-[0.15em] mb-6">
           Trusted by students from
         </p>
@@ -450,7 +450,7 @@ export default function LandingPage() {
 
           {/* Toggle */}
           <motion.div variants={staggerItem} className="flex justify-center mb-10">
-            <div className="inline-flex bg-[#0D0D0D] border border-[#1F1F1F] rounded-lg p-1">
+            <div className="inline-flex bg-surface border border-border-default rounded-lg p-1">
               <button
                 onClick={() => setAnnual(false)}
                 className={`px-5 py-2 rounded-md text-sm transition-all cursor-pointer ${!annual ? 'bg-white text-black font-medium' : 'text-[#777]'}`}
@@ -600,7 +600,7 @@ export default function LandingPage() {
       </section>
 
       {/* ══════════════ FOOTER ══════════════ */}
-      <footer className="bg-[#080808] border-t border-[#1F1F1F] py-10 px-6">
+      <footer className="bg-black border-t border-border-default py-10 px-6">
         <div className="max-w-[1100px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-10">
           {/* Left */}
           <div>
@@ -638,7 +638,7 @@ export default function LandingPage() {
         </div>
 
         {/* Bottom bar */}
-        <div className="max-w-[1100px] mx-auto border-t border-[#1F1F1F] pt-6 mt-6 flex flex-col md:flex-row items-center justify-between gap-2">
+        <div className="max-w-[1100px] mx-auto border-t border-border-default pt-6 mt-6 flex flex-col md:flex-row items-center justify-between gap-2">
           <p className="text-[#333] text-xs">© 2026 InternOS. All rights reserved.</p>
           <p className="text-[#2A2A2A] text-xs">Built for the 94% who deserve better opportunities.</p>
         </div>
