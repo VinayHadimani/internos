@@ -147,9 +147,9 @@ export default function LandingPage() {
       >
         <div className="max-w-[1100px] mx-auto px-6 h-[60px] flex items-center justify-between">
           {/* Logo */}
-          <div className="flex items-center" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+          <div className="flex items-center font-mono">
             <span className="text-white font-bold text-lg">InternOS</span>
-            <span className="text-white font-bold text-lg" style={{ animation: 'blink 0.7s steps(1) infinite' }}>|</span>
+            <span className="text-white font-bold text-lg animate-blink">|</span>
           </div>
 
           {/* Desktop nav */}
@@ -234,8 +234,7 @@ export default function LandingPage() {
             initial={prefersReducedMotion ? 'visible' : 'hidden'}
             animate="visible"
             transition={{ delay: 0.1 }}
-            className="text-[40px] md:text-[52px] lg:text-[72px] font-bold leading-[1.05] tracking-tight mb-6"
-            style={{ fontFamily: "var(--font-geist-mono), monospace" }}
+            className="text-[40px] md:text-[52px] lg:text-[72px] font-bold leading-[1.05] tracking-tight mb-6 font-mono"
           >
             Get Your Dream<br />
             Internship in<br />
@@ -311,7 +310,7 @@ export default function LandingPage() {
                 <p className="text-[#A1A1AA] text-[13px] mt-0.5">React, TypeScript, Node.js</p>
               </div>
               <div className="text-right shrink-0">
-                <p className="text-2xl font-bold text-[#3B82F6]" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+                <p className="text-2xl font-bold text-[#3B82F6] font-mono">
                   <AnimatedCounter target={94} suffix="%" />
                 </p>
                 <p className="text-[10px] text-[#444] uppercase tracking-wider">match</p>
@@ -344,7 +343,7 @@ export default function LandingPage() {
             { target: 94, suffix: '%', label: 'Avg ATS match score' },
           ].map((stat, i) => (
             <div key={i} className={`text-center py-4 ${i < 2 ? 'border-r border-[#1F1F1F]' : ''}`}>
-              <p className="text-3xl md:text-4xl font-bold text-white" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+              <p className="text-3xl md:text-4xl font-bold text-white font-mono">
                 <AnimatedCounter target={stat.target} suffix={stat.suffix} />
               </p>
               <p className="text-[#555] text-xs mt-1">{stat.label}</p>
@@ -408,7 +407,7 @@ export default function LandingPage() {
       <Section id="how-it-works" className="py-24 px-6 bg-[#080808]">
         <div className="max-w-[900px] mx-auto">
           <motion.p variants={staggerItem} className="text-[11px] uppercase tracking-[0.15em] text-[#444] mb-3">HOW IT WORKS</motion.p>
-          <motion.h2 variants={staggerItem} className="text-2xl md:text-[36px] font-bold text-white mb-16" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+          <motion.h2 variants={staggerItem} className="text-2xl md:text-[36px] font-bold text-white mb-16 font-mono">
             From resume to tailored application in 3 steps
           </motion.h2>
 
@@ -443,7 +442,7 @@ export default function LandingPage() {
       <Section id="pricing" className="py-24 px-6">
         <div className="max-w-[1000px] mx-auto">
           <motion.p variants={staggerItem} className="text-[11px] uppercase tracking-[0.15em] text-[#444] mb-3">PRICING</motion.p>
-          <motion.h2 variants={staggerItem} className="text-2xl md:text-[36px] font-bold text-white mb-3" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+          <motion.h2 variants={staggerItem} className="text-2xl md:text-[36px] font-bold text-white mb-3 font-mono">
             Pricing that respects a student&apos;s budget
           </motion.h2>
           <motion.p variants={staggerItem} className="text-[#666] mb-10">Start free. Upgrade when you&apos;re ready.</motion.p>
@@ -472,7 +471,7 @@ export default function LandingPage() {
             <motion.div variants={staggerItem} className="bg-gradient-to-b from-[#0E0E11] to-[#050505] border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] rounded-2xl p-8">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#A1A1AA]">FREE</p>
               <p className="mt-4">
-                <span className="text-[44px] font-bold text-white tracking-tighter" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>₹0</span>
+                <span className="text-[44px] font-bold text-white tracking-tighter font-mono">₹0</span>
                 <span className="text-[#A1A1AA] text-[15px] ml-1">/ month</span>
               </p>
               <div className="border-t border-white/10 my-6" />
@@ -497,13 +496,13 @@ export default function LandingPage() {
               <p className="mt-4">
                 {annual ? (
                   <>
-                    <span className="text-[44px] font-bold text-white tracking-tighter" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>₹166</span>
+                    <span className="text-[44px] font-bold text-white tracking-tighter font-mono">₹166</span>
                     <span className="text-[#94A3B8] text-[15px] ml-2 line-through decoration-red-500/70">₹299</span>
                     <span className="text-[#94A3B8] text-[15px]"> / mo</span>
                   </>
                 ) : (
                   <>
-                    <span className="text-[44px] font-bold text-white tracking-tighter" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>₹299</span>
+                    <span className="text-[44px] font-bold text-white tracking-tighter font-mono">₹299</span>
                     <span className="text-[#94A3B8] text-[15px] ml-1">/ month</span>
                   </>
                 )}
@@ -531,7 +530,7 @@ export default function LandingPage() {
             <motion.div variants={staggerItem} className="bg-gradient-to-b from-[#0E0E11] to-[#050505] border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] rounded-2xl p-8">
               <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#A1A1AA]">ANNUAL</p>
               <p className="mt-4">
-                <span className="text-[44px] font-bold text-white tracking-tighter" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>₹1,999</span>
+                <span className="text-[44px] font-bold text-white tracking-tighter font-mono">₹1,999</span>
                 <span className="text-[#A1A1AA] text-[15px] ml-1">/ year</span>
               </p>
               <p className="text-[#71717A] text-[13px] mt-1">₹166/mo</p>
@@ -567,7 +566,7 @@ export default function LandingPage() {
       <Section id="faq" className="py-24 px-6">
         <div className="max-w-[680px] mx-auto">
           <motion.p variants={staggerItem} className="text-[11px] uppercase tracking-[0.15em] text-[#444] mb-3">FAQ</motion.p>
-          <motion.h2 variants={staggerItem} className="text-2xl md:text-[36px] font-bold text-white mb-10" style={{ fontFamily: "'Geist Mono', monospace" }}>
+          <motion.h2 variants={staggerItem} className="text-2xl md:text-[36px] font-bold text-white mb-10 font-mono">
             Questions? Answered.
           </motion.h2>
 
@@ -587,7 +586,7 @@ export default function LandingPage() {
           <div className="inline-flex items-center border border-blue-500/20 bg-blue-500/5 text-[#93C5FD] text-[13px] rounded-full px-5 py-2 mb-8 font-medium tracking-wide shadow-inner">
             ✦ Free to start. No credit card required.
           </div>
-          <h2 className="text-4xl md:text-[56px] font-bold text-white leading-[1.1] tracking-tight" style={{ fontFamily: "var(--font-geist-mono), monospace" }}>
+          <h2 className="text-4xl md:text-[56px] font-bold text-white leading-[1.1] tracking-tight font-mono">
             Your dream internship is 60 seconds away.
           </h2>
           <p className="text-[#A1A1AA] text-lg mt-6 leading-relaxed max-w-[600px] mx-auto">
@@ -604,9 +603,9 @@ export default function LandingPage() {
         <div className="max-w-[1100px] mx-auto grid grid-cols-1 md:grid-cols-3 gap-10">
           {/* Left */}
           <div>
-            <div className="flex items-center" style={{ fontFamily: "'Geist Mono', monospace" }}>
+            <div className="flex items-center font-mono">
               <span className="text-white font-bold text-lg">InternOS</span>
-              <span className="text-white font-bold text-lg" style={{ animation: 'blink 0.7s steps(1) infinite' }}>|</span>
+              <span className="text-white font-bold text-lg animate-blink">|</span>
             </div>
             <p className="text-[#444] text-xs mt-1">Find internships. Tailor resumes. Get hired.</p>
             <p className="text-[#333] text-xs mt-4">Made with ♥ for Indian students</p>
