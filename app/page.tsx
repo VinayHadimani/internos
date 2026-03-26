@@ -1,24 +1,24 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence, useInView, useMotionValue, useSpring, useTransform, useReducedMotion } from 'framer-motion'
+import { motion, AnimatePresence, useInView, useMotionValue, useSpring, useTransform, useReducedMotion, Variants } from 'framer-motion'
 import {
   FileEdit, Search, LayoutGrid, Upload, ClipboardPaste, Sparkles,
   ChevronDown, Menu, X, Check, ArrowRight, Zap
 } from 'lucide-react'
 
 // ─── Animation Variants ────────────────────────────────────────
-const fadeUp = {
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 24 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
 }
 
-const staggerContainer = {
+const staggerContainer: Variants = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.1 } },
 }
 
-const staggerItem = {
+const staggerItem: Variants = {
   hidden: { opacity: 0, y: 24 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: 'easeOut' } },
 }
