@@ -14,11 +14,11 @@ const fadeUp: Variants = {
 }
 
 const staggerContainer: Variants = {
-  visible: { 
-    transition: { 
+  visible: {
+    transition: {
       staggerChildren: 0.1,
       delayChildren: 0.1
-    } 
+    }
   },
 }
 
