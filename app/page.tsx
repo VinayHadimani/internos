@@ -216,7 +216,7 @@ export default function LandingPage() {
         <div className="absolute inset-0 opacity-[0.15] z-0" style={{ backgroundImage: 'radial-gradient(circle, #555 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
 
         {/* Blue blob */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-[100%] bg-blue-600/10 blur-[120px] z-0 pointer-events-none" style={{ animation: 'float 8s ease-in-out infinite' }} />
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[800px] h-[600px] rounded-[100%] bg-blue-600/10 blur-[120px] z-0 pointer-events-none animate-float" />
 
         {/* Bottom fade */}
         <div className="absolute bottom-0 left-0 right-0 h-[250px] z-10 pointer-events-none" style={{ background: 'linear-gradient(to bottom, transparent, #030303)' }} />
@@ -224,7 +224,7 @@ export default function LandingPage() {
         <div className="relative z-20 max-w-[780px] text-center">
           {/* Badge */}
           <motion.div variants={fadeUp} initial={prefersReducedMotion ? 'visible' : 'hidden'} animate="visible" className="inline-flex items-center gap-2 border border-blue-500/30 bg-blue-500/[0.08] rounded-full px-4 py-1.5 mb-8">
-            <span className="w-2 h-2 rounded-full bg-[#3B82F6]" style={{ animation: 'pulse-dot 2s infinite' }} />
+            <span className="w-2 h-2 rounded-full bg-[#3B82F6] animate-pulse-dot" />
             <span className="text-[13px] text-[#999]">✦ Now in beta — free for all students</span>
           </motion.div>
 
@@ -244,7 +244,8 @@ export default function LandingPage() {
                 <path
                   d="M2 8 C 50 2, 100 10, 150 6 S 250 2, 298 8"
                   stroke="#3B82F6" strokeWidth="3" strokeLinecap="round"
-                  style={{ strokeDasharray: 400, strokeDashoffset: 400, animation: 'draw 0.8s ease forwards 0.6s' }}
+                  className="animate-draw [animation-delay:0.6s]"
+                  style={{ strokeDasharray: 400, strokeDashoffset: 400 }}
                 />
               </svg>
             </span>
@@ -298,8 +299,7 @@ export default function LandingPage() {
             initial={prefersReducedMotion ? 'visible' : 'hidden'}
             animate="visible"
             transition={{ delay: 0.5 }}
-            className="mt-12 mx-auto max-w-[480px]"
-            style={{ animation: prefersReducedMotion ? 'none' : 'float 4s ease-in-out infinite' }}
+            className="mt-12 mx-auto max-w-[480px] motion-safe:animate-float-fast"
           >
             <div className="bg-gradient-to-b from-[#111111] to-[#0A0A0A] border border-white/[0.08] shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_20px_60px_rgba(37,99,235,0.15)] rounded-2xl p-5 flex items-center gap-4">
               <div className="w-11 h-11 rounded-lg bg-gradient-to-br from-[#27272A] to-[#18181B] border border-white/10 flex items-center justify-center shrink-0 shadow-inner">
@@ -328,7 +328,7 @@ export default function LandingPage() {
 
         {/* Marquee */}
         <div className="overflow-hidden mb-10">
-          <div className="flex whitespace-nowrap" style={{ animation: 'marquee 20s linear infinite' }}>
+          <div className="flex whitespace-nowrap animate-marquee">
             {[...colleges, ...colleges].map((name, i) => (
               <span key={i} className="text-[#555] text-sm font-medium px-8">{name}</span>
             ))}
