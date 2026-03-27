@@ -1,11 +1,14 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence, useInView, useMotionValue, useSpring, useTransform, useReducedMotion, Variants } from 'framer-motion'
 import {
   FileEdit, Search, LayoutGrid, Upload, ClipboardPaste, Sparkles,
   ChevronDown, Menu, X, Check, ArrowRight, Zap
 } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
+import LoginModal from '@/components/auth/LoginModal'
 
 // ─── Animation Variants ────────────────────────────────────────
 const fadeUp: Variants = {
@@ -95,7 +98,18 @@ function FAQItem({ question, answer }: { question: string; answer: string }) {
 export default function LandingPage() {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [annual, setAnnual] = useState(false)
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false)
   const prefersReducedMotion = useReducedMotion()
+  const { isAuthenticated } = useAuth()
+  const router = useRouter()
+
+  const handleGetStarted = () => {
+    if (isAuthenticated) {
+      router.push('/dashboard')
+    } else {
+      setIsLoginModalOpen(true)
+    }
+  }
 
   const colleges = [
     'IIT Bombay', 'VIT', 'BITS Pilani', 'NIT Trichy', 'Manipal', 'Amrita',
@@ -167,10 +181,16 @@ export default function LandingPage() {
 
           {/* Right buttons */}
           <div className="hidden md:flex items-center gap-3">
-            <button className="text-[#A1A1AA] text-sm hover:text-white px-4 py-1.5 transition-colors cursor-pointer">
+            <button 
+              onClick={() => setIsLoginModalOpen(true)}
+              className="text-[#A1A1AA] text-sm hover:text-white px-4 py-1.5 transition-colors cursor-pointer"
+            >
               Log in
             </button>
-            <button className="bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] font-medium text-sm px-4 py-2 rounded-lg transition-all duration-200 hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:scale-[1.02] cursor-pointer">
+            <button 
+              onClick={handleGetStarted}
+              className="bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] font-medium text-sm px-4 py-2 rounded-lg transition-all duration-200 hover:shadow-[0_0_20px_rgba(37,99,235,0.4)] hover:scale-[1.02] cursor-pointer"
+            >
               Get Started Free
             </button>
           </div>
@@ -202,8 +222,18 @@ export default function LandingPage() {
                 </a>
               ))}
               <div className="mt-4 flex flex-col gap-3">
-                <button className="text-white text-sm border border-[#2A2A2A] px-4 py-2.5 rounded-md hover:bg-white/5 transition-all cursor-pointer">Log in</button>
-                <button className="bg-[#3B82F6] text-black font-semibold text-sm px-4 py-2.5 rounded-md cursor-pointer">Get Started Free</button>
+                <button 
+                  onClick={() => { setIsLoginModalOpen(true); setMobileOpen(false); }}
+                  className="text-white text-sm border border-[#2A2A2A] px-4 py-2.5 rounded-md hover:bg-white/5 transition-all cursor-pointer"
+                >
+                  Log in
+                </button>
+                <button 
+                  onClick={() => { handleGetStarted(); setMobileOpen(false); }}
+                  className="bg-[#3B82F6] text-black font-semibold text-sm px-4 py-2.5 rounded-md cursor-pointer"
+                >
+                  Get Started Free
+                </button>
               </div>
             </motion.div>
           )}
@@ -270,7 +300,10 @@ export default function LandingPage() {
             transition={{ delay: 0.3 }}
             className="flex flex-col sm:flex-row gap-4 justify-center items-center"
           >
-            <button className="bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium px-8 py-3.5 rounded-xl text-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.25)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_60px_rgba(37,99,235,0.4)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer">
+            <button 
+              onClick={handleGetStarted}
+              className="bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium px-8 py-3.5 rounded-xl text-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.25)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_60px_rgba(37,99,235,0.4)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer"
+            >
               Tailor My Resume Free →
             </button>
             <button className="bg-white/5 border border-white/10 text-[#E4E4E7] font-medium px-8 py-3.5 rounded-xl text-[15px] hover:bg-white/10 hover:border-white/20 transition-all duration-300 cursor-pointer backdrop-blur-sm">
@@ -482,7 +515,10 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <button className="mt-8 w-full border border-white/10 bg-white/5 shadow-inner text-white py-3 rounded-xl text-[15px] font-medium hover:bg-white/10 transition-all cursor-pointer">
+              <button 
+                onClick={handleGetStarted}
+                className="mt-8 w-full border border-white/10 bg-white/5 shadow-inner text-white py-3 rounded-xl text-[15px] font-medium hover:bg-white/10 transition-all cursor-pointer"
+              >
                 Get started free
               </button>
             </motion.div>
@@ -521,7 +557,10 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <button className="mt-8 w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_20px_rgba(37,99,235,0.3)] font-semibold py-3 rounded-xl text-[15px] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.5)] hover:scale-[1.02] transition-all cursor-pointer">
+              <button 
+                onClick={handleGetStarted}
+                className="mt-8 w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_20px_rgba(37,99,235,0.3)] font-semibold py-3 rounded-xl text-[15px] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.5)] hover:scale-[1.02] transition-all cursor-pointer"
+              >
                 Upgrade to Pro
               </button>
             </motion.div>
@@ -549,7 +588,10 @@ export default function LandingPage() {
                   </li>
                 ))}
               </ul>
-              <button className="mt-8 w-full border border-white/10 bg-white/5 shadow-inner text-white py-3 rounded-xl text-[15px] font-medium hover:bg-white/10 transition-all cursor-pointer">
+              <button 
+                onClick={handleGetStarted}
+                className="mt-8 w-full border border-white/10 bg-white/5 shadow-inner text-white py-3 rounded-xl text-[15px] font-medium hover:bg-white/10 transition-all cursor-pointer"
+              >
                 Get annual plan
               </button>
             </motion.div>
@@ -592,7 +634,10 @@ export default function LandingPage() {
           <p className="text-[#A1A1AA] text-lg mt-6 leading-relaxed max-w-[600px] mx-auto">
             Join 500+ students from tier-2 colleges who stopped getting rejected and started getting interviews.
           </p>
-          <button className="mt-10 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium px-10 py-4 rounded-xl text-[17px] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.3)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_60px_rgba(37,99,235,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer">
+          <button 
+            onClick={handleGetStarted}
+            className="mt-10 bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium px-10 py-4 rounded-xl text-[17px] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.3)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_60px_rgba(37,99,235,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer"
+          >
             Tailor My Resume Free →
           </button>
         </div>
@@ -642,6 +687,12 @@ export default function LandingPage() {
           <p className="text-[#2A2A2A] text-xs">Built for the 94% who deserve better opportunities.</p>
         </div>
       </footer>
+
+      {/* Login Modal */}
+      <LoginModal 
+        isOpen={isLoginModalOpen} 
+        onClose={() => setIsLoginModalOpen(false)} 
+      />
     </div>
   )
 }
