@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import ZAI from 'z-ai-web-dev-sdk';
 
 interface TailorRequest {
   resumeText: string;
@@ -24,75 +25,74 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // In a real implementation, you would:
-    // 1. Use AI/ML to analyze the resume and job description
-    // 2. Calculate match score
-    // 3. Generate tailored resume content
-    // 4. Identify missing skills
-    // 5. Provide suggestions
+    // Initialize ZAI SDK
+    const zai = await ZAI.create();
 
-    // For now, we'll return mock data
-    const result: TailorResult = {
-      matchScore: 75,
-      tailoredResume: `PROFESSIONAL SUMMARY
-Dynamic and motivated software engineering student with strong foundation in full-stack development, seeking internship opportunities in software engineering. Proficient in React, Node.js, and modern web technologies with experience in building scalable applications.
+    // Create the prompt for AI
+    const prompt = `Tailor this resume to match the job description. Return JSON with:
+- tailoredResume: the rewritten resume
+- matchScore: 0-100
+- missingSkills: array of skills to add
+- suggestions: array of improvement tips
 
-EDUCATION
-Bachelor of Science in Computer Science
-University Name, Expected Graduation: May 2025
-GPA: 3.8/4.0
+Resume: ${resumeText}
+Job Description: ${jobDescription}`;
 
-TECHNICAL SKILLS
-• Programming Languages: JavaScript, TypeScript, Python, Java
-• Web Technologies: React, Next.js, Node.js, Express, HTML5, CSS3
-• Databases: PostgreSQL, MongoDB, Supabase
-• Tools & Platforms: Git, Docker, AWS, Vercel
-• Other: REST APIs, GraphQL, Agile/Scrum
-
-PROJECTS
-Full-Stack E-Commerce Platform
-• Built a complete e-commerce solution using React and Node.js
-• Implemented user authentication, payment processing, and inventory management
-• Deployed on AWS with 99.9% uptime
-
-AI-Powered Resume Tailoring Tool
-• Developed a web application that uses AI to optimize resumes for specific job postings
-• Integrated with OpenAI API for natural language processing
-• Improved user match rates by 40% on average
-
-EXPERIENCE
-Software Engineering Intern
-Tech Company Name, Summer 2024
-• Developed and maintained web applications using React and TypeScript
-• Collaborated with cross-functional teams in an Agile environment
-• Implemented automated testing and CI/CD pipelines
-
-Research Assistant
-University Lab, 2023-Present
-• Conducted research in machine learning applications
-• Published 2 papers in peer-reviewed conferences
-• Presented findings at international conferences`,
-      missingSkills: [
-        'Kubernetes',
-        'Microservices architecture',
-        'System design',
-        'Cloud architecture (AWS/Azure)',
-        'DevOps practices'
+    // Call Claude Haiku for fast processing
+    const aiResponse = await zai.chat.completions.create({
+      model: 'claude-3-haiku',
+      messages: [
+        {
+          role: 'user',
+          content: prompt
+        }
       ],
-      suggestions: [
-        'Add quantifiable achievements to your experience section',
-        'Include specific technologies used in projects',
-        'Highlight leadership and collaboration skills',
-        'Add relevant coursework or certifications',
-        'Customize the summary for each application'
-      ]
-    };
+      temperature: 0.7,
+      max_tokens: 4000
+    });
+
+    // Parse the AI response
+    const aiContent = aiResponse.choices?.[0]?.message?.content;
+
+    if (!aiContent) {
+      throw new Error('No response from AI');
+    }
+
+    // Try to parse the JSON response
+    let result: TailorResult;
+    try {
+      // Clean the response if it has markdown formatting
+      const cleanedContent = aiContent.replace(/```json\n?|\n?```/g, '').trim();
+      result = JSON.parse(cleanedContent);
+    } catch {
+      console.error('Failed to parse AI response as JSON:', aiContent);
+      throw new Error('AI returned invalid JSON response');
+    }
+
+    // Validate the result structure
+    if (
+      typeof result.matchScore !== 'number' ||
+      typeof result.tailoredResume !== 'string' ||
+      !Array.isArray(result.missingSkills) ||
+      !Array.isArray(result.suggestions)
+    ) {
+      throw new Error('AI response does not match expected format');
+    }
 
     return NextResponse.json(result);
+
   } catch (error) {
     console.error('Tailor API error:', error);
+
+    if (error instanceof Error) {
+      return NextResponse.json(
+        { error: `Failed to tailor resume: ${error.message}` },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'An unexpected error occurred while tailoring the resume' },
       { status: 500 }
     );
   }

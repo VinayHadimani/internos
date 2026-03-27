@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { FileEdit, Search, ArrowRight, Zap } from 'lucide-react';
+import { FileEdit, Search, ArrowRight, Zap, Eye } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, isAuthenticated, loading, signOut } = useAuth();
@@ -84,7 +84,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Action cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
           <Link
             href="/tailor"
             className="group bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-8 hover:border-[#3B82F6]/50 transition-all duration-300"
@@ -114,6 +114,22 @@ export default function DashboardPage() {
             </p>
             <span className="inline-flex items-center gap-2 text-[#3B82F6] text-sm font-medium group-hover:gap-3 transition-all">
               Browse listings <ArrowRight size={16} />
+            </span>
+          </Link>
+
+          <Link
+            href="/tracker"
+            className="group bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-8 hover:border-[#3B82F6]/50 transition-all duration-300"
+          >
+            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 shadow-inner flex items-center justify-center mb-6">
+              <Eye size={24} className="text-[#3B82F6]" />
+            </div>
+            <h2 className="text-xl font-bold text-white mb-2">Track Applications</h2>
+            <p className="text-[#777] text-[15px] leading-relaxed mb-6">
+              Monitor your internship applications, interviews, and offers all in one place.
+            </p>
+            <span className="inline-flex items-center gap-2 text-[#3B82F6] text-sm font-medium group-hover:gap-3 transition-all">
+              View tracker <ArrowRight size={16} />
             </span>
           </Link>
         </div>
