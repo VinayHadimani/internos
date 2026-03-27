@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { FileEdit, Search, ArrowRight, Zap, Eye } from 'lucide-react';
+import { FileEdit, Search, ArrowRight, Zap, Eye, User } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, isAuthenticated, loading, signOut } = useAuth();
@@ -42,6 +42,13 @@ export default function DashboardPage() {
             </Link>
           </div>
           <div className="flex items-center gap-4">
+            <Link
+              href="/profile"
+              className="flex items-center gap-2 text-[#777] hover:text-white transition-colors"
+            >
+              <User size={16} />
+              Profile
+            </Link>
             <div className="flex items-center gap-2 bg-white/5 border border-[#1F1F1F] rounded-full px-3 py-1.5">
               <Zap size={14} className="text-blue-400 fill-blue-400" />
               <span className="text-xs text-[#999]">Free Plan</span>

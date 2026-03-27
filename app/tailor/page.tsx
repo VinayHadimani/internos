@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { FileEdit, Upload, ArrowLeft, Zap, AlertCircle, Target, Lightbulb } from 'lucide-react';
+import { FileEdit, Upload, ArrowLeft, Zap, AlertCircle, Target, Lightbulb, Briefcase } from 'lucide-react';
 
 interface TailorResult {
   matchScore: number;
@@ -13,9 +13,10 @@ interface TailorResult {
   suggestions: string[];
 }
 
-export default function TailorPage() {
+function TailorContent() {
   const { isAuthenticated, loading, signOut } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
 
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeText, setResumeText] = useState('');
@@ -23,6 +24,43 @@ export default function TailorPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<TailorResult | null>(null);
   const [error, setError] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
+  const [jobCompany, setJobCompany] = useState('');
+  const [isLoadingJob, setIsLoadingJob] = useState(false);
+
+  // Read URL params and auto-fill
+  useEffect(() => {
+    const desc = searchParams.get('description');
+    const title = searchParams.get('title');
+    const company = searchParams.get('company');
+    const jobId = searchParams.get('jobId');
+
+    if (desc) {
+      setJobDescription(decodeURIComponent(desc));
+    }
+    if (title) {
+      setJobTitle(decodeURIComponent(title));
+    }
+    if (company) {
+      setJobCompany(decodeURIComponent(company));
+    }
+
+    // If jobId exists but no description, fetch from API
+    if (jobId && !desc) {
+      setIsLoadingJob(true);
+      fetch(`/api/internships/${jobId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.data) {
+            setJobDescription(data.data.description || '');
+            if (!title) setJobTitle(data.data.title || '');
+            if (!company) setJobCompany(data.data.company || '');
+          }
+        })
+        .catch(err => console.error('Failed to fetch internship:', err))
+        .finally(() => setIsLoadingJob(false));
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -160,14 +198,28 @@ export default function TailorPage() {
         {/* Title */}
         <div className="mb-10">
           <h1 className="text-3xl font-bold text-white tracking-tight mb-2">
-            Tailor Your Resume
+            {jobTitle ? 'Tailor Your Resume' : 'Tailor Your Resume'}
           </h1>
-          <p className="text-[#777]">
-            Upload your resume and paste a job description to get an ATS-optimized version.
-          </p>
+          {jobTitle && jobCompany ? (
+            <div className="flex items-center gap-3 mt-3">
+              <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/20 text-[#3B82F6] px-4 py-2 rounded-lg text-sm font-medium">
+                <Briefcase size={16} />
+                Tailoring for: {jobTitle} at {jobCompany}
+              </div>
+            </div>
+          ) : (
+            <p className="text-[#777]">
+              Upload your resume and paste a job description to get an ATS-optimized version.
+            </p>
+          )}
         </div>
 
-        {!result ? (
+        {isLoadingJob ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            <span className="ml-3 text-[#999]">Loading job details...</span>
+          </div>
+        ) : !result ? (
           <>
             {/* Input sections */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
@@ -317,6 +369,9 @@ export default function TailorPage() {
                   setResumeFile(null);
                   setResumeText('');
                   setJobDescription('');
+                  setJobTitle('');
+                  setJobCompany('');
+                  router.push('/tailor');
                 }}
                 className="bg-[#0D0D0D] border border-[#1F1F1F] text-white px-6 py-3 rounded-lg hover:border-[#3B82F6] transition-colors"
               >
@@ -333,5 +388,17 @@ export default function TailorPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function TailorPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+      </div>
+    }>
+      <TailorContent />
+    </Suspense>
   );
 }

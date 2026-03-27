@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
 import { ArrowLeft, MapPin, DollarSign, Calendar, Target, ExternalLink, FileEdit } from 'lucide-react';
 
 interface InternshipDetail {
@@ -64,37 +63,21 @@ What We Offer:
   applyUrl: 'https://careers.flipkart.com/internships/software-engineering'
 };
 
-export default function InternshipDetailPage() {
-  const { isAuthenticated, loading, signOut } = useAuth();
+export default function InternshipDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
-  const params = useParams();
-  const id = params.id as string;
-
-  const [internship, setInternship] = useState<InternshipDetail | null>(mockInternship);
+  const [id, setId] = useState<string>('');
 
   useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      router.push('/');
-    }
-  }, [isAuthenticated, loading, router]);
+    params.then((p) => setId(p.id));
+  }, [params]);
+
+  const [internship] = useState<InternshipDetail | null>(mockInternship);
 
   const handleExternalApply = () => {
     if (internship?.applyUrl) {
       window.open(internship.applyUrl, '_blank');
     }
   };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
-        <div className="text-white">Loading...</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return null;
-  }
 
   if (!internship) {
     return (
@@ -123,12 +106,12 @@ export default function InternshipDetailPage() {
             <div className="flex items-center gap-2 bg-white/5 border border-[#1F1F1F] rounded-full px-3 py-1.5">
               <span className="text-xs text-[#999]">Free Plan</span>
             </div>
-            <button
-              onClick={signOut}
+            <Link
+              href="/auth/signout"
               className="text-sm text-[#777] hover:text-white transition-colors cursor-pointer"
             >
               Sign out
-            </button>
+            </Link>
           </div>
         </div>
       </header>
@@ -229,7 +212,7 @@ export default function InternshipDetailPage() {
         {/* CTA buttons */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Link
-            href={`/tailor?jobId=${internship.id}`}
+            href={`/tailor?jobId=${internship.id}&title=${encodeURIComponent(internship.title)}&company=${encodeURIComponent(internship.company)}&description=${encodeURIComponent(internship.description)}`}
             className="bg-[#3B82F6] text-white font-medium py-4 px-6 rounded-xl hover:bg-[#2563EB] transition-colors flex items-center justify-center gap-2"
           >
             <FileEdit size={20} />
