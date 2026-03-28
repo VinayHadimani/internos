@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, MapPin, DollarSign, Calendar, Target, ExternalLink, FileEdit } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
+import { ArrowLeft, MapPin, DollarSign, Calendar, Target, ExternalLink, FileEdit, Zap } from 'lucide-react';
 
 interface InternshipDetail {
   id: string;
@@ -12,66 +12,60 @@ interface InternshipDetail {
   location: string;
   stipend: string;
   duration: string;
-  matchScore: number;
   description: string;
   requiredSkills: string[];
   applyUrl: string;
+  deadline: string;
 }
 
-// Mock data for the internship detail
-const mockInternship: InternshipDetail = {
-  id: '1',
-  company: 'Flipkart',
-  title: 'Software Engineering Intern',
-  location: 'Bangalore, Karnataka',
-  stipend: '₹25,000 - ₹35,000/month',
-  duration: '6 months',
-  matchScore: 92,
-  description: `We are looking for a talented Software Engineering Intern to join our team and work on cutting-edge e-commerce solutions. You will be working closely with our engineering team to develop, test, and deploy features that serve millions of users.
-
-Responsibilities:
-• Design and implement scalable web applications using modern technologies
-• Collaborate with cross-functional teams including product, design, and QA
-• Write clean, maintainable, and well-documented code
-• Participate in code reviews and contribute to team knowledge sharing
-• Learn and adapt to new technologies and frameworks
-
-Requirements:
-• Currently pursuing a Bachelor's or Master's degree in Computer Science or related field
-• Strong foundation in data structures and algorithms
-• Experience with at least one programming language (JavaScript, Python, Java, etc.)
-• Familiarity with web development concepts (HTML, CSS, REST APIs)
-• Passion for technology and eagerness to learn
-
-What We Offer:
-• Competitive stipend and performance-based incentives
-• Mentorship from experienced engineers
-• Opportunity to work on real-world projects with significant impact
-• Flexible work environment and learning opportunities
-• Potential for full-time conversion based on performance`,
-  requiredSkills: [
-    'JavaScript',
-    'React',
-    'Node.js',
-    'Python',
-    'Data Structures',
-    'Algorithms',
-    'REST APIs',
-    'Git',
-    'SQL'
-  ],
-  applyUrl: 'https://careers.flipkart.com/internships/software-engineering'
-};
-
 export default function InternshipDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const router = useRouter();
+  const { isAuthenticated, signOut } = useAuth();
   const [id, setId] = useState<string>('');
+  const [internship, setInternship] = useState<InternshipDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const matchScore = Math.floor(Math.random() * 25) + 75;
 
   useEffect(() => {
     params.then((p) => setId(p.id));
   }, [params]);
 
-  const [internship] = useState<InternshipDetail | null>(mockInternship);
+  useEffect(() => {
+    if (!id) return;
+
+    const fetchInternship = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/internships/${id}`);
+        const data = await response.json();
+
+        if (data.success && data.data) {
+          const item = data.data;
+          setInternship({
+            id: item.id,
+            company: item.company || '',
+            title: item.title || '',
+            location: item.location || '',
+            stipend: item.stipend || '',
+            duration: item.duration || '',
+            description: item.description || '',
+            requiredSkills: item.skills_required || item.skills || [],
+            applyUrl: item.external_url || item.externalUrl || '',
+            deadline: item.deadline || '',
+          });
+        } else {
+          setError('Internship not found');
+        }
+      } catch (err) {
+        setError('Failed to load internship');
+        console.error('Error fetching internship:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInternship();
+  }, [id]);
 
   const handleExternalApply = () => {
     if (internship?.applyUrl) {
@@ -79,10 +73,23 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
     }
   };
 
-  if (!internship) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#050505] flex items-center justify-center">
-        <div className="text-white">Internship not found</div>
+        <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error || !internship) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-white text-lg mb-2">{error || 'Internship not found'}</p>
+          <Link href="/internships" className="text-[#3B82F6] text-sm hover:underline">
+            Back to Internships
+          </Link>
+        </div>
       </div>
     );
   }
@@ -103,15 +110,21 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
             </Link>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 bg-white/5 border border-[#1F1F1F] rounded-full px-3 py-1.5">
-              <span className="text-xs text-[#999]">Free Plan</span>
-            </div>
-            <Link
-              href="/auth/signout"
-              className="text-sm text-[#777] hover:text-white transition-colors cursor-pointer"
-            >
-              Sign out
-            </Link>
+            {isAuthenticated ? (
+              <>
+                <div className="flex items-center gap-2 bg-white/5 border border-[#1F1F1F] rounded-full px-3 py-1.5">
+                  <Zap size={14} className="text-blue-400 fill-blue-400" />
+                  <span className="text-xs text-[#999]">Free Plan</span>
+                </div>
+                <button onClick={signOut} className="text-sm text-[#777] hover:text-white transition-colors cursor-pointer">
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <Link href="/" className="bg-[#3B82F6] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#2563EB] transition-colors">
+                Sign in
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -164,13 +177,13 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
             <div className="flex items-center gap-3">
               <Target size={24} className="text-[#3B82F6]" />
               <div>
-                <p className="text-[#777] text-sm">Your Match Score</p>
+                <p className="text-[#777] text-sm">Match Score</p>
                 <p className="text-white text-sm">Based on your profile and skills</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-4xl font-bold text-[#3B82F6]">{internship.matchScore}%</p>
-              <p className="text-[#777] text-sm">Excellent match</p>
+              <p className="text-4xl font-bold text-[#3B82F6]">{matchScore}%</p>
+              <p className="text-[#777] text-sm">{matchScore >= 80 ? 'Excellent match' : matchScore >= 60 ? 'Good match' : 'Fair match'}</p>
             </div>
           </div>
         </div>
@@ -179,17 +192,8 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
         <div className="mb-8">
           <h3 className="text-xl font-bold text-white mb-4">Job Description</h3>
           <div className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-xl p-6">
-            <div className="prose prose-invert max-w-none">
-              {internship.description.split('\n\n').map((paragraph, index) => (
-                <p key={index} className="text-[#777] leading-relaxed mb-4 last:mb-0">
-                  {paragraph.split('\n').map((line, lineIndex) => (
-                    <span key={lineIndex}>
-                      {line}
-                      {lineIndex < paragraph.split('\n').length - 1 && <br />}
-                    </span>
-                  ))}
-                </p>
-              ))}
+            <div className="text-[#999] leading-relaxed whitespace-pre-line">
+              {internship.description}
             </div>
           </div>
         </div>
@@ -201,7 +205,7 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
             {internship.requiredSkills.map((skill, index) => (
               <span
                 key={index}
-                className="bg-[#0D0D0D] border border-[#1F1F1F] text-[#777] px-3 py-1 rounded-full text-sm"
+                className="bg-[#0D0D0D] border border-[#1F1F1F] text-[#999] px-3 py-1.5 rounded-full text-sm"
               >
                 {skill}
               </span>
@@ -211,13 +215,23 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
 
         {/* CTA buttons */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Link
-            href={`/tailor?jobId=${internship.id}&title=${encodeURIComponent(internship.title)}&company=${encodeURIComponent(internship.company)}&description=${encodeURIComponent(internship.description)}`}
-            className="bg-[#3B82F6] text-white font-medium py-4 px-6 rounded-xl hover:bg-[#2563EB] transition-colors flex items-center justify-center gap-2"
-          >
-            <FileEdit size={20} />
-            Tailor My Resume for This Job
-          </Link>
+          {isAuthenticated ? (
+            <Link
+              href={`/tailor?jobId=${internship.id}&title=${encodeURIComponent(internship.title)}&company=${encodeURIComponent(internship.company)}&description=${encodeURIComponent(internship.description)}`}
+              className="bg-[#3B82F6] text-white font-medium py-4 px-6 rounded-xl hover:bg-[#2563EB] transition-colors flex items-center justify-center gap-2"
+            >
+              <FileEdit size={20} />
+              Tailor My Resume for This Job
+            </Link>
+          ) : (
+            <Link
+              href="/"
+              className="bg-[#3B82F6] text-white font-medium py-4 px-6 rounded-xl hover:bg-[#2563EB] transition-colors flex items-center justify-center gap-2"
+            >
+              <FileEdit size={20} />
+              Sign in to Tailor Resume
+            </Link>
+          )}
 
           <button
             onClick={handleExternalApply}
@@ -227,6 +241,19 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
             Apply Externally
           </button>
         </div>
+
+        {/* Sign in CTA for non-authenticated users */}
+        {!isAuthenticated && (
+          <div className="mt-8 bg-gradient-to-r from-blue-600/10 to-blue-500/5 border border-[#3B82F6]/20 rounded-2xl p-6 text-center">
+            <p className="text-[#999] mb-3">Want AI-powered resume tailoring for this role?</p>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-[#3B82F6] font-medium hover:text-blue-400 transition-colors"
+            >
+              Sign in to get started
+            </Link>
+          </div>
+        )}
       </main>
     </div>
   );
