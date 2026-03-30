@@ -9,6 +9,8 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import LoginModal from '@/components/auth/LoginModal'
+import BetaSpots from '@/components/BetaSpots'
+import { BETA_CONFIG } from '@/constants/beta'
 
 // ─── Animation Variants ────────────────────────────────────────
 const fadeUp: Variants = {
@@ -289,7 +291,10 @@ export default function LandingPage() {
             transition={{ delay: 0.2 }}
             className="text-[#777] text-base md:text-lg max-w-[520px] mx-auto leading-relaxed mb-8"
           >
-            Upload your resume once. InternOS AI tailors it for every opportunity — optimized for ATS, matched to the role, ready in under 2 minutes.
+            {BETA_CONFIG.IS_BETA
+              ? 'Free during beta. Upload your resume once — InternOS AI tailors it for every opportunity in seconds.'
+              : 'Upload your resume once. InternOS AI tailors it for every opportunity — optimized for ATS, matched to the role, ready in under 2 minutes.'
+            }
           </motion.p>
 
           {/* CTA Buttons */}
@@ -304,12 +309,25 @@ export default function LandingPage() {
               onClick={handleGetStarted}
               className="bg-gradient-to-r from-blue-600 to-blue-500 text-white font-medium px-8 py-3.5 rounded-xl text-[15px] shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.25)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_60px_rgba(37,99,235,0.4)] hover:scale-[1.02] active:scale-[0.98] transition-all duration-300 cursor-pointer"
             >
-              Tailor My Resume Free →
+              {BETA_CONFIG.IS_BETA ? 'Join Free Beta →' : 'Tailor My Resume Free →'}
             </button>
             <button className="bg-white/5 border border-white/10 text-[#E4E4E7] font-medium px-8 py-3.5 rounded-xl text-[15px] hover:bg-white/10 hover:border-white/20 transition-all duration-300 cursor-pointer backdrop-blur-sm">
               Browse Internships
             </button>
           </motion.div>
+
+          {BETA_CONFIG.IS_BETA && (
+            <motion.div
+              variants={fadeUp}
+              initial={prefersReducedMotion ? 'visible' : 'hidden'}
+              animate="visible"
+              transition={{ delay: 0.35 }}
+              className="mt-4"
+            >
+              <BetaSpots />
+              <p className="text-[#555] text-xs mt-1">No credit card required</p>
+            </motion.div>
+          )}
 
           {/* Trust bar */}
           <motion.div
@@ -476,24 +494,57 @@ export default function LandingPage() {
         <div className="max-w-[1000px] mx-auto">
           <motion.p variants={staggerItem} className="text-[11px] uppercase tracking-[0.15em] text-[#444] mb-3">PRICING</motion.p>
           <motion.h2 variants={staggerItem} className="text-2xl md:text-[36px] font-bold text-white mb-3 font-mono">
-            Pricing that respects a student&apos;s budget
+            {BETA_CONFIG.IS_BETA ? 'Free during Beta' : 'Pricing that respects a student\'s budget'}
           </motion.h2>
-          <motion.p variants={staggerItem} className="text-[#666] mb-10">Start free. Upgrade when you&apos;re ready.</motion.p>
+          <motion.p variants={staggerItem} className="text-[#666] mb-10">
+            {BETA_CONFIG.IS_BETA ? 'All Pro features included free. No payment required.' : 'Start free. Upgrade when you\'re ready.'}
+          </motion.p>
 
-          {/* Toggle */}
-          <motion.div variants={staggerItem} className="flex justify-center mb-10">
-            <div className="inline-flex bg-surface border border-border-default rounded-lg p-1">
-              <button
-                onClick={() => setAnnual(false)}
-                className={`px-5 py-2 rounded-md text-sm transition-all cursor-pointer ${!annual ? 'bg-white text-black font-medium' : 'text-[#777]'}`}
-              >
-                Monthly
-              </button>
-              <button
-                onClick={() => setAnnual(true)}
-                className={`px-5 py-2 rounded-md text-sm transition-all cursor-pointer flex items-center gap-2 ${annual ? 'bg-white text-black font-medium' : 'text-[#777]'}`}
-              >
-                Annual
+          {BETA_CONFIG.IS_BETA ? (
+            /* Beta: show simple free card */
+            <motion.div variants={staggerItem} className="max-w-[400px] mx-auto">
+              <div className="bg-gradient-to-b from-blue-600/10 to-[#050505] border-2 border-[#3B82F6]/40 rounded-2xl p-8 text-center relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.1),transparent_70%)] pointer-events-none" />
+                <div className="relative z-10">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#3B82F6] mb-2">BETA ACCESS</p>
+                  <p className="text-[48px] font-bold text-white tracking-tighter font-mono">FREE</p>
+                  <p className="text-[#777] text-sm mt-1 mb-6">All Pro features included</p>
+                  <div className="border-t border-white/[0.08] pt-6 space-y-3 text-left">
+                    {['Unlimited resume tailoring', 'Unlimited internship matches', 'AI cover letter generation', 'Full application tracker', 'Email alerts', 'Priority support'].map((f, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+                          <Check size={12} className="text-blue-400" />
+                        </div>
+                        <span className="text-[#ccc] text-sm">{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button 
+                    onClick={handleGetStarted}
+                    className="mt-8 w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold py-3.5 rounded-xl text-[15px] hover:scale-[1.02] transition-all cursor-pointer"
+                  >
+                    Join Free Beta
+                  </button>
+                  <p className="text-[#555] text-xs mt-3">Limited to {BETA_CONFIG.BETA_USER_LIMIT} students</p>
+                </div>
+              </div>
+            </motion.div>
+          ) : (
+            <>
+              {/* Toggle */}
+              <motion.div variants={staggerItem} className="flex justify-center mb-10">
+                <div className="inline-flex bg-surface border border-border-default rounded-lg p-1">
+                  <button
+                    onClick={() => setAnnual(false)}
+                    className={`px-5 py-2 rounded-md text-sm transition-all cursor-pointer ${!annual ? 'bg-white text-black font-medium' : 'text-[#777]'}`}
+                  >
+                    Monthly
+                  </button>
+                  <button
+                    onClick={() => setAnnual(true)}
+                    className={`px-5 py-2 rounded-md text-sm transition-all cursor-pointer flex items-center gap-2 ${annual ? 'bg-white text-black font-medium' : 'text-[#777]'}`}
+                  >
+                    Annual
                 <span className="bg-blue-500/10 text-[#60A5FA] text-[10px] px-2 py-0.5 rounded-full font-medium">Save 44%</span>
               </button>
             </div>
@@ -601,6 +652,9 @@ export default function LandingPage() {
             <Zap size={16} className="text-blue-500 fill-blue-500" />
             First month 50% off — pay just <span className="text-white font-semibold">₹149</span> to start
           </p>
+            </>
+          )}
+
         </div>
       </Section>
 

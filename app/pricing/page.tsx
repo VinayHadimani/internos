@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
@@ -12,6 +12,7 @@ import {
   ChevronDown,
   ArrowLeft,
 } from "lucide-react";
+import { BETA_CONFIG } from "@/constants/beta";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 20 },
@@ -118,6 +119,15 @@ function handleUpgrade() {
 }
 
 export default function PricingPage() {
+  const [spotsLeft, setSpotsLeft] = useState<number | null>(null);
+
+  useEffect(() => {
+    fetch('/api/beta/spots')
+      .then(res => res.json())
+      .then(data => setSpotsLeft(data.spotsLeft))
+      .catch(() => setSpotsLeft(67));
+  }, []);
+
   return (
     <div className="min-h-screen bg-[#030303] text-white">
       {/* Background */}
@@ -164,119 +174,193 @@ export default function PricingPage() {
             <span className="text-xs text-[#999]">Simple, student-friendly pricing</span>
           </div>
           <h1 className="text-4xl md:text-5xl font-bold text-white tracking-tight mb-4 font-mono">
-            Upgrade to Pro
+            {BETA_CONFIG.IS_BETA ? "Free During Beta" : "Upgrade to Pro"}
           </h1>
           <p className="text-[#777] text-lg max-w-[500px] mx-auto">
-            Unlock unlimited resume tailoring and land more interviews.
+            {BETA_CONFIG.IS_BETA
+              ? "All Pro features unlocked for first 100 users. Pricing starts June 2026."
+              : "Unlock unlimited resume tailoring and land more interviews."
+            }
           </p>
         </motion.div>
 
-        {/* Pricing cards */}
-        <div className="grid md:grid-cols-3 gap-5 mb-24">
-          {plans.map((plan, i) => (
+        {BETA_CONFIG.IS_BETA ? (
+          /* ═══ BETA MODE ═══ */
+          <>
+            {/* Urgency message */}
             <motion.div
-              key={plan.name}
               initial="hidden"
               animate="visible"
               variants={fadeUp}
-              transition={{ delay: 0.1 * (i + 1) }}
-              className={`relative rounded-2xl p-8 flex flex-col ${
-                plan.popular
-                  ? "bg-gradient-to-b from-[#1E293B]/40 to-[#0F172A]/80 border-2 border-[#3B82F6]/60 shadow-[0_0_60px_rgba(37,99,235,0.15)] scale-[1.02]"
-                  : "bg-gradient-to-b from-[#0E0E11] to-[#050505] border border-white/[0.08]"
-              }`}
+              className="max-w-[400px] mx-auto mb-10 text-center"
             >
-              {plan.popular && (
-                <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-[10px] uppercase tracking-[0.15em] px-4 py-1.5 rounded-full font-bold shadow-lg">
-                  Most Popular
+              <div className="flex items-center justify-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                <span className="text-[#999] text-sm">
+                  <span className="text-white font-bold">{spotsLeft ?? "..."}</span> beta spots remaining
                 </span>
-              )}
-
-              <div className="mb-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#A1A1AA] mb-3">
-                  {plan.name}
-                </p>
-                <p className="flex items-baseline gap-1">
-                  <span className="text-4xl font-bold text-white tracking-tighter font-mono">
-                    {plan.price}
-                  </span>
-                  {plan.period && (
-                    <span className="text-[#666] text-sm">{plan.period}</span>
-                  )}
-                </p>
-                <p className="text-[#666] text-sm mt-2">{plan.description}</p>
               </div>
+            </motion.div>
 
-              <div className="border-t border-white/[0.08] my-4" />
+            {/* Beta card */}
+            <motion.div
+              initial="hidden"
+              animate="visible"
+              variants={fadeUp}
+              transition={{ delay: 0.1 }}
+              className="max-w-[450px] mx-auto"
+            >
+              <div className="bg-gradient-to-b from-blue-600/10 to-[#050505] border-2 border-[#3B82F6]/40 rounded-2xl p-10 text-center relative overflow-hidden">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(59,130,246,0.15),transparent_70%)] pointer-events-none" />
+                <div className="relative z-10">
+                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#3B82F6] mb-2">BETA ACCESS</p>
+                  <p className="text-[56px] font-bold text-white tracking-tighter font-mono">FREE</p>
+                  <p className="text-[#777] text-sm mt-1 mb-8">All Pro features included</p>
 
-              <ul className="space-y-3.5 flex-1 mb-8">
-                {plan.features.map((f, j) => (
-                  <li key={j} className="flex items-start gap-3 text-[15px]">
-                    <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-                        plan.popular
-                          ? "bg-blue-500/20"
-                          : "bg-white/5"
-                      }`}
-                    >
-                      <Check
-                        size={12}
-                        className={plan.popular ? "text-blue-400" : "text-[#666]"}
-                      />
-                    </div>
-                    <span className={plan.popular ? "text-white" : "text-[#999]"}>
-                      {f}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+                  <div className="border-t border-white/[0.08] pt-6 space-y-3.5 text-left">
+                    {[
+                      "Unlimited resume tailoring",
+                      "Unlimited internship matches",
+                      "AI cover letter generation",
+                      "Full application tracker",
+                      "Email alerts for new matches",
+                      "Priority support",
+                    ].map((f, i) => (
+                      <div key={i} className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full bg-blue-500/20 flex items-center justify-center shrink-0">
+                          <Check size={12} className="text-blue-400" />
+                        </div>
+                        <span className="text-[#ccc] text-sm">{f}</span>
+                      </div>
+                    ))}
+                  </div>
 
-              {plan.ctaStyle === "disabled" ? (
-                <button
-                  disabled
-                  className="w-full py-3.5 rounded-xl text-[15px] font-semibold transition-all cursor-not-allowed bg-white/5 text-[#555] border border-white/10"
-                >
-                  {plan.cta}
-                </button>
-              ) : (
-                <button
-                  onClick={handleUpgrade}
-                  className={`w-full py-3.5 rounded-xl text-[15px] font-semibold transition-all cursor-pointer ${
-                    plan.ctaStyle === "primary"
-                      ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_20px_rgba(37,99,235,0.2)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.4)] hover:scale-[1.02]"
-                      : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                  <Link
+                    href="/"
+                    className="mt-8 block w-full bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold py-3.5 rounded-xl text-[15px] hover:scale-[1.02] transition-all"
+                  >
+                    Join Free Beta
+                  </Link>
+                  <p className="text-[#555] text-xs mt-3">No credit card required · Limited to {BETA_CONFIG.BETA_USER_LIMIT} students</p>
+                </div>
+              </div>
+            </motion.div>
+
+            {/* Coming soon note */}
+            <motion.div
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              variants={fadeUp}
+              className="text-center mt-16 text-[#555] text-sm"
+            >
+              <p>After beta ends on {BETA_CONFIG.BETA_END_DATE}, paid plans will be available.</p>
+            </motion.div>
+          </>
+        ) : (
+          /* ═══ NORMAL PRICING ═══ */
+          <>
+            {/* Pricing cards */}
+            <div className="grid md:grid-cols-3 gap-5 mb-24">
+              {plans.map((plan, i) => (
+                <motion.div
+                  key={plan.name}
+                  initial="hidden"
+                  animate="visible"
+                  variants={fadeUp}
+                  transition={{ delay: 0.1 * (i + 1) }}
+                  className={`relative rounded-2xl p-8 flex flex-col ${
+                    plan.popular
+                      ? "bg-gradient-to-b from-[#1E293B]/40 to-[#0F172A]/80 border-2 border-[#3B82F6]/60 shadow-[0_0_60px_rgba(37,99,235,0.15)] scale-[1.02]"
+                      : "bg-gradient-to-b from-[#0E0E11] to-[#050505] border border-white/[0.08]"
                   }`}
                 >
-                  {plan.cta}
-                </button>
-              )}
+                  {plan.popular && (
+                    <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-[10px] uppercase tracking-[0.15em] px-4 py-1.5 rounded-full font-bold shadow-lg">
+                      Most Popular
+                    </span>
+                  )}
+
+                  <div className="mb-6">
+                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#A1A1AA] mb-3">
+                      {plan.name}
+                    </p>
+                    <p className="flex items-baseline gap-1">
+                      <span className="text-4xl font-bold text-white tracking-tighter font-mono">
+                        {plan.price}
+                      </span>
+                      {plan.period && (
+                        <span className="text-[#666] text-sm">{plan.period}</span>
+                      )}
+                    </p>
+                    <p className="text-[#666] text-sm mt-2">{plan.description}</p>
+                  </div>
+
+                  <div className="border-t border-white/[0.08] my-4" />
+
+                  <ul className="space-y-3.5 flex-1 mb-8">
+                    {plan.features.map((f, j) => (
+                      <li key={j} className="flex items-start gap-3 text-[15px]">
+                        <div
+                          className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                            plan.popular ? "bg-blue-500/20" : "bg-white/5"
+                          }`}
+                        >
+                          <Check size={12} className={plan.popular ? "text-blue-400" : "text-[#666]"} />
+                        </div>
+                        <span className={plan.popular ? "text-white" : "text-[#999]"}>{f}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {plan.ctaStyle === "disabled" ? (
+                    <button
+                      disabled
+                      className="w-full py-3.5 rounded-xl text-[15px] font-semibold transition-all cursor-not-allowed bg-white/5 text-[#555] border border-white/10"
+                    >
+                      {plan.cta}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleUpgrade}
+                      className={`w-full py-3.5 rounded-xl text-[15px] font-semibold transition-all cursor-pointer ${
+                        plan.ctaStyle === "primary"
+                          ? "bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_20px_rgba(37,99,235,0.2)] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_40px_rgba(37,99,235,0.4)] hover:scale-[1.02]"
+                          : "border border-white/10 bg-white/5 text-white hover:bg-white/10"
+                      }`}
+                    >
+                      {plan.cta}
+                    </button>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+
+            {/* Payment notice */}
+            <motion.div
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true }}
+              variants={fadeUp}
+              className="text-center mb-20 bg-[#0A0A0A] border border-white/[0.06] rounded-2xl p-8"
+            >
+              <Zap size={24} className="text-blue-400 mx-auto mb-4" />
+              <h3 className="text-lg font-bold text-white mb-2">Payment integration coming soon</h3>
+              <p className="text-[#777] text-sm max-w-[450px] mx-auto mb-4">
+                Razorpay payment gateway is being integrated. For now, contact us directly for Pro or Annual access.
+              </p>
+              <a
+                href="mailto:vinay@internos.in?subject=InternOS%20Pro%20Access"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-sm font-medium px-6 py-3 rounded-xl hover:shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all"
+              >
+                <Mail size={16} />
+                Contact vinay@internos.in for Pro access
+              </a>
             </motion.div>
-          ))}
-        </div>
+          </>
+        )}
 
-        {/* Payment notice */}
-        <motion.div
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-          variants={fadeUp}
-          className="text-center mb-20 bg-[#0A0A0A] border border-white/[0.06] rounded-2xl p-8"
-        >
-          <Zap size={24} className="text-blue-400 mx-auto mb-4" />
-          <h3 className="text-lg font-bold text-white mb-2">Payment integration coming soon</h3>
-          <p className="text-[#777] text-sm max-w-[450px] mx-auto mb-4">
-            Razorpay payment gateway is being integrated. For now, contact us directly for Pro or Annual access.
-          </p>
-          <a
-            href="mailto:vinay@internos.in?subject=InternOS%20Pro%20Access"
-            className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-sm font-medium px-6 py-3 rounded-xl hover:shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all"
-          >
-            <Mail size={16} />
-            Contact vinay@internos.in for Pro access
-          </a>
-        </motion.div>
-
-        {/* FAQ */}
+        {/* FAQ — always shown */}
         <motion.div
           initial="hidden"
           whileInView="visible"

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
+import { BETA_CONFIG } from '@/constants/beta';
 import {
   FileEdit, Upload, ArrowLeft, Zap, AlertCircle, Target,
   Lightbulb, Briefcase, GraduationCap, FolderGit2, Check, X,
@@ -20,16 +21,17 @@ interface TailoredResume {
 
 interface TailorResult {
   matchScore: number;
+  isIrrelevant?: boolean;
   tailoredResume: TailoredResume;
   suggestions: string[];
 }
 
-function ScoreCircle({ score }: { score: number }) {
+function ScoreCircle({ score, isIrrelevant }: { score: number; isIrrelevant?: boolean }) {
   const radius = 70;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
-  const color = score >= 80 ? '#22c55e' : score >= 60 ? '#eab308' : '#ef4444';
-  const label = score >= 80 ? 'Excellent match' : score >= 60 ? 'Good match' : 'Needs improvement';
+  const color = isIrrelevant ? '#ef4444' : score >= 80 ? '#22c55e' : score >= 60 ? '#eab308' : score > 0 ? '#ef4444' : '#ef4444';
+  const label = isIrrelevant ? 'Not a match' : score >= 80 ? 'Excellent match' : score >= 60 ? 'Good match' : score > 0 ? 'Needs improvement' : 'No match';
 
   return (
     <div className="flex flex-col items-center">
@@ -218,7 +220,9 @@ function TailorContent() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 bg-white/5 border border-[#1F1F1F] rounded-full px-3 py-1.5">
               <Zap size={14} className="text-blue-400 fill-blue-400" />
-              <span className="text-xs text-[#999]">Free Plan</span>
+              <span className="text-xs text-[#999]">
+                {BETA_CONFIG.IS_BETA ? 'Beta — Unlimited' : 'Free Plan'}
+              </span>
             </div>
             <button onClick={signOut} className="text-sm text-[#777] hover:text-white transition-colors cursor-pointer">
               Sign out
@@ -308,8 +312,22 @@ function TailorContent() {
             <div className="space-y-6">
               {/* Match score */}
               <div className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-8 text-center">
-                <ScoreCircle score={result.matchScore} />
+                <ScoreCircle score={result.matchScore} isIrrelevant={result.isIrrelevant} />
               </div>
+
+              {/* Irrelevant warning */}
+              {result.isIrrelevant && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-6">
+                  <h3 className="text-base font-bold text-red-400 mb-2 flex items-center gap-2">
+                    <AlertCircle size={18} /> This role isn't for you
+                  </h3>
+                  <p className="text-[#999] text-sm leading-relaxed">
+                    Your resume shows no relevant skills or experience for this position. 
+                    Consider looking for roles that match your actual background — 
+                    you'll have a much better chance of success.
+                  </p>
+                </div>
+              )}
 
               {/* Skills */}
               <div className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-6">
