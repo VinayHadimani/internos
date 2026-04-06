@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { scrapeAllInternships, scrapeSingleUrl } from '@/lib/scraper/internship-scraper';
-import { createClient } from '@/lib/supabase/server';
-import { Database } from '@/types/database';
-import { createServerClient } from '@supabase/ssr';
+import { scrapeSingleUrl } from '@/lib/scraper/internship-scraper';
+import { createAdminClient } from '@/lib/supabase/admin';
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GROQ_API_KEY;
@@ -12,17 +10,12 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = await req.json().catch(() => ({}));
-    const singleUrl = body?.url;
-
-    let internships;
+    // Test with just ONE URL for now to avoid Vercel timeouts
+    const testUrl = 'https://internshala.com/internships/python';
     
-    if (singleUrl) {
-      internships = await scrapeSingleUrl(singleUrl, apiKey);
-    } else {
-      const result = await scrapeAllInternships(apiKey);
-      internships = result.internships;
-    }
+    console.log('Scraping single URL:', testUrl);
+    const internships = await scrapeSingleUrl(testUrl, apiKey);
+    console.log('Found internships:', internships.length);
 
     if (!internships || internships.length === 0) {
       return NextResponse.json({
@@ -34,27 +27,18 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const supabase = createServerClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      {
-        cookies: {
-          getAll: () => [],
-          setAll: () => {},
-        },
-      }
-    );
+    const supabase = createAdminClient();
     
     let added = 0;
     let skipped = 0;
 
-    for (const internship of internships) {
+    // Process first 10 results to stay within timeout limits
+    for (const internship of internships.slice(0, 10)) {
       try {
         const { data: existing } = await supabase
           .from('internships')
           .select('id')
-          .eq('title', internship.title)
-          .eq('company', internship.company)
+          .eq('external_url', internship.link)
           .maybeSingle();
 
         if (existing) {
@@ -81,9 +65,11 @@ export async function POST(req: NextRequest) {
 
         if (!error) {
           added++;
+        } else {
+          console.error('Database insert error:', error);
         }
       } catch (e) {
-        // Skip errors
+        console.error('Error processing internship:', e);
       }
     }
 
