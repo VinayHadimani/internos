@@ -1,12 +1,11 @@
 import { scrapeUrl } from './browser';
-import { extractInternships, extractSkillsFromJD } from './extractor';
-import { createClient } from '@/lib/supabase/server';
+import { extractInternships } from './extractor';
 
 const INTERNSHIP_SOURCES = [
   {
     name: 'Internshala',
     baseUrl: 'https://internshala.com/internships',
-    searches: ['python', 'web-development', 'data-science', 'machine-learning', 'marketing', 'design'],
+    searches: ['python', 'web-development', 'data-science', 'marketing', 'design'],
   },
   {
     name: 'Unstop',
@@ -15,22 +14,31 @@ const INTERNSHIP_SOURCES = [
   },
 ];
 
-export async function scrapeAndSeedInternships(): Promise<{
-  inserted: number;
-  skipped: number;
-  errors: number;
-}> {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) throw new Error('GROQ_API_KEY not set');
+export interface ScrapedInternship {
+  title: string;
+  company: string;
+  location: string;
+  stipend: string;
+  duration: string | null;
+  description: string;
+  skills: string[];
+  link: string;
+  deadline: string | null;
+  source: string;
+}
 
-  const supabase = await createClient();
-  const results = { inserted: 0, skipped: 0, errors: 0 };
+export async function scrapeAllInternships(apiKey: string): Promise<{
+  internships: ScrapedInternship[];
+  errors: string[];
+}> {
+  const allInternships: ScrapedInternship[] = [];
+  const errors: string[] = [];
 
   for (const source of INTERNSHIP_SOURCES) {
     for (const search of source.searches) {
       try {
         console.log(`Scraping ${source.name}: ${search}`);
-
+        
         const url = `${source.baseUrl}/${search}`;
         const html = await scrapeUrl(url);
         const internships = await extractInternships(html, apiKey);
@@ -38,64 +46,47 @@ export async function scrapeAndSeedInternships(): Promise<{
         console.log(`Found ${internships.length} internships`);
 
         for (const job of internships) {
-          try {
-            // Check for duplicates
-            const { data: existing } = await (supabase as any)
-              .from('internships')
-              .select('id')
-              .eq('external_url', job.link || '')
-              .single();
-
-            if (existing) {
-              results.skipped++;
-              continue;
-            }
-
-            // Extract skills
-            const skills = await extractSkillsFromJD(job.description || '', apiKey);
-
-            // Insert
-            const { error } = await (supabase as any)
-              .from('internships')
-              .insert({
-                title: job.title || 'Untitled',
-                company: job.company || 'Unknown',
-                location: job.location || 'Not specified',
-                stipend: job.stipend || 'Not disclosed',
-                duration: job.duration || null,
-                description: job.description || '',
-                skills_required: skills.length > 0 ? skills : (job.skills || []),
-                source: source.name.toLowerCase(),
-                external_url: job.link || '',
-                posted_date: new Date().toISOString().split('T')[0],
-                deadline: job.deadline || null,
-                is_active: true,
-              });
-
-            if (error) {
-              console.error('Insert error:', error);
-              results.errors++;
-            } else {
-              results.inserted++;
-            }
-
-            // Rate limiting
-            await sleep(1000);
-          } catch (err) {
-            results.errors++;
-          }
+          allInternships.push({
+            title: job.title || 'Untitled',
+            company: job.company || 'Unknown',
+            location: job.location || 'Not specified',
+            stipend: job.stipend || 'Not disclosed',
+            duration: job.duration || null,
+            description: job.description || '',
+            skills: job.skills || [],
+            link: job.link || '',
+            deadline: job.deadline || null,
+            source: source.name.toLowerCase(),
+          });
         }
 
-        // Wait between searches
         await sleep(2000);
       } catch (error: any) {
         console.error(`Failed ${source.name} - ${search}:`, error.message);
-        results.errors++;
+        errors.push(`${source.name}/${search}: ${error.message}`);
       }
     }
   }
 
-  return results;
+  return { internships: allInternships, errors };
+}
+
+export async function scrapeSingleUrl(url: string, apiKey: string): Promise<ScrapedInternship[]> {
+  const html = await scrapeUrl(url);
+  const internships = await extractInternships(html, apiKey);
+  
+  return internships.map(job => ({
+    title: job.title || 'Untitled',
+    company: job.company || 'Unknown',
+    location: job.location || 'Not specified',
+    stipend: job.stipend || 'Not disclosed',
+    duration: job.duration || null,
+    description: job.description || '',
+    skills: job.skills || [],
+    link: job.link || '',
+    deadline: job.deadline || null,
+    source: 'custom',
+  }));
 }
 
 function sleep(ms: number) {
