@@ -1,6 +1,6 @@
 import { scrapeUrl } from './browser';
 import { extractInternships, extractSkillsFromJD } from './extractor';
-import { createServerClient } from '@/lib/supabase/server';
+import { createClient } from '@/lib/supabase/server';
 
 const INTERNSHIP_SOURCES = [
   {
@@ -23,7 +23,7 @@ export async function scrapeAndSeedInternships(): Promise<{
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY not set');
 
-  const supabase = await createServerClient();
+  const supabase = await createClient();
   const results = { inserted: 0, skipped: 0, errors: 0 };
 
   for (const source of INTERNSHIP_SOURCES) {
@@ -40,7 +40,7 @@ export async function scrapeAndSeedInternships(): Promise<{
         for (const job of internships) {
           try {
             // Check for duplicates
-            const { data: existing } = await supabase
+            const { data: existing } = await (supabase as any)
               .from('internships')
               .select('id')
               .eq('external_url', job.link || '')
@@ -55,7 +55,7 @@ export async function scrapeAndSeedInternships(): Promise<{
             const skills = await extractSkillsFromJD(job.description || '', apiKey);
 
             // Insert
-            const { error } = await supabase
+            const { error } = await (supabase as any)
               .from('internships')
               .insert({
                 title: job.title || 'Untitled',
