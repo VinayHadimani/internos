@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { scrapeAllInternships, scrapeSingleUrl } from '@/lib/scraper/internship-scraper';
 import { createClient } from '@/lib/supabase/server';
+import { Database } from '@/types/database';
+import { createServerClient } from '@supabase/ssr';
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GROQ_API_KEY;
@@ -32,7 +34,16 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    const supabase = await createClient();
+    const supabase = createServerClient<Database>(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          getAll: () => [],
+          setAll: () => {},
+        },
+      }
+    );
     
     let added = 0;
     let skipped = 0;
@@ -51,8 +62,8 @@ export async function POST(req: NextRequest) {
           continue;
         }
 
-        const { error } = await supabase
-          .from('internships')
+        const { error } = await (supabase
+          .from('internships') as any)
           .insert({
             title: internship.title,
             company: internship.company,
