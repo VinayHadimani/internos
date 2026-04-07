@@ -14,7 +14,8 @@ export async function GET(req: NextRequest) {
     const { data, error } = await supabase
       .from('resumes')
       .delete()
-      .lt('updated_at', twoMinutesAgo.toISOString());
+      .lt('updated_at', twoMinutesAgo.toISOString())
+      .select();
 
     if (error) {
       console.error('[Cron Cleanup] Error deleting old resumes:', error);
