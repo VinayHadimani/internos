@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
+import { createClient } from '@/lib/supabase/client';
 import { FileEdit, Search, ArrowRight, Zap, Eye, User, Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -14,21 +15,56 @@ export default function DashboardPage() {
   const [searchError, setSearchError] = useState<string | null>(null);
 
   async function handleSearchJobs() {
+    if (!user?.id) {
+      setSearchError('User not authenticated');
+      return;
+    }
+
     setSearching(true);
     setSearchError(null);
     try {
+      const supabase = createClient();
+      
+      // 1. Fetch the latest resume text
+      const { data: resumeData, error: resumeError } = await supabase
+        .from('resumes')
+        .select('original_text')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (resumeError || !resumeData || !(resumeData as any).original_text) {
+        setSearchError('No resume found. Please upload a resume in your profile first.');
+        setSearching(false);
+        return;
+      }
+
+      // 2. Fetch user skills for better ranking
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('skills')
+        .eq('id', user.id)
+        .single();
+
       const res = await fetch('/api/internships/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resumeText: "user's resume text here" }) // get from profile/resume state
+        body: JSON.stringify({ 
+          resumeText: (resumeData as any).original_text,
+          userId: user.id,
+          userSkills: (profileData as any)?.skills || []
+        })
       });
+      
       const data = await res.json();
       if (data.success) {
-        setSearchResults(data.jobs);
+        setSearchResults(data.data || []);
       } else {
         setSearchError(data.error || 'Search failed');
       }
     } catch (error) {
+      console.error('Search error:', error);
       setSearchError('Failed to connect to search service');
     } finally {
       setSearching(false);
