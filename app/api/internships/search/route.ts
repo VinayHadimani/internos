@@ -1,42 +1,43 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { searchJobsForResume, rankJobsForResume } from '@/lib/scraper/resume-job-search';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { resumeText } = body;
-    
-    console.log('Search API called with resume length:', resumeText?.length);
+    const { resumeText, userSkills } = body;
     
     if (!resumeText) {
       return NextResponse.json({ error: 'Resume text is required' }, { status: 400 });
     }
 
-    // For now, return mock data to test
+    // 1. Search for jobs based on resume content
+    const { jobs: foundJobs } = await searchJobsForResume(resumeText);
+    
+    if (!foundJobs || foundJobs.length === 0) {
+      return NextResponse.json({ 
+        success: true, 
+        data: [], 
+        message: 'No matching internships found' 
+      });
+    }
+
+    // 2. Rank jobs against user's skills and resume
+    const rankedJobs = await rankJobsForResume(
+      resumeText, 
+      foundJobs, 
+      userSkills || [], 
+      'fresher' // Defaulting to fresher for internship search
+    );
+
     return NextResponse.json({
       success: true,
-      jobs: [
-        {
-          title: 'Frontend Developer Intern',
-          company: 'Tech Startup',
-          location: 'Remote',
-          skills: ['React', 'TypeScript', 'CSS'],
-          matchScore: 85,
-          matchLabel: 'Excellent Match',
-          description: 'Build modern web applications'
-        },
-        {
-          title: 'Full Stack Intern',
-          company: 'Innovation Labs',
-          location: 'Bangalore',
-          skills: ['JavaScript', 'Node.js', 'MongoDB'],
-          matchScore: 72,
-          matchLabel: 'Good Match',
-          description: 'Full stack development role'
-        }
-      ]
+      data: rankedJobs
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Search error:', error);
-    return NextResponse.json({ error: 'Search failed' }, { status: 500 });
+    return NextResponse.json({ 
+      success: false, 
+      error: error.message || 'Search failed' 
+    }, { status: 500 });
   }
 }

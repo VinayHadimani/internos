@@ -31,6 +31,9 @@ export default function DashboardPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rawText: text, fileName: file.name })
       });
+
+      // Automatically trigger search after upload
+      await handleSearchJobs(text);
     } catch (error) {
       console.error('Upload failed:', error);
     } finally {
@@ -38,7 +41,7 @@ export default function DashboardPage() {
     }
   }
 
-  async function handleSearchJobs() {
+  async function handleSearchJobs(providedResumeText?: string) {
     if (!user?.id) {
       setSearchError('User not authenticated');
       return;
@@ -49,7 +52,7 @@ export default function DashboardPage() {
     try {
       const supabase = createClient();
       
-      let currentResumeText = resumeText;
+      let currentResumeText = providedResumeText || resumeText;
 
       if (!currentResumeText) {
         // 1. Fetch the latest resume text if not in state
@@ -231,7 +234,7 @@ export default function DashboardPage() {
                <p className="text-[#777] text-sm">Find internships that perfectly match your resume using AI.</p>
              </div>
              <button 
-               onClick={handleSearchJobs} 
+               onClick={() => handleSearchJobs()} 
                disabled={searching}
                className="bg-[#3B82F6] hover:bg-blue-600 disabled:bg-blue-800 text-white px-6 py-2.5 rounded-lg font-medium transition-all flex items-center justify-center w-full md:w-auto"
              >
