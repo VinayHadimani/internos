@@ -142,7 +142,7 @@ export async function rankJobsForResume(
     }));
 
     // Batch insert into user_internships
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('user_internships')
       .insert(insertions);
 
