@@ -13,6 +13,30 @@ export default function DashboardPage() {
   const [searching, setSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [resumeText, setResumeText] = useState<string | null>(null);
+
+  async function handleResumeUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    try {
+      const text = await file.text();
+      setResumeText(text);
+      
+      // Save to database
+      await fetch('/api/resume', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawText: text, fileName: file.name })
+      });
+    } catch (error) {
+      console.error('Upload failed:', error);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function handleSearchJobs() {
     if (!user?.id) {
@@ -25,19 +49,24 @@ export default function DashboardPage() {
     try {
       const supabase = createClient();
       
-      // 1. Fetch the latest resume text
-      const { data: resumeData, error: resumeError } = await supabase
-        .from('resumes')
-        .select('original_text')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+      let currentResumeText = resumeText;
 
-      if (resumeError || !resumeData || !(resumeData as any).original_text) {
-        setSearchError('No resume found. Please upload a resume in your profile first.');
-        setSearching(false);
-        return;
+      if (!currentResumeText) {
+        // 1. Fetch the latest resume text if not in state
+        const { data: resumeData, error: resumeError } = await supabase
+          .from('resumes')
+          .select('original_text')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (resumeError || !resumeData || !(resumeData as any).original_text) {
+          setSearchError('No resume found. Please upload a resume first.');
+          setSearching(false);
+          return;
+        }
+        currentResumeText = (resumeData as any).original_text;
       }
 
       // 2. Fetch user skills for better ranking
@@ -51,7 +80,7 @@ export default function DashboardPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          resumeText: (resumeData as any).original_text,
+          resumeText: currentResumeText,
           userId: user.id,
           userSkills: (profileData as any)?.skills || []
         })
@@ -151,8 +180,51 @@ export default function DashboardPage() {
            ))}
          </div>
 
-         {/* Job Search Section - Moved for better prominence */}
-         <div className="mb-10 p-6 bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl">
+          {/* Resume Upload Section */}
+          <div className="bg-[#0D0D0D] rounded-2xl p-6 mb-6 border border-[#1F1F1F]">
+            <h2 className="text-xl font-semibold mb-2 text-white">📄 Your Resume</h2>
+            <p className="text-[#777] mb-4">
+              Upload your resume to get personalized job matches
+            </p>
+            
+            {resumeText ? (
+              <div className="flex items-center gap-3">
+                <span className="text-green-400 text-sm">✓ Resume uploaded</span>
+                <label className="cursor-pointer text-[#3B82F6] hover:text-blue-300 underline text-sm">
+                  Replace
+                  <input 
+                    type="file" 
+                    accept=".txt,.pdf,.doc,.docx" 
+                    className="hidden" 
+                    onChange={handleResumeUpload}
+                  />
+                </label>
+              </div>
+            ) : (
+              <label className="inline-flex items-center gap-2 bg-[#3B82F6] hover:bg-blue-600 px-4 py-2 rounded-lg cursor-pointer transition text-sm font-medium text-white">
+                {uploading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    📤 Upload Resume
+                  </>
+                )}
+                <input 
+                  type="file" 
+                  accept=".txt,.pdf,.doc,.docx" 
+                  className="hidden" 
+                  onChange={handleResumeUpload}
+                  disabled={uploading}
+                />
+              </label>
+            )}
+          </div>
+
+          {/* Job Search Section - Moved for better prominence */}
+          <div className="mb-10 p-6 bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl">
            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
              <div>
                <h2 className="text-xl font-bold text-white">Smart Job Matching</h2>
