@@ -27,10 +27,11 @@ export async function GET(req: NextRequest) {
 
     // Transform the data to a flatter structure
     const matchedInternships = data?.map(item => {
-      const internship = (item as any).internships;
+      const row = item as any;
+      const internship = row.internships;
       return {
         ...internship,
-        matchScore: item.match_score
+        matchScore: row.match_score
       };
     }) || [];
 
