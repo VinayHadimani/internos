@@ -1,80 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
-import { searchJobsForResume, rankJobsForResume } from '@/lib/scraper/resume-job-search';
 
-export async function POST(request: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
-    const body = await request.json();
-    const { 
-      resumeText, 
-      userId, 
-      userSkills = [], 
-      experienceLevel = 'fresher' 
-    } = body;
-
+    const body = await req.json();
+    const { resumeText } = body;
+    
+    console.log('Search API called with resume length:', resumeText?.length);
+    
     if (!resumeText) {
-      return NextResponse.json(
-        { success: false, error: 'resumeText is required' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Resume text is required' }, { status: 400 });
     }
 
-    // 1. Search for jobs based on resume (includes extraction and aggregation)
-    console.log(`[Search API] Starting search pipeline for user: ${userId}`);
-    try {
-      const { jobs, searchTerms } = await searchJobsForResume(resumeText);
-      console.log(`[Search API] Found ${jobs?.length || 0} jobs using terms:`, searchTerms);
-      
-      if (!jobs || jobs.length === 0) {
-        return NextResponse.json({
-          success: true,
-          data: [],
-          searchTerms,
-          message: 'No jobs found for the given resume'
-        });
-      }
-
-      // 2. Rank the found jobs against the resume
-      const rankedJobs = await rankJobsForResume(
-        resumeText, 
-        jobs, 
-        userSkills, 
-        experienceLevel
-      );
-
-      // 3. Optional: Log search to DB if userId is provided
-      if (userId) {
-        try {
-          const supabase = await createClient();
-          await (supabase as any).from('search_logs').insert({
-            user_id: userId,
-            query_params: searchTerms,
-            results_count: rankedJobs.length,
-            created_at: new Date().toISOString()
-          });
-        } catch (dbError) {
-          console.error('[Search API] DB Logging Error:', dbError);
-          // Don't fail the whole request if just logging fails
+    // For now, return mock data to test
+    return NextResponse.json({
+      success: true,
+      jobs: [
+        {
+          title: 'Frontend Developer Intern',
+          company: 'Tech Startup',
+          location: 'Remote',
+          skills: ['React', 'TypeScript', 'CSS'],
+          matchScore: 85,
+          matchLabel: 'Excellent Match',
+          description: 'Build modern web applications'
+        },
+        {
+          title: 'Full Stack Intern',
+          company: 'Innovation Labs',
+          location: 'Bangalore',
+          skills: ['JavaScript', 'Node.js', 'MongoDB'],
+          matchScore: 72,
+          matchLabel: 'Good Match',
+          description: 'Full stack development role'
         }
-      }
-
-      return NextResponse.json({
-        success: true,
-        data: rankedJobs,
-        searchTerms,
-        count: rankedJobs.length
-      });
-    } catch (pipelineError: any) {
-      console.error('[Search API] Pipeline Error:', pipelineError);
-      throw pipelineError;
-    }
-
-
-  } catch (error: any) {
-    console.error('[Search API] Pipeline Error:', error);
-    return NextResponse.json(
-      { success: false, error: error.message || 'Internal server error during job search' },
-      { status: 500 }
-    );
+      ]
+    });
+  } catch (error) {
+    console.error('Search error:', error);
+    return NextResponse.json({ error: 'Search failed' }, { status: 500 });
   }
 }
