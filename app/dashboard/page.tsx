@@ -1,14 +1,39 @@
 "use client";
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { FileEdit, Search, ArrowRight, Zap, Eye, User } from 'lucide-react';
+import { FileEdit, Search, ArrowRight, Zap, Eye, User, Loader2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { user, isAuthenticated, loading, signOut } = useAuth();
   const router = useRouter();
+  const [searching, setSearching] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
+
+  async function handleSearchJobs() {
+    setSearching(true);
+    setSearchError(null);
+    try {
+      const res = await fetch('/api/internships/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeText: "user's resume text here" }) // get from profile/resume state
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSearchResults(data.jobs);
+      } else {
+        setSearchError(data.error || 'Search failed');
+      }
+    } catch (error) {
+      setSearchError('Failed to connect to search service');
+    } finally {
+      setSearching(false);
+    }
+  }
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -124,22 +149,89 @@ export default function DashboardPage() {
             </span>
           </Link>
 
-          <Link
-            href="/tracker"
-            className="group bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-8 hover:border-[#3B82F6]/50 transition-all duration-300"
-          >
-            <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 shadow-inner flex items-center justify-center mb-6">
-              <Eye size={24} className="text-[#3B82F6]" />
-            </div>
-            <h2 className="text-xl font-bold text-white mb-2">Track Applications</h2>
-            <p className="text-[#777] text-[15px] leading-relaxed mb-6">
-              Monitor your internship applications, interviews, and offers all in one place.
-            </p>
-            <span className="inline-flex items-center gap-2 text-[#3B82F6] text-sm font-medium group-hover:gap-3 transition-all">
-              View tracker <ArrowRight size={16} />
-            </span>
-          </Link>
-        </div>
+            <Link
+              href="/tracker"
+              className="group bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-8 hover:border-[#3B82F6]/50 transition-all duration-300"
+            >
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 shadow-inner flex items-center justify-center mb-6">
+                <Eye size={24} className="text-[#3B82F6]" />
+              </div>
+              <h2 className="text-xl font-bold text-white mb-2">Track Applications</h2>
+              <p className="text-[#777] text-[15px] leading-relaxed mb-6">
+                Monitor your internship applications, interviews, and offers all in one place.
+              </p>
+              <span className="inline-flex items-center gap-2 text-[#3B82F6] text-sm font-medium group-hover:gap-3 transition-all">
+                View tracker <ArrowRight size={16} />
+              </span>
+            </Link>
+          </div>
+
+          {/* Job Search Section */}
+          <div className="mt-10 p-6 bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl">
+            <h2 className="text-xl font-bold text-white mb-4">Smart Job Matching</h2>
+            <p className="text-[#777] text-sm mb-6">Find internships that perfectly match your resume using AI.</p>
+            
+            <button 
+              onClick={handleSearchJobs} 
+              disabled={searching}
+              className="mb-4 bg-[#3B82F6] hover:bg-blue-600 disabled:bg-blue-800 text-white px-6 py-2.5 rounded-lg font-medium transition-all flex items-center justify-center w-full md:w-auto"
+            >
+              {searching ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Searching...
+                </>
+              ) : (
+                <>
+                  🔍 Find Jobs For My Resume
+                </>
+              )}
+            </button>
+
+            {searchError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded mb-4 text-sm">
+                {searchError}
+              </div>
+            )}
+
+            {searchResults.length > 0 && (
+              <div className="space-y-3 mt-6">
+                <h3 className="font-semibold text-lg text-white">Jobs Matched For You ({searchResults.length})</h3>
+                <div className="grid grid-cols-1 gap-3">
+                  {searchResults.map((job, i) => (
+                    <div key={i} className="border border-[#1F1F1F] bg-black/20 rounded-lg p-4 hover:shadow-md transition text-white">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <h4 className="font-semibold">{job.title}</h4>
+                          <p className="text-[#777] text-sm">{job.company}</p>
+                          <p className="text-xs text-[#555]">{job.location}</p>
+                          {job.skills?.length > 0 && (
+                            <div className="flex gap-1 mt-2 flex-wrap">
+                              {job.skills.slice(0, 5).map((skill: string, j: number) => (
+                                <span key={j} className="text-xs bg-[#1F1F1F] text-[#999] px-2 py-1 rounded">
+                                  {skill}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-right ml-4">
+                          <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+                            job.matchScore >= 80 ? 'bg-green-500/20 text-green-400' :
+                            job.matchScore >= 60 ? 'bg-blue-500/20 text-blue-400' :
+                            job.matchScore >= 40 ? 'bg-yellow-500/20 text-yellow-400' :
+                            'bg-gray-500/20 text-gray-400'
+                          }`}>
+                            {job.matchScore}% {job.matchLabel}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
       </main>
     </div>
   );
