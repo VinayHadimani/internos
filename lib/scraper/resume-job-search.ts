@@ -1,9 +1,10 @@
 import Groq from 'groq-sdk'
 import { aggregateJobs } from '../aggregator'
 import { calculateMatchScore } from '../matching/skills'
+import { createAdminClient } from '../supabase/admin'
 
-const groq = new Groq({ 
-  apiKey: process.env.GROQ_API_KEY 
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY
 })
 
 // Step 1: Extract search terms from resume
@@ -70,15 +71,15 @@ export async function searchJobsForResume(
 
   // Extract what to search for
   const searchTerms = await extractSearchTerms(resumeText)
-  
+
   // Run aggregator for each search query
   const allJobs: any[] = []
-  
+
   for (const query of searchTerms.searchQueries) {
     try {
       const jobs = await aggregateJobs(query)
       allJobs.push(...jobs)
-      
+
       // Small delay between searches
       await new Promise(r => setTimeout(r, 1000))
     } catch (error) {
@@ -106,15 +107,16 @@ export async function rankJobsForResume(
   resumeText: string,
   jobs: any[],
   userSkills: string[],
-  experienceLevel: string
+  experienceLevel: string,
+  userId?: string
 ): Promise<any[]> {
 
   // Use your existing matching algorithm
   const rankedJobs = jobs.map(job => {
-    
+
     // Extract required skills from job
-    const jobSkills = job.skills || 
-                      job.tags || 
+    const jobSkills = job.skills ||
+                      job.tags ||
                       extractSkillsFromText(job.description || '')
 
     // Calculate match score using the matching algorithm
@@ -127,8 +129,29 @@ export async function rankJobsForResume(
     }
   })
 
-  // Sort by match score highest first
-  return rankedJobs.sort((a, b) => b.matchScore - a.matchScore)
+  const sortedJobs = rankedJobs.sort((a, b) => b.matchScore - a.matchScore)
+
+  // Persist ranked results if userId is provided
+  if (userId) {
+    const supabase = createAdminClient();
+
+    const insertions = sortedJobs.map(job => ({
+      user_id: userId,
+      internship_id: job.id,
+      match_score: job.matchScore,
+    }));
+
+    // Batch insert into user_internships
+    const { error } = await supabase
+      .from('user_internships')
+      .insert(insertions);
+
+    if (error) {
+      console.error('[Rank Jobs] Error persisting results:', error);
+    }
+  }
+
+  return sortedJobs;
 }
 
 // Helper: extract skills from job text
@@ -140,8 +163,8 @@ function extractSkillsFromText(text: string): string[] {
     'Next.js', 'Vue', 'Angular', 'CSS', 'HTML', 'Tailwind',
     'Figma', 'UI/UX', 'Marketing', 'Excel', 'PowerPoint'
   ]
-  
-  return commonSkills.filter(skill => 
+
+  return commonSkills.filter(skill =>
     text.toLowerCase().includes(skill.toLowerCase())
   )
 }

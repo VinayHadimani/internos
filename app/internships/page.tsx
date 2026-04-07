@@ -20,7 +20,7 @@ interface Internship {
 }
 
 // Map database fields to frontend format
-function mapInternship(item: Record<string, unknown>): Internship {
+function mapInternship(item: any): Internship {
   return {
     id: item.id as string,
     title: item.title as string || '',
@@ -30,7 +30,7 @@ function mapInternship(item: Record<string, unknown>): Internship {
     duration: item.duration as string || '',
     description: item.description as string || '',
     skills: (item.skills_required || item.skills || []) as string[],
-    matchScore: Math.floor(Math.random() * 25) + 75,
+    matchScore: item.matchScore || 0,
     externalUrl: (item.external_url || item.externalUrl || '') as string,
     deadline: item.deadline as string || '',
   };
@@ -48,13 +48,17 @@ export default function InternshipsPage() {
     const fetchInternships = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/internships');
+        const response = await fetch('/api/my-internships');
         const data = await response.json();
 
-        if (data.success) {
+        if (data.success || Array.isArray(data)) {
           // Map database fields to frontend format
-          const mapped = (data.data || []).map(mapInternship);
-          setInternships(mapped);
+          const mapped = (data.data || data || []).map(mapInternship);
+
+          // Filter for match score > 40
+          const filtered = mapped.filter(internship => internship.matchScore > 40);
+
+          setInternships(filtered);
         } else {
           setError('Failed to fetch internships');
         }

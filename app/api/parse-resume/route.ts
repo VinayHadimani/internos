@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       text: trimmedText,
       pages: totalPages,
+      fileName: file.name,
     });
   } catch (error) {
     console.error('[Parse Resume] Error:', error);

@@ -52,6 +52,7 @@ export interface Database {
           file_url: string | null
           original_text: string | null
           created_at: string | null
+          updated_at: string | null
         }
         Insert: {
           id?: string
@@ -60,6 +61,7 @@ export interface Database {
           file_url?: string | null
           original_text?: string | null
           created_at?: string | null
+          updated_at?: string | null
         }
         Update: {
           id?: string
@@ -68,6 +70,7 @@ export interface Database {
           file_url?: string | null
           original_text?: string | null
           created_at?: string | null
+          updated_at?: string | null
         }
       }
       internships: {
@@ -266,6 +269,29 @@ export interface Database {
           user_id?: string | null
           action?: string | null
           metadata?: Json | null
+          created_at?: string | null
+        }
+      },
+      user_internships: {
+        Row: {
+          id: string
+          user_id: string | null
+          internship_id: string | null
+          match_score: number | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          internship_id?: string | null
+          match_score?: number | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          internship_id?: string | null
+          match_score?: number | null
           created_at?: string | null
         }
       }

@@ -28,7 +28,10 @@ RULES:
 2. If the resume has ZERO relevant skills or experience for this job, matchScore MUST be 0
 3. A 0% match means: This candidate has no relevant skills or experience for this role
 4. Don't make up skills the candidate doesn't have
-5. Only use information FROM THE RESUME — never invent experience
+5. Only use information FROM THE RESUME — never invent experience, certifications, degrees, or projects.
+6. Every bullet point generated in the tailored resume MUST be grounded in the original resume.
+7. Focus on keyword optimization and rephrasing existing factual achievements to match the job description's language, NOT adding new ones.
+8. STRICT PROHIBITION: Do not imagine or hallucinate any new credentials, roles, or achievements.
 
 RESUME:
 ${truncatedResume}
