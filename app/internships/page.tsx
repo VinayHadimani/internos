@@ -56,7 +56,7 @@ export default function InternshipsPage() {
           const mapped = (data.data || data || []).map(mapInternship);
 
           // Filter for match score > 40
-          const filtered = mapped.filter(internship => internship.matchScore > 40);
+          const filtered = mapped.filter((internship: Internship) => internship.matchScore > 40);
 
           setInternships(filtered);
         } else {
