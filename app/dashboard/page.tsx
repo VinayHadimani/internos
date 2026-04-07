@@ -134,24 +134,94 @@ export default function DashboardPage() {
           <p className="text-[#777] mt-2">Here&apos;s your internship search at a glance.</p>
         </div>
 
-        {/* Stats row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-          {[
-            { label: 'Resumes', value: '0' },
-            { label: 'Tailors Used', value: '0/2' },
-            { label: 'Applications', value: '0' },
-          ].map((stat, i) => (
-            <div
-              key={i}
-              className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-6"
-            >
-              <span className="text-sm text-[#777]">{stat.label}</span>
-              <p className="text-3xl font-bold text-white font-mono mt-2">{stat.value}</p>
-            </div>
-          ))}
-        </div>
+         {/* Stats row */}
+         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+           {[
+             { label: 'Resumes', value: '0' },
+             { label: 'Tailors Used', value: '0/2' },
+             { label: 'Applications', value: '0' },
+           ].map((stat, i) => (
+             <div
+               key={i}
+               className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-6"
+             >
+               <span className="text-sm text-[#777]">{stat.label}</span>
+               <p className="text-3xl font-bold text-white font-mono mt-2">{stat.value}</p>
+             </div>
+           ))}
+         </div>
 
-        {/* Action cards */}
+         {/* Job Search Section - Moved for better prominence */}
+         <div className="mb-10 p-6 bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl">
+           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+             <div>
+               <h2 className="text-xl font-bold text-white">Smart Job Matching</h2>
+               <p className="text-[#777] text-sm">Find internships that perfectly match your resume using AI.</p>
+             </div>
+             <button 
+               onClick={handleSearchJobs} 
+               disabled={searching}
+               className="bg-[#3B82F6] hover:bg-blue-600 disabled:bg-blue-800 text-white px-6 py-2.5 rounded-lg font-medium transition-all flex items-center justify-center w-full md:w-auto"
+             >
+               {searching ? (
+                 <>
+                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                   Searching...
+                 </>
+               ) : (
+                 <>
+                   🔍 Find Jobs For My Resume
+                 </>
+               )}
+             </button>
+           </div>
+
+           {searchError && (
+             <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded mb-4 text-sm">
+               {searchError}
+             </div>
+           )}
+
+           {searchResults.length > 0 && (
+             <div className="space-y-3 mt-6">
+               <h3 className="font-semibold text-lg text-white">Jobs Matched For You ({searchResults.length})</h3>
+               <div className="grid grid-cols-1 gap-3">
+                 {searchResults.map((job, i) => (
+                   <div key={i} className="border border-[#1F1F1F] bg-black/20 rounded-lg p-4 hover:shadow-md transition text-white">
+                     <div className="flex justify-between items-start">
+                       <div className="flex-1">
+                         <h4 className="font-semibold">{job.title}</h4>
+                         <p className="text-[#777] text-sm">{job.company}</p>
+                         <p className="text-xs text-[#555]">{job.location}</p>
+                         {job.skills?.length > 0 && (
+                           <div className="flex gap-1 mt-2 flex-wrap">
+                             {job.skills.slice(0, 5).map((skill: string, j: number) => (
+                               <span key={j} className="text-xs bg-[#1F1F1F] text-[#999] px-2 py-1 rounded">
+                                 {skill}
+                               </span>
+                             ))}
+                           </div>
+                         )}
+                       </div>
+                       <div className="text-right ml-4">
+                         <span className={`text-xs font-bold px-3 py-1 rounded-full ${
+                           job.matchScore >= 80 ? 'bg-green-500/20 text-green-400' :
+                           job.matchScore >= 60 ? 'bg-blue-500/20 text-blue-400' :
+                           job.matchScore >= 40 ? 'bg-yellow-500/20 text-yellow-400' :
+                           'bg-gray-500/20 text-gray-400'
+                         }`}>
+                           {job.matchScore}% {job.matchLabel}
+                         </span>
+                       </div>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             </div>
+           )}
+         </div>
+
+         {/* Action cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
           <Link
             href="/tailor"
@@ -202,72 +272,6 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          {/* Job Search Section */}
-          <div className="mt-10 p-6 bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl">
-            <h2 className="text-xl font-bold text-white mb-4">Smart Job Matching</h2>
-            <p className="text-[#777] text-sm mb-6">Find internships that perfectly match your resume using AI.</p>
-            
-            <button 
-              onClick={handleSearchJobs} 
-              disabled={searching}
-              className="mb-4 bg-[#3B82F6] hover:bg-blue-600 disabled:bg-blue-800 text-white px-6 py-2.5 rounded-lg font-medium transition-all flex items-center justify-center w-full md:w-auto"
-            >
-              {searching ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Searching...
-                </>
-              ) : (
-                <>
-                  🔍 Find Jobs For My Resume
-                </>
-              )}
-            </button>
-
-            {searchError && (
-              <div className="bg-red-50 border border-red-200 text-red-700 p-3 rounded mb-4 text-sm">
-                {searchError}
-              </div>
-            )}
-
-            {searchResults.length > 0 && (
-              <div className="space-y-3 mt-6">
-                <h3 className="font-semibold text-lg text-white">Jobs Matched For You ({searchResults.length})</h3>
-                <div className="grid grid-cols-1 gap-3">
-                  {searchResults.map((job, i) => (
-                    <div key={i} className="border border-[#1F1F1F] bg-black/20 rounded-lg p-4 hover:shadow-md transition text-white">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1">
-                          <h4 className="font-semibold">{job.title}</h4>
-                          <p className="text-[#777] text-sm">{job.company}</p>
-                          <p className="text-xs text-[#555]">{job.location}</p>
-                          {job.skills?.length > 0 && (
-                            <div className="flex gap-1 mt-2 flex-wrap">
-                              {job.skills.slice(0, 5).map((skill: string, j: number) => (
-                                <span key={j} className="text-xs bg-[#1F1F1F] text-[#999] px-2 py-1 rounded">
-                                  {skill}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-right ml-4">
-                          <span className={`text-xs font-bold px-3 py-1 rounded-full ${
-                            job.matchScore >= 80 ? 'bg-green-500/20 text-green-400' :
-                            job.matchScore >= 60 ? 'bg-blue-500/20 text-blue-400' :
-                            job.matchScore >= 40 ? 'bg-yellow-500/20 text-yellow-400' :
-                            'bg-gray-500/20 text-gray-400'
-                          }`}>
-                            {job.matchScore}% {job.matchLabel}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
       </main>
     </div>
   );
