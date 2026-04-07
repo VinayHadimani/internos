@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { data, error: insertError } = await supabase
+    const { data, error: insertError } = await (supabase as any)
       .from('resumes')
       .insert({
         user_id: user.id,
