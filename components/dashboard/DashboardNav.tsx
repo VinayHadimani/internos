@@ -8,7 +8,6 @@ import {
   LayoutDashboard,
   FileEdit,
   Search,
-  Kanban,
   User,
   LogOut,
   Zap,
@@ -20,7 +19,6 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/tailor", label: "Tailor Resume", icon: FileEdit },
   { href: "/internships", label: "Internships", icon: Search },
-  { href: "/tracker", label: "Applications", icon: Kanban },
   { href: "/profile", label: "Profile", icon: User },
 ];
 

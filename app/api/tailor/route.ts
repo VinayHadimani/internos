@@ -21,30 +21,25 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'AI service not configured' }, { status: 500 });
     }
 
-    const prompt = `You are a CRITICAL and HONEST resume analyzer. You must accurately assess how well a resume matches a job description.
+    const prompt = `You are an expert resume writer. Your job is to TAILOR an existing resume for a specific job.
 
-RULES:
-1. Be STRICT — don't inflate scores
-2. If the resume has ZERO relevant skills or experience for this job, matchScore MUST be 0
-3. A 0% match means: This candidate has no relevant skills or experience for this role
-4. Don't make up skills the candidate doesn't have
-5. Only use information FROM THE RESUME — never invent experience, certifications, degrees, or projects.
-6. Every bullet point generated in the tailored resume MUST be grounded in the original resume.
-7. Focus on keyword optimization and rephrasing existing factual achievements to match the job description's language, NOT adding new ones.
-8. STRICT PROHIBITION: Do not imagine or hallucinate any new credentials, roles, or achievements.
+CRITICAL RULES - YOU MUST FOLLOW THESE:
+1. NEVER invent, add, or fabricate ANY information
+2. NEVER add skills, experiences, or qualifications not in the original resume
+3. ONLY use information that exists in the candidate's original resume
+4. You MAY reframe sentences to sound more professional
+5. You MAY reorder bullet points to prioritize relevance to the job
+6. You MAY highlight keywords that match the job description
+7. You MAY reorganize sections for better flow
+8. You MAY fix grammar and improve clarity
 
-RESUME:
-${truncatedResume}
-
-JOB DESCRIPTION:
-${truncatedJD}
-
-ANALYSIS STEPS:
-1. Extract ALL required skills from job description
-2. Check which skills ACTUALLY appear in the resume
-3. If ZERO skills match AND the resume is for a completely different field → matchScore = 0
-4. Calculate: (matched / total required) * 100
-5. Adjust down if experience level doesn't match
+WHAT YOU CANNOT DO:
+- Add skills the candidate doesn't have
+- Add experiences that didn't happen
+- Add certifications not earned
+- Add projects not completed
+- Add education not listed
+- Exaggerate any claims
 
 SCORING RULES:
 - 0% = Completely irrelevant (e.g., Marketing resume for Engineering job)
@@ -55,6 +50,16 @@ SCORING RULES:
 - 75-85% = Strong match
 - 85%+ = Excellent match (rare)
 - 100% = Perfect match (never happens in practice)
+
+CANDIDATE'S ORIGINAL RESUME (use ONLY this information):
+${truncatedResume}
+
+TARGET JOB DESCRIPTION:
+${truncatedJD}
+
+Tailor the resume for this job. Remember: ONLY use information from the original resume.
+
+If the candidate lacks skills for the job, do NOT fake them. Just optimize what exists.
 
 Return ONLY valid JSON (no markdown):
 {
@@ -90,7 +95,11 @@ Return ONLY valid JSON (no markdown):
       }
     ]
   },
-  "suggestions": ["<actionable tips>"]
+  "suggestions": ["<actionable tips>"],
+  "keywordsMatched": ["<keywords from resume that match JD>"],
+  "keywordsAdded": [],
+  "atsScore": <number 0-100>,
+  "changes": ["<list what was actually modified, e.g. Reordered experience section, Highlighted Python skills>"]
 }
 
 CRITICAL: If matchScore is 0, set isIrrelevant to true.`;
@@ -108,7 +117,7 @@ CRITICAL: If matchScore is 0, set isIrrelevant to true.`;
         messages: [
           {
             role: 'system',
-            content: 'You are a strict resume analyst. If a resume has zero relevant skills for a job, you MUST return matchScore: 0 and isIrrelevant: true. Never inflate scores. A typical good match is 60-75%. Perfect matches never happen.'
+            content: 'You are an expert resume writer. You TAILOR existing resumes — you NEVER invent, add, or fabricate information. Only reframe, reorder, and highlight what already exists. If a resume has zero relevant skills for a job, return matchScore: 0 and isIrrelevant: true. Never inflate scores. A typical good match is 60-75%.'
           },
           { role: 'user', content: prompt }
         ],

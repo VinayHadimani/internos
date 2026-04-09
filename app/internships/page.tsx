@@ -1,198 +1,161 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { ArrowLeft, Search, MapPin, DollarSign, Target, Zap, Briefcase } from 'lucide-react';
+import { Loader2, Upload, ExternalLink, Search } from 'lucide-react';
 
-interface Internship {
-  id: string;
+interface Job {
   title: string;
   company: string;
   location: string;
-  stipend: string;
-  duration: string;
   description: string;
   skills: string[];
+  url: string;
+  source: string;
   matchScore: number;
-  externalUrl: string;
-  deadline: string;
-}
-
-// Map database fields to frontend format
-function mapInternship(item: any): Internship {
-  return {
-    id: item.id as string,
-    title: item.title as string || '',
-    company: item.company as string || '',
-    location: item.location as string || '',
-    stipend: item.stipend as string || '',
-    duration: item.duration as string || '',
-    description: item.description as string || '',
-    skills: (item.skills_required || item.skills || []) as string[],
-    matchScore: item.matchScore || 0,
-    externalUrl: (item.external_url || item.externalUrl || '') as string,
-    deadline: item.deadline as string || '',
-  };
+  matchLabel: string;
 }
 
 export default function InternshipsPage() {
   const { isAuthenticated, signOut } = useAuth();
-
-  const [internships, setInternships] = useState<Internship[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [resumeText, setResumeText] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [skills, setSkills] = useState<string[]>([]);
 
   useEffect(() => {
-    const fetchInternships = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch('/api/my-internships');
-        const data = await response.json();
-
-        if (data.success || Array.isArray(data)) {
-          // Map database fields to frontend format
-          const mapped = (data.data || data || []).map(mapInternship);
-
-          // Filter for match score > 40
-          const filtered = mapped.filter((internship: Internship) => internship.matchScore > 40);
-
-          setInternships(filtered);
-        } else {
-          setError('Failed to fetch internships');
-        }
-      } catch (err) {
-        setError('Failed to fetch internships');
-        console.error('Error fetching internships:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchInternships();
+    const savedResume = localStorage.getItem('resumeText');
+    if (savedResume) {
+      setResumeText(savedResume);
+      searchJobs(savedResume);
+    }
   }, []);
 
-  const filteredInternships = internships.filter(internship => {
-    const matchesSearch = internship.company.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         internship.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         internship.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         internship.skills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesSearch;
-  });
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  if (loading) {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const text = await file.text();
+      setResumeText(text);
+      localStorage.setItem('resumeText', text);
+      await searchJobs(text);
+    } catch (err) {
+      setError('Failed to read resume file');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function searchJobs(text: string) {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/internships/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeText: text })
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        const filteredJobs = (data.jobs || data.data || []).filter(
+          (job: Job) => job.matchScore >= 40
+        );
+        setJobs(filteredJobs);
+        setSkills(data.searchTerms?.skills || []);
+      } else {
+        setError(data.error || 'Failed to search jobs');
+      }
+    } catch (err) {
+      setError('Failed to connect to search service');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleRefresh() {
+    if (resumeText) {
+      searchJobs(resumeText);
+    }
+  }
+
+  // Upload prompt (no resume)
+  if (!resumeText && !loading) {
     return (
       <div className="min-h-screen bg-[#050505] text-white">
         {/* Header */}
         <header className="border-b border-[#1F1F1F] bg-black/50 backdrop-blur-xl sticky top-0 z-30">
           <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between">
-            <Link href="/" className="flex items-center font-mono">
+            <Link href="/dashboard" className="flex items-center font-mono">
               <span className="text-white font-bold text-lg">InternOS</span>
               <span className="text-white font-bold text-lg animate-blink">|</span>
             </Link>
-            <div className="flex items-center gap-4">
-              <Link href="/" className="text-sm text-[#777] hover:text-white transition-colors">Sign in</Link>
-              <Link href="/" className="bg-[#3B82F6] text-white text-sm font-medium px-4 py-2 rounded-lg">Get Started</Link>
-            </div>
+            {isAuthenticated && (
+              <button
+                onClick={signOut}
+                className="text-sm text-[#777] hover:text-white transition-colors cursor-pointer"
+              >
+                Sign out
+              </button>
+            )}
           </div>
         </header>
 
-        <main className="max-w-[1200px] mx-auto px-6 py-10">
-          <div className="mb-8">
-            <div className="h-9 w-64 bg-[#1F1F1F] rounded-lg animate-pulse mb-2" />
-            <div className="h-5 w-96 bg-[#1F1F1F] rounded-lg animate-pulse" />
-          </div>
-          <div className="h-12 w-full max-w-md bg-[#1F1F1F] rounded-lg animate-pulse mb-6" />
-          <p className="text-[#777] text-sm mb-6">Loading internships...</p>
+        <main className="max-w-2xl mx-auto px-6 pt-24 text-center">
+          <h1 className="text-3xl font-bold text-white mb-4">Find Your Perfect Internship</h1>
+          <p className="text-[#777] mb-8">
+            Upload your resume to discover internships that match your skills
+          </p>
 
-          {/* Skeleton grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3, 4, 5, 6].map(i => (
-              <div key={i} className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-6 animate-pulse">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 bg-[#1F1F1F] rounded-xl" />
-                  <div>
-                    <div className="h-5 w-24 bg-[#1F1F1F] rounded mb-2" />
-                    <div className="h-4 w-32 bg-[#1F1F1F] rounded" />
-                  </div>
-                </div>
-                <div className="h-6 w-48 bg-[#1F1F1F] rounded mb-4" />
-                <div className="flex gap-4 mb-4">
-                  <div className="h-4 w-28 bg-[#1F1F1F] rounded" />
-                  <div className="h-4 w-16 bg-[#1F1F1F] rounded" />
-                </div>
-                <div className="flex gap-2 mb-4">
-                  <div className="h-5 w-16 bg-[#1F1F1F] rounded-full" />
-                  <div className="h-5 w-20 bg-[#1F1F1F] rounded-full" />
-                  <div className="h-5 w-14 bg-[#1F1F1F] rounded-full" />
-                </div>
-                <div className="h-10 w-full bg-[#1F1F1F] rounded-lg mt-auto" />
-              </div>
-            ))}
-          </div>
+          <label className="inline-flex items-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] px-6 py-3 rounded-lg cursor-pointer transition text-lg font-medium text-white">
+            <Upload className="h-5 w-5" />
+            Upload Your Resume
+            <input
+              type="file"
+              accept=".txt,.pdf,.doc,.docx"
+              className="hidden"
+              onChange={handleUpload}
+            />
+          </label>
+
+          <p className="text-[#555] text-sm mt-4">
+            Supports: .txt, .pdf, .doc, .docx
+          </p>
         </main>
       </div>
     );
   }
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
-        <div className="text-red-400 text-center">
-          <p className="text-lg mb-2">Error loading internships</p>
-          <p className="text-sm text-[#777]">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
+  // Main view (has resume)
   return (
     <div className="min-h-screen bg-[#050505] text-white">
       {/* Header */}
       <header className="border-b border-[#1F1F1F] bg-black/50 backdrop-blur-xl sticky top-0 z-30">
         <div className="max-w-[1200px] mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <Link href="/" className="flex items-center font-mono">
-              <span className="text-white font-bold text-lg">InternOS</span>
-              <span className="text-white font-bold text-lg animate-blink">|</span>
-            </Link>
-            <nav className="hidden md:flex items-center gap-6">
-              <Link href="/internships" className="text-sm text-white font-medium">Internships</Link>
-              {isAuthenticated && (
-                <>
-                  <Link href="/dashboard" className="text-sm text-[#777] hover:text-white transition-colors">Dashboard</Link>
-                  <Link href="/tailor" className="text-sm text-[#777] hover:text-white transition-colors">Tailor</Link>
-                </>
-              )}
-            </nav>
-          </div>
+          <Link href="/dashboard" className="flex items-center font-mono">
+            <span className="text-white font-bold text-lg">InternOS</span>
+            <span className="text-white font-bold text-lg animate-blink">|</span>
+          </Link>
           <div className="flex items-center gap-4">
             {isAuthenticated ? (
-              <>
-                <div className="flex items-center gap-2 bg-white/5 border border-[#1F1F1F] rounded-full px-3 py-1.5">
-                  <Zap size={14} className="text-blue-400 fill-blue-400" />
-                  <span className="text-xs text-[#999]">Free Plan</span>
-                </div>
-                <button
-                  onClick={signOut}
-                  className="text-sm text-[#777] hover:text-white transition-colors cursor-pointer"
-                >
-                  Sign out
-                </button>
-              </>
+              <button
+                onClick={signOut}
+                className="text-sm text-[#777] hover:text-white transition-colors cursor-pointer"
+              >
+                Sign out
+              </button>
             ) : (
-              <>
-                <Link href="/" className="text-sm text-[#777] hover:text-white transition-colors">
-                  Sign in
-                </Link>
-                <Link
-                  href="/"
-                  className="bg-[#3B82F6] text-white text-sm font-medium px-4 py-2 rounded-lg hover:bg-[#2563EB] transition-colors"
-                >
-                  Get Started
-                </Link>
-              </>
+              <Link href="/" className="text-sm text-[#777] hover:text-white transition-colors">
+                Sign in
+              </Link>
             )}
           </div>
         </div>
@@ -200,142 +163,139 @@ export default function InternshipsPage() {
 
       {/* Page content */}
       <main className="max-w-[1200px] mx-auto px-6 py-10">
-        {/* Title */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white tracking-tight mb-2">
-            Find Internships
-          </h1>
-          <p className="text-[#777]">
-            Discover opportunities that match your skills and interests.
-            {isAuthenticated && (
-              <span className="text-[#3B82F6] ml-1">
-                <Link href="/tailor" className="underline hover:text-blue-400">Tailor your resume</Link> for any role.
-              </span>
+        {/* Title bar */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+          <div>
+            <h1 className="text-3xl font-bold text-white tracking-tight mb-2">
+              Internships For You
+            </h1>
+            {skills.length > 0 && (
+              <p className="text-[#777]">
+                Based on your skills: {skills.slice(0, 5).join(', ')}
+                {skills.length > 5 && ` +${skills.length - 5} more`}
+              </p>
             )}
-          </p>
-        </div>
+          </div>
 
-        {/* Search bar */}
-        <div className="mb-6">
-          <div className="relative max-w-md">
-            <Search size={20} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-[#777]" />
-            <input
-              type="text"
-              placeholder="Search by title, company, or skill..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-[#0D0D0D] border border-[#1F1F1F] rounded-lg text-white placeholder-[#777] focus:border-[#3B82F6] focus:outline-none"
-            />
+          <div className="flex gap-3">
+            <button
+              onClick={handleRefresh}
+              disabled={loading}
+              className="flex items-center gap-2 bg-[#0D0D0D] border border-[#1F1F1F] text-white font-medium py-2 px-4 rounded-lg hover:border-[#3B82F6] transition-colors disabled:opacity-50"
+            >
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+              Refresh Search
+            </button>
+
+            <label className="cursor-pointer">
+              <span className="flex items-center gap-2 bg-[#0D0D0D] border border-[#1F1F1F] text-white font-medium py-2 px-4 rounded-lg hover:border-[#3B82F6] transition-colors">
+                <Upload className="h-4 w-4" />
+                Change Resume
+              </span>
+              <input
+                type="file"
+                accept=".txt,.pdf,.doc,.docx"
+                className="hidden"
+                onChange={handleUpload}
+              />
+            </label>
           </div>
         </div>
 
-        {/* Results count */}
-        <p className="text-[#777] text-sm mb-6">
-          {filteredInternships.length} internship{filteredInternships.length !== 1 ? 's' : ''} found
-        </p>
-
-        {/* Internships grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredInternships.map(internship => (
-            <div
-              key={internship.id}
-              className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-6 hover:border-[#3B82F6]/50 transition-all duration-300 flex flex-col"
-            >
-              {/* Company logo and name */}
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-12 h-12 bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20 rounded-xl flex items-center justify-center">
-                  <span className="text-[#3B82F6] font-bold text-lg">
-                    {internship.company.charAt(0)}
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-white font-semibold">{internship.company}</h3>
-                  <p className="text-[#777] text-sm">{internship.location}</p>
-                </div>
-              </div>
-
-              {/* Job title */}
-              <h4 className="text-white font-bold text-lg mb-2">{internship.title}</h4>
-
-              {/* Details */}
-              <div className="flex items-center gap-4 mb-4 text-[#777] text-sm">
-                <span className="flex items-center gap-1">
-                  <DollarSign size={14} />
-                  {internship.stipend}
-                </span>
-                <span>{internship.duration}</span>
-              </div>
-
-              {/* Match score */}
-              <div className="flex items-center gap-2 mb-4">
-                <Target size={16} className="text-[#3B82F6]" />
-                <span className="text-sm text-[#777]">Match</span>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                  internship.matchScore >= 80 ? 'bg-green-500/10 text-green-400' :
-                  internship.matchScore >= 60 ? 'bg-yellow-500/10 text-yellow-400' :
-                  'bg-orange-500/10 text-orange-400'
-                }`}>
-                  {internship.matchScore}%
-                </span>
-              </div>
-
-              {/* Skills */}
-              <div className="flex flex-wrap gap-1.5 mb-4 flex-1">
-                {internship.skills.slice(0, 4).map((skill, i) => (
-                  <span key={i} className="bg-white/5 text-[#999] text-xs px-2 py-0.5 rounded-full">
-                    {skill}
-                  </span>
-                ))}
-                {internship.skills.length > 4 && (
-                  <span className="text-[#555] text-xs">+{internship.skills.length - 4}</span>
-                )}
-              </div>
-
-              {/* CTA */}
-              <div className="flex gap-2 mt-auto">
-                <Link
-                  href={`/internships/${internship.id}`}
-                  className="flex-1 bg-[#3B82F6] text-white text-sm font-medium py-2.5 px-4 rounded-lg hover:bg-[#2563EB] transition-colors text-center"
-                >
-                  View Details
-                </Link>
-                {internship.externalUrl && (
-                  <a
-                    href={internship.externalUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bg-white/5 border border-white/10 text-white text-sm py-2.5 px-3 rounded-lg hover:bg-white/10 transition-colors"
-                  >
-                    <Briefcase size={16} />
-                  </a>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Empty state */}
-        {filteredInternships.length === 0 && (
-          <div className="text-center py-12">
-            <div className="w-16 h-16 bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <Search size={24} className="text-[#777]" />
-            </div>
-            <p className="text-[#777] text-lg mb-2">No internships found</p>
-            <p className="text-[#555] text-sm">Try adjusting your search or filters</p>
+        {/* Error */}
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-lg mb-6">
+            {error}
           </div>
         )}
 
-        {/* CTA for non-authenticated users */}
-        {!isAuthenticated && (
-          <div className="mt-12 bg-gradient-to-r from-blue-600/10 to-blue-500/5 border border-[#3B82F6]/20 rounded-2xl p-8 text-center">
-            <h3 className="text-xl font-bold text-white mb-2">Want to tailor your resume?</h3>
-            <p className="text-[#777] mb-6">Sign in to use AI-powered resume tailoring for any internship.</p>
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 bg-[#3B82F6] text-white font-medium px-6 py-3 rounded-xl hover:bg-[#2563EB] transition-colors"
-            >
-              Sign in to Get Started
-            </Link>
+        {/* Loading */}
+        {loading && (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="h-8 w-8 animate-spin mr-3 text-[#3B82F6]" />
+            <span className="text-xl text-[#777]">Searching for matching internships...</span>
+          </div>
+        )}
+
+        {/* Results */}
+        {!loading && jobs.length > 0 && (
+          <div>
+            <p className="text-[#777] text-sm mb-6">
+              Found {jobs.length} internship{jobs.length !== 1 ? 's' : ''} with 40%+ match
+            </p>
+
+            <div className="space-y-4">
+              {jobs.map((job, i) => (
+                <div
+                  key={i}
+                  className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-6 hover:border-[#3B82F6]/50 transition-all duration-300"
+                >
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div className="flex-1">
+                      <h3 className="text-xl font-semibold text-white">{job.title}</h3>
+                      <p className="text-[#777] mt-1">{job.company}</p>
+                      {job.location && (
+                        <p className="text-[#555] text-sm">{job.location}</p>
+                      )}
+
+                      {job.description && (
+                        <p className="text-[#777] text-sm mt-3 line-clamp-2">
+                          {job.description}
+                        </p>
+                      )}
+
+                      {job.skills?.length > 0 && (
+                        <div className="flex gap-1.5 mt-3 flex-wrap">
+                          {job.skills.slice(0, 6).map((skill, j) => (
+                            <span key={j} className="bg-white/5 text-[#999] text-xs px-2 py-0.5 rounded-full">
+                              {skill}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col items-end gap-3">
+                      <span className={`text-lg font-bold px-3 py-1 rounded-full ${
+                        job.matchScore >= 80 ? 'bg-green-500/10 text-green-400' :
+                        job.matchScore >= 60 ? 'bg-blue-500/10 text-blue-400' :
+                        'bg-yellow-500/10 text-yellow-400'
+                      }`}>
+                        {job.matchScore}% {job.matchLabel}
+                      </span>
+
+                      {job.url && (
+                        <a
+                          href={job.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 bg-[#3B82F6] text-white text-sm font-medium py-2 px-4 rounded-lg hover:bg-[#2563EB] transition-colors"
+                        >
+                          Apply <ExternalLink className="h-4 w-4" />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* No results */}
+        {!loading && jobs.length === 0 && !error && resumeText && (
+          <div className="text-center py-20">
+            <div className="w-16 h-16 bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl flex items-center justify-center mx-auto mb-4">
+              <Search className="h-8 w-8 text-[#777]" />
+            </div>
+            <p className="text-[#777] text-lg mb-2">No internships found with 40%+ match.</p>
+            <p className="text-[#555] text-sm">
+              Try uploading a more detailed resume with your skills and experience.
+            </p>
           </div>
         )}
       </main>
