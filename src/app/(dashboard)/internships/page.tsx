@@ -34,7 +34,13 @@ export default function InternshipsPage() {
     setLoading(true);
     try {
       // In a real app, this would call an internal API that uses lib/aggregator
-      const res = await fetch('/api/jobs');
+
+      const resumeText = localStorage.getItem('resumeText') || '';
+      const res = await fetch('/api/internships/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resumeText })
+      });
       const data = await res.json();
       if (data.success) {
         setJobs(data.jobs);
