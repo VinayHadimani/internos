@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { aggregateJobs } from '@/lib/aggregator';
+import { aggregateJobs } from '../../../../../lib/aggregator';
 import ZAI from 'z-ai-web-dev-sdk';
 
 // Initialize z-ai
