@@ -78,6 +78,12 @@ function TailorContent() {
   const resumeRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Load resume from storage
+    const savedResume = localStorage.getItem('resumeText');
+    if (savedResume) {
+      setResumeText(savedResume);
+    }
+
     const desc = searchParams.get('description');
     const title = searchParams.get('title');
     const company = searchParams.get('company');
