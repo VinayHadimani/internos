@@ -273,7 +273,7 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function runFetchersSequentially(
+async function runFetchersInParallel(
   keywords: string[],
   location: string
 ): Promise<{
@@ -286,73 +286,44 @@ async function runFetchersSequentially(
   wework: JobResult[]
   arbeitnow: JobResult[]
 }> {
-  const out = {
-    remotive: [] as JobResult[],
-    himalayas: [] as JobResult[],
-    remoteOK: [] as JobResult[],
-    adzuna: [] as JobResult[],
-    jsearch: [] as JobResult[],
-    internshala: [] as JobResult[],
-    wework: [] as JobResult[],
-    arbeitnow: [] as JobResult[],
+  // Run ALL fetchers in parallel with Promise.allSettled
+  // so one slow/failing API doesn't block the others
+  const [
+    remotiveResult,
+    himalayasResult,
+    remoteOKResult,
+    adzunaResult,
+    jsearchResult,
+    internshalaResult,
+    weworkResult,
+    arbeitnowResult,
+  ] = await Promise.allSettled([
+    fetchRemotive(keywords),
+    fetchHimalayas(keywords),
+    fetchRemoteOK(keywords),
+    fetchAdzuna(keywords, location),
+    fetchJSearch(keywords),
+    fetchInternshala(keywords),
+    fetchWeWorkRemotely(keywords),
+    fetchArbeitnow(keywords),
+  ])
+
+  const extract = (result: PromiseSettledResult<JobResult[]>, name: string): JobResult[] => {
+    if (result.status === 'fulfilled') return result.value
+    console.error(`[Aggregator] ${name} failed:`, result.reason)
+    return []
   }
 
-  try {
-    out.remotive = await fetchRemotive(keywords)
-  } catch (err) {
-    console.error('[Aggregator] fetchRemotive failed:', err)
+  return {
+    remotive: extract(remotiveResult, 'Remotive'),
+    himalayas: extract(himalayasResult, 'Himalayas'),
+    remoteOK: extract(remoteOKResult, 'RemoteOK'),
+    adzuna: extract(adzunaResult, 'Adzuna'),
+    jsearch: extract(jsearchResult, 'JSearch'),
+    internshala: extract(internshalaResult, 'Internshala'),
+    wework: extract(weworkResult, 'WeWorkRemotely'),
+    arbeitnow: extract(arbeitnowResult, 'Arbeitnow'),
   }
-  await delay(200)
-
-  try {
-    out.himalayas = await fetchHimalayas(keywords)
-  } catch (err) {
-    console.error('[Aggregator] fetchHimalayas failed:', err)
-  }
-  await delay(200)
-
-  try {
-    out.remoteOK = await fetchRemoteOK(keywords)
-  } catch (err) {
-    console.error('[Aggregator] fetchRemoteOK failed:', err)
-  }
-  await delay(200)
-
-  try {
-    out.adzuna = await fetchAdzuna(keywords, location)
-  } catch (err) {
-    console.error('[Aggregator] fetchAdzuna failed:', err)
-  }
-  await delay(200)
-
-  try {
-    out.jsearch = await fetchJSearch(keywords)
-  } catch (err) {
-    console.error('[Aggregator] fetchJSearch failed:', err)
-  }
-  await delay(200)
-
-  try {
-    out.internshala = await fetchInternshala(keywords)
-  } catch (err) {
-    console.error('[Aggregator] fetchInternshala failed:', err)
-  }
-  await delay(200)
-
-  try {
-    out.wework = await fetchWeWorkRemotely(keywords)
-  } catch (err) {
-    console.error('[Aggregator] fetchWeWorkRemotely failed:', err)
-  }
-  await delay(200)
-
-  try {
-    out.arbeitnow = await fetchArbeitnow(keywords)
-  } catch (err) {
-    console.error('[Aggregator] fetchArbeitnow failed:', err)
-  }
-
-  return out
 }
 
 // ─── Tier 1: Free API Fetchers ───────────────────────────────
@@ -915,7 +886,7 @@ export async function aggregateJobs(userQuery: string, preferredLocation?: strin
   const prefLocation = preferredLocation || queryLocation
   console.log(`[Aggregator] Keywords: ${keywords.join(', ')} | Type: ${job_type} | Location: ${prefLocation}`)
 
-  // Fetch all sources sequentially to reduce rate-limit pressure
+  // Fetch all sources in parallel to avoid rate limits and Vercel timeouts
   const {
     remotive,
     himalayas,
@@ -925,7 +896,7 @@ export async function aggregateJobs(userQuery: string, preferredLocation?: strin
     internshala,
     wework,
     arbeitnow,
-  } = await runFetchersSequentially(keywords, prefLocation)
+  } = await runFetchersInParallel(keywords, prefLocation)
 
   console.log(`[Aggregator] Results — Remotive: ${remotive.length}, Himalayas: ${himalayas.length}, RemoteOK: ${remoteOK.length}, Adzuna: ${adzuna.length}, JSearch: ${jsearch.length}, Internshala: ${internshala.length}, WeWorkRemotely: ${wework.length}, Arbeitnow: ${arbeitnow.length}`)
 

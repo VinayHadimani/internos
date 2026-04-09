@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Upload, ExternalLink, Search } from 'lucide-react';
 
@@ -19,6 +20,7 @@ interface Job {
 
 export default function InternshipsPage() {
   const { isAuthenticated, signOut } = useAuth();
+  const router = useRouter();
   const [resumeText, setResumeText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -32,6 +34,11 @@ export default function InternshipsPage() {
       searchJobs(savedResume);
     }
   }, []);
+
+  function handleJobClick(job: Job) {
+    sessionStorage.setItem('selectedJob', JSON.stringify(job));
+    router.push(`/internships/${Date.now()}`);
+  }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -232,7 +239,8 @@ export default function InternshipsPage() {
               {jobs.map((job, i) => (
                 <div
                   key={i}
-                  className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-6 hover:border-[#3B82F6]/50 transition-all duration-300"
+                  onClick={() => handleJobClick(job)}
+                  className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-6 hover:border-[#3B82F6]/50 transition-all duration-300 cursor-pointer"
                 >
                   <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                     <div className="flex-1">

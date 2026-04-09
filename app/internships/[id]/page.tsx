@@ -33,38 +33,32 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
   useEffect(() => {
     if (!id) return;
 
-    const fetchInternship = async () => {
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/internships/${id}`);
-        const data = await response.json();
-
-        if (data.success && data.data) {
-          const item = data.data;
-          setInternship({
-            id: item.id,
-            company: item.company || '',
-            title: item.title || '',
-            location: item.location || '',
-            stipend: item.stipend || '',
-            duration: item.duration || '',
-            description: item.description || '',
-            requiredSkills: item.skills_required || item.skills || [],
-            applyUrl: item.external_url || item.externalUrl || '',
-            deadline: item.deadline || '',
-          });
-        } else {
-          setError('Internship not found');
-        }
-      } catch (err) {
-        setError('Failed to load internship');
-        console.error('Error fetching internship:', err);
-      } finally {
-        setLoading(false);
+    try {
+      setLoading(true);
+      const savedJobStr = sessionStorage.getItem('selectedJob');
+      if (savedJobStr) {
+        const item = JSON.parse(savedJobStr);
+        setInternship({
+          id: id,
+          company: item.company || '',
+          title: item.title || '',
+          location: item.location || '',
+          stipend: item.stipend || 'Unpaid / Not reported',
+          duration: item.duration || 'Not reported',
+          description: item.description || '',
+          requiredSkills: item.skills || [],
+          applyUrl: item.url || '',
+          deadline: item.deadline || 'Apply ASAP',
+        });
+      } else {
+        setError('Job details not found. Please go back to search.');
       }
-    };
-
-    fetchInternship();
+    } catch (err) {
+      setError('Failed to load internship details');
+      console.error('Error fetching internship:', err);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   const handleExternalApply = () => {
