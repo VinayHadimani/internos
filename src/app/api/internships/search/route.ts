@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { aggregateJobs } from '../../../../../lib/aggregator';
-import ZAI from 'z-ai-web-dev-sdk';
+import Groq from 'groq-sdk';
 
-// Initialize z-ai
-let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
-
-async function getZai() {
-  if (!zaiInstance) {
-    zaiInstance = await ZAI.create();
-  }
-  return zaiInstance;
-}
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
 export async function POST(req: NextRequest) {
   try {
@@ -23,9 +15,9 @@ export async function POST(req: NextRequest) {
 
     console.log('=== JOB SEARCH START ===');
 
-    // Step 1: Extract skills from resume using AI
-    const zai = await getZai();
-    const extractResponse = await zai.chat.completions.create({
+    // Step 1: Extract skills from resume using Groq
+    const extractResponse = await groq.chat.completions.create({
+      model: 'llama-3.3-70b-versatile',
       messages: [
         {
           role: 'system',
@@ -46,7 +38,17 @@ export async function POST(req: NextRequest) {
       temperature: 0.1,
     });
 
-    const searchTerms = JSON.parse(extractResponse.choices[0]?.message?.content || '{"skills":[],"searchQueries":[]}');
+    let searchTerms: { skills?: string[]; searchQueries?: string[] };
+    try {
+      let raw = extractResponse.choices[0]?.message?.content || '{"skills":[],"searchQueries":[]}';
+      raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+      searchTerms = JSON.parse(raw);
+    } catch {
+      // Fallback: basic keyword extraction
+      const words = resumeText.split(/\s+/).filter((w: string) => w.length > 3).slice(0, 10);
+      searchTerms = { skills: words, searchQueries: ['software developer intern'] };
+    }
+
     console.log('Extracted skills:', searchTerms.skills);
 
     // Step 2: Search for jobs using the REAL aggregator
@@ -78,15 +80,15 @@ export async function POST(req: NextRequest) {
     // Step 4: Calculate match scores
     const userSkills = searchTerms.skills || [];
     const rankedJobs = uniqueJobs.map(job => {
-      const jobSkills = job.skills || job.tags || [];
+      const jobText = `${job.title} ${job.description || ''} ${job.company}`.toLowerCase();
       const matchingSkills = userSkills.filter((s: string) => 
-        jobSkills.some((js: string) => js.toLowerCase().includes(s.toLowerCase()))
+        jobText.includes(s.toLowerCase())
       );
-      const skillScore = jobSkills.length > 0 
-        ? (matchingSkills.length / jobSkills.length) * 100 
+      const skillScore = userSkills.length > 0 
+        ? (matchingSkills.length / userSkills.length) * 100 
         : 50;
       
-      const matchScore = Math.round(skillScore);
+      const matchScore = Math.round(Math.max(skillScore, 40)); // Floor at 40 since aggregator already filtered by relevance
       
       let matchLabel = 'Low Match';
       if (matchScore >= 80) matchLabel = 'Excellent Match';
@@ -100,16 +102,15 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    // Step 5: Sort and filter
+    // Step 5: Sort by match score
     rankedJobs.sort((a, b) => b.matchScore - a.matchScore);
-    const filteredJobs = rankedJobs.filter(job => job.matchScore >= 40);
 
-    console.log(`After filtering (40%+): ${filteredJobs.length} jobs`);
+    console.log(`Returning ${rankedJobs.length} jobs`);
 
     return NextResponse.json({
       success: true,
-      total: filteredJobs.length,
-      jobs: filteredJobs,
+      total: rankedJobs.length,
+      jobs: rankedJobs,
       searchTerms
     });
 
