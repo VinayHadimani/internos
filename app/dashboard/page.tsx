@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { Upload, Briefcase, FileText, ArrowRight, Loader2, Zap, User } from 'lucide-react';
 import { parseResumePDF, parseResumeText } from '@/lib/resume-parser';
+import { extractSkillsFromResume } from '@/lib/ai';
 
 export default function DashboardPage() {
   const { user, isAuthenticated, loading, signOut } = useAuth();
@@ -188,6 +189,12 @@ export default function DashboardPage() {
                   disabled={uploading}
                 />
               </label>
+              
+              {error && (
+                <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+                  {error}
+                </div>
+              )}
             </div>
           )}
         </div>
