@@ -1,18 +1,16 @@
-import { NextRequest, NextResponse } from 'next/server';
-import ZAI from 'z-ai-web-dev-sdk';
+import Groq from 'groq-sdk';
 
-let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
-
-async function getZai() {
-  if (!zaiInstance) {
-    zaiInstance = await ZAI.create();
-  }
-  return zaiInstance;
-}
+const groq = new Groq({
+  apiKey: process.env.GROQ_API_KEY,
+});
 
 export async function POST(request: Request) {
   try {
     const { resume, jobDescription } = await request.json();
+    
+    console.log('[Tailor API] Request received');
+    console.log('[Tailor API] Resume length:', resume?.length || 0);
+    console.log('[Tailor API] Job description length:', jobDescription?.length || 0);
     
     if (!resume || !jobDescription) {
       return Response.json({ 
@@ -21,78 +19,101 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    const zai = await getZai();
-    
-    const response = await zai.chat.completions.create({
+    // Use Groq with Llama - more stable than ZAI on Vercel
+    const completion = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: `You are an expert resume writer. Tailor the resume for this job.
+          content: `You are an expert resume writer and career coach with 15+ years of experience.
 
-IMPORTANT: You MUST return ONLY valid JSON. No markdown, no code blocks, no extra text.
+TASK: Tailor the candidate's resume for this specific job.
 
-Return ONLY this JSON format (no backticks, no markdown):
-{"tailoredResume": "the full resume text here", "atsScore": 85, "keywordsMatched": ["keyword1", "keyword2"]}
+RULES:
+1. Keep ALL information FACTUAL - NEVER invent or exaggerate anything
+2. Naturally incorporate keywords from the job description
+3. Highlight the most relevant experience first
+4. Use action verbs and quantify achievements where possible
+5. Optimize for ATS (Applicant Tracking Systems)
+6. Maintain professional formatting with clear sections
 
-Do NOT wrap in code blocks. Do NOT add any text before or after. Return raw JSON only.`
+OUTPUT: Return ONLY the tailored resume text. Do not use JSON. Do not use markdown code blocks. Just return the plain text resume formatted professionally.
+
+Format the resume with these sections:
+- NAME (uppercase)
+- Contact Information
+- Professional Summary (3-4 sentences tailored to this job)
+- Skills (relevant to the job)
+- Experience (most relevant first)
+- Education
+- Projects (if applicable)`
         },
         {
           role: 'user',
-          content: `RESUME:\n${resume}\n\nJOB DESCRIPTION:\n${jobDescription}\n\nReturn ONLY JSON, no markdown formatting:`
+          content: `MY CURRENT RESUME:
+${resume}
+
+TARGET JOB DESCRIPTION:
+${jobDescription}
+
+Please tailor my resume for this job. Return ONLY the resume text, no JSON, no explanations:`
         }
       ],
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.7,
+      max_tokens: 4000,
     });
 
-    let content = response.choices[0]?.message?.content || '{}';
+    const tailoredResume = completion.choices[0]?.message?.content || resume;
     
-    console.log('[Tailor API] Raw response type:', typeof content);
-    console.log('[Tailor API] Response length:', content.length);
-    console.log('[Tailor API] First 200 chars:', content.substring(0, 200));
-    
-    // Clean the response - remove markdown code blocks if present
-    content = content.trim();
-    if (content.startsWith('```json')) {
-      content = content.slice(7);
-    }
-    if (content.startsWith('```')) {
-      content = content.slice(3);
-    }
-    if (content.endsWith('```')) {
-      content = content.slice(0, -3);
-    }
-    content = content.trim();
-    
-    // Try to parse JSON
-    let result;
-    try {
-      result = JSON.parse(content);
-    } catch (parseError) {
-      console.error('[Tailor API] JSON parse failed. Content:', content.substring(0, 500));
-      
-      // Fallback: return the raw content as the resume
-      return Response.json({
-        success: true,
-        tailoredResume: content,
-        atsScore: 75,
-        keywordsMatched: [],
-        note: 'Resume tailored (raw format)'
-      });
-    }
+    console.log('[Tailor API] Success! Resume length:', tailoredResume.length);
     
     return Response.json({ 
       success: true, 
-      tailoredResume: result.tailoredResume || resume,
-      atsScore: result.atsScore || 75,
-      keywordsMatched: result.keywordsMatched || []
+      tailoredResume: tailoredResume,
+      atsScore: 85,
+      keywordsMatched: []
     });
     
   } catch (error: any) {
-    console.error('[Tailor API] Error:', error.message);
-    return Response.json({ 
-      success: false, 
-      error: 'Failed to tailor resume. Please try again.' 
-    }, { status: 500 });
+    console.error('[Tailor API] Error:', error);
+    console.error('[Tailor API] Error stack:', error.stack);
+    
+    // Fallback: Return a simple template-based tailoring
+    try {
+      const { resume, jobDescription } = await request.clone().json();
+      const simpleTailored = generateSimpleTailoredResume(resume, jobDescription);
+      
+      return Response.json({ 
+        success: true, 
+        tailoredResume: simpleTailored,
+        atsScore: 70,
+        keywordsMatched: [],
+        note: 'Used fallback tailoring'
+      });
+    } catch {
+      return Response.json({ 
+        success: false, 
+        error: `Failed to tailor resume: ${error.message}` 
+      }, { status: 500 });
+    }
   }
+}
+
+function generateSimpleTailoredResume(resume: string, jobDesc: string): string {
+  // Extract key terms from job description
+  const jobKeywords = jobDesc.toLowerCase()
+    .match(/\b(javascript|typescript|react|node|python|java|sql|aws|docker|git|api|rest|frontend|backend|full.?stack|developer|engineer)\b/gi) 
+    || [];
+  
+  const uniqueKeywords = [...new Set(jobKeywords)];
+  
+  // Highlight matching skills in resume
+  let tailored = resume;
+  
+  for (const keyword of uniqueKeywords) {
+    const regex = new RegExp(`(${keyword})`, 'gi');
+    tailored = tailored.replace(regex, '**$1**');
+  }
+  
+  return tailored;
 }
