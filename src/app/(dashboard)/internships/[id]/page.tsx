@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, ExternalLink, ArrowLeft, Download } from 'lucide-react';
+import { jsPDF } from 'jspdf';
 
 export default function JobDetailPage() {
   const params = useParams();
@@ -15,6 +16,120 @@ export default function JobDetailPage() {
   const [tailoredResume, setTailoredResume] = useState<string | null>(null);
   const [matchScore, setMatchScore] = useState<number | null>(null);
   const [resumeText, setResumeText] = useState<string | null>(null);
+
+  function formatJobDescription(description: string): React.ReactNode {
+    if (!description) return null;
+    
+    // Clean the text first
+    const cleaned = description
+      .replace(/â/g, "'")
+      .replace(/â€"/g, '-')
+      .replace(/â€"/g, '-')
+      .replace(/â€˜/g, "'")
+      .replace(/â€œ/g, '"')
+      .replace(/â€/g, '"')
+      .replace(/Â/g, '')
+      .replace(/â/g, '')
+      .replace(/â€¢/g, '•')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/\s+/g, ' ')
+      .trim();
+    
+    // Split into sections
+    const sections = cleaned.split(/\n\n+/);
+    
+    return (
+      <div className="space-y-4">
+        {sections.map((section, index) => {
+          // Check if it's a bullet list
+          if (section.includes('•') || section.includes('- ')) {
+            const lines = section.split('\n');
+            return (
+              <ul key={index} className="list-disc list-inside space-y-1 text-gray-400">
+                {lines.map((line, i) => {
+                  const cleanLine = line.replace(/^[•\-\s]+/, '').trim();
+                  if (cleanLine) {
+                    return <li key={i}>{cleanLine}</li>;
+                  }
+                  return null;
+                })}
+              </ul>
+            );
+          }
+          
+          // Check if it's a heading (short line, possibly all caps)
+          if (section.length < 60 && section === section.toUpperCase()) {
+            return <h3 key={index} className="text-lg font-bold text-white mt-4">{section}</h3>;
+          }
+          
+          // Regular paragraph
+          return <p key={index} className="text-gray-300 leading-relaxed">{section}</p>;
+        })}
+      </div>
+    );
+  }
+
+  function downloadResumeAsPDF(resumeText: string, fileName: string) {
+    const doc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+    
+    // Set font
+    doc.setFont('helvetica');
+    
+    // Split text into lines that fit the page width
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const maxWidth = pageWidth - (margin * 2);
+    
+    // Process the resume text
+    const lines = resumeText.split('\n');
+    let yPosition = 20;
+    const lineHeight = 6;
+    
+    for (const line of lines) {
+      // Check if it's a header (ALL CAPS with = under it, or just ALL CAPS)
+      const isHeader = /^[A-Z\s]+$/.test(line.trim()) && line.trim().length > 0;
+      const isSeparator = /^=+$/.test(line.trim());
+      
+      if (isSeparator) {
+        yPosition += 3;
+        continue;
+      }
+      
+      if (isHeader) {
+        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        yPosition += 5;
+      } else if (line.startsWith('•')) {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+      } else {
+        doc.setFontSize(10);
+        doc.setFont('helvetica', 'normal');
+      }
+      
+      // Split long lines
+      const splitLines = doc.splitTextToSize(line, maxWidth);
+      
+      for (const splitLine of splitLines) {
+        // Check if we need a new page
+        if (yPosition > 280) {
+          doc.addPage();
+          yPosition = 20;
+        }
+        
+        doc.text(splitLine, margin, yPosition);
+        yPosition += lineHeight;
+      }
+    }
+    
+    // Save the PDF
+    doc.save(`${fileName}-tailored-resume.pdf`);
+  }
 
   // Get resume from localStorage
   useEffect(() => {
@@ -165,7 +280,7 @@ export default function JobDetailPage() {
         {/* Job Description */}
         <div className="bg-gray-800/50 border border-gray-700 rounded-xl p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Job Description</h2>
-          <p className="text-gray-300 whitespace-pre-wrap">{job.description}</p>
+          {formatJobDescription(job.description)}
         </div>
 
         {/* Resume Tailoring Section */}
@@ -213,9 +328,9 @@ export default function JobDetailPage() {
                       {tailoredResume}
                     </pre>
                   </div>
-                  <Button onClick={handleDownload}>
+                  <Button onClick={() => downloadResumeAsPDF(tailoredResume, job?.company || 'resume')}>
                     <Download className="h-4 w-4 mr-2" />
-                    Download Tailored Resume
+                    Download as PDF
                   </Button>
                 </div>
               )}

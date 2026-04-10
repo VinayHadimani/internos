@@ -4,6 +4,36 @@ import { normalizeSalary, type SalaryInfo } from '@/lib/utils/salary'
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! })
 
+// Add this helper function at the top:
+function cleanText(text: string): string {
+  if (!text) return '';
+  
+  return text
+    // Fix HTML entities
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Fix mojibake (encoding errors)
+    .replace(/â/g, "'")
+    .replace(/â€"/g, '-')
+    .replace(/â€"/g, '-')
+    .replace(/â€˜/g, "'")
+    .replace(/â€œ/g, '"')
+    .replace(/â€/g, '"')
+    .replace(/Ã¢â‚¬â€œ/g, '-')
+    .replace(/Ã¢â‚¬â„¢/g, "'")
+    .replace(/Ã‚Â/g, '')
+    .replace(/Â/g, '')
+    .replace(/â/g, '')
+    // Remove extra whitespace
+    .replace(/\s+/g, ' ')
+    .replace(/\n\s*\n/g, '\n\n')
+    .trim();
+}
+
 // ─── Interfaces ──────────────────────────────────────────────
 export interface JobResult {
   title: string
@@ -955,7 +985,17 @@ export async function aggregateJobs(userQuery: string, preferredLocation?: strin
   })
 
   console.log(`[Aggregator] Combined: ${combined.length} → Deduplicated: ${deduplicated.length} → Sorted: ${scored.length}`)
-  return scored
+  
+  // Apply cleanText to EVERY job before returning:
+  const cleanedJobs = scored.map(job => ({
+    ...job,
+    title: cleanText(job.title),
+    description: cleanText(job.description || ''),
+    company: cleanText(job.company),
+    location: cleanText(job.location)
+  }));
+
+  return cleanedJobs;
 }
 
 export default aggregateJobs
