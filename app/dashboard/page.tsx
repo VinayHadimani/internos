@@ -5,13 +5,14 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { Upload, Briefcase, FileText, ArrowRight, Loader2, Zap, User } from 'lucide-react';
-import { extractSkillsFromResume } from '@/lib/ai';
+import { parseResumePDF, parseResumeText } from '@/lib/resume-parser';
 
 export default function DashboardPage() {
   const { user, isAuthenticated, loading, signOut } = useAuth();
   const router = useRouter();
   const [uploading, setUploading] = useState(false);
   const [resumeText, setResumeText] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {
@@ -29,8 +30,21 @@ export default function DashboardPage() {
     if (!file) return;
 
     setUploading(true);
+    setError(null);
     try {
-      const text = await file.text();
+      let text = '';
+      if (file.type === 'application/pdf') {
+        const buffer = await file.arrayBuffer();
+        text = await parseResumePDF(buffer);
+      } else {
+        const rawText = await file.text();
+        text = await parseResumeText(rawText);
+      }
+      
+      if (!text || text.length < 50) {
+        throw new Error('Could not extract enough text from the resume. Please ensure it is a valid document.');
+      }
+      
       setResumeText(text);
       localStorage.setItem('resumeText', text);
       

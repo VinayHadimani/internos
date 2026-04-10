@@ -22,64 +22,83 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // Use Groq with Llama - more stable than ZAI on Vercel
     const completion = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: `You are an expert resume writer and career coach with 15+ years of experience.
-
-TASK: Tailor the candidate's resume for this specific job.
+          content: `You are an expert resume writer and career coach. 
+          
+TASK: Tailor the candidate's resume for the provided job description.
 
 RULES:
-1. Keep ALL information FACTUAL - NEVER invent or exaggerate anything
-2. Naturally incorporate keywords from the job description
-3. Highlight the most relevant experience first
-4. Use action verbs and quantify achievements where possible
-5. Optimize for ATS (Applicant Tracking Systems)
-6. Maintain professional formatting with clear sections
+1. OUTPUT ONLY ONE COPY of the tailored resume. 
+2. DO NOT include any introductory or concluding text.
+3. Keep ALL information FACTUAL based on the original resume.
+4. Naturally incorporate keywords from the job description.
+5. Highlight quantified achievements.
+6. Return the resume as a structured plain text document.
+7. ALSO, at the very end of your response, after the resume, provide a list of the TOP 5 matching keywords you used, prefixed with "KEYWORDS: " and comma-separated.
 
-OUTPUT: Return ONLY the tailored resume text. Do not use JSON. Do not use markdown code blocks. Just return the plain text resume formatted professionally.
+FORMAT TEMPLATE:
+[NAME]
+[Contact Info]
 
-Format the resume with these sections:
-- NAME (uppercase)
-- Contact Information
-- Professional Summary (3-4 sentences tailored to this job)
-- Skills (relevant to the job)
-- Experience (most relevant first)
-- Education
-- Projects (if applicable)`
+Professional Summary
+[3-4 sentences tailored to the job]
+
+Core Competencies
+[Key skills matching the JD]
+
+Experience
+[Most relevant achievements first, bullet points]
+
+Education
+[Institution, Degree]
+
+Projects
+[If applicable]`
         },
         {
           role: 'user',
-          content: `MY CURRENT RESUME:
+          content: `ORIGINAL RESUME:
 ${resumeToUse}
 
-TARGET JOB DESCRIPTION:
+JOB DESCRIPTION:
 ${jobDescription}
 
-Please tailor my resume for this job. Return ONLY the resume text, no JSON, no explanations:`
+Please tailor this resume. Return ONLY the resume and the keywords list.`
         }
       ],
       model: 'llama-3.3-70b-versatile',
-      temperature: 0.7,
-      max_tokens: 4000,
+      temperature: 0.3, // Lower temperature for more consistency
+      max_tokens: 3000,
     });
 
-    const tailoredResume = completion.choices[0]?.message?.content || resumeToUse;
+    let fullOutput = completion.choices[0]?.message?.content || resumeToUse;
     
+    // Sanitize output (remove binary chars)
+    fullOutput = fullOutput.replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim();
+    
+    // Split resume and keywords
+    const keywordIndex = fullOutput.lastIndexOf('KEYWORDS:');
+    let tailoredResume = fullOutput;
+    let keywordsMatched: string[] = [];
+    
+    if (keywordIndex !== -1) {
+      tailoredResume = fullOutput.substring(0, keywordIndex).trim();
+      const keywordStr = fullOutput.substring(keywordIndex).replace('KEYWORDS:', '').trim();
+      keywordsMatched = keywordStr.split(',').map(k => k.trim().toLowerCase());
+    }
+
     console.log('[Tailor API] Success! Resume length:', tailoredResume.length);
     
-    // Structure the response to be compatible with the NEW dashboard
-    // and provide enough info that the OLD dashboard might still be able to use it (though it might need further tweaks)
     return Response.json({ 
       success: true, 
       tailoredResume: tailoredResume,
       atsScore: 85,
-      keywordsMatched: [],
-      // For compatibility with old dashboard if needed
+      keywordsMatched: keywordsMatched,
       matchScore: 85,
-      suggestions: ["Highlight these changes in your interview."]
+      suggestions: ["Focused on highlighting technical skills found in the job description."]
     });
     
   } catch (error: any) {

@@ -162,19 +162,31 @@ Example output:
  */
 function sanitizeDescription(raw: string): string {
   if (!raw) return ''
-  // Strip HTML tags
-  const stripped = raw.replace(/<[^>]*>/g, '')
-    // Decode common HTML entities
+  
+  // 1. Replace block-level tags with spaces to avoid words sticking together
+  // e.g., <div>One</div><div>Two</div> -> One Two
+  let processed = raw.replace(/<(div|p|br|li|h[1-6]|tr)[^>]*>/gi, ' ');
+  
+  // 2. Strip all remaining HTML tags
+  processed = processed.replace(/<[^>]*>/g, ' ')
+  
+  // 3. Decode common HTML entities and fix encoding artifacts
+  processed = processed
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ')
-    // Collapse whitespace
-    .replace(/\s+/g, ' ')
-    .trim()
-  return stripped.length > 2000 ? stripped.substring(0, 2000) + '...' : stripped
+    .replace(/\u00A0/g, ' ') // Non-breaking space
+    .replace(/\u2011/g, '-') // Non-breaking hyphen
+    .replace(/â/g, '-')    // Common garbled hyphen artifact
+  
+  // 4. Collapse multiple whitespaces/newlines into a single space
+  // and trim the result
+  const stripped = processed.replace(/\s+/g, ' ').trim()
+  
+  return stripped.length > 2500 ? stripped.substring(0, 2500) + '...' : stripped
 }
 
 // ─── Location Matching ───────────────────────────────────────
