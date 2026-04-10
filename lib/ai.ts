@@ -61,7 +61,7 @@ Return JSON:
   }
 }
 
-export function isEnglish(text: string): boolean {
+function isEnglish(text: string): boolean {
   if (!text) return true;
   // Check for common non-English characters
   const nonEnglishPatterns = /[\u0900-\u097F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F]/;
