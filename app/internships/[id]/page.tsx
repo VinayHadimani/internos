@@ -21,8 +21,9 @@ interface InternshipDetail {
 export default function InternshipDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { isAuthenticated, signOut } = useAuth();
   const [id, setId] = useState<string>('');
-  const [internship, setInternship] = useState<InternshipDetail | null>(null);
+  const [internship, setInternship] = useState<InternshipDetail & { needsTranslation?: boolean; originalDescription?: string; originalTitle?: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [translating, setTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const matchScore = Math.floor(Math.random() * 25) + 75;
 
@@ -46,10 +47,38 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
           stipend: item.stipend || 'Unpaid / Not reported',
           duration: item.duration || 'Not reported',
           description: item.description || '',
-          requiredSkills: item.skills || [],
-          applyUrl: item.url || '',
+          requiredSkills: item.skills || item.requiredSkills || [],
+          applyUrl: item.url || item.applyUrl || '',
           deadline: item.deadline || 'Apply ASAP',
+          needsTranslation: item.needsTranslation || false,
+          originalDescription: item.description,
+          originalTitle: item.title,
         });
+
+        if (item.needsTranslation) {
+          setTranslating(true);
+          Promise.all([
+            fetch('/api/translate-job', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: item.title })
+            }).then(r => r.json()),
+            fetch('/api/translate-job', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ text: item.description })
+            }).then(r => r.json())
+          ]).then(([titleData, descData]) => {
+            setInternship(prev => prev ? {
+              ...prev,
+              title: titleData.translated || prev.title,
+              description: descData.translated || prev.description,
+              needsTranslation: false
+            } : prev);
+          }).finally(() => {
+            setTranslating(false);
+          });
+        }
       } else {
         setError('Job details not found. Please go back to search.');
       }
@@ -133,7 +162,14 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
             </span>
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-white">{internship.company}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-white">{internship.company}</h1>
+              {translating && (
+                <span className="bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 text-xs px-2 py-0.5 rounded-lg animate-pulse flex items-center gap-1">
+                  Translating...
+                </span>
+              )}
+            </div>
             <h2 className="text-xl text-[#777]">{internship.title}</h2>
           </div>
         </div>

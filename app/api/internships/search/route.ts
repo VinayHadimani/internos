@@ -6,132 +6,146 @@ const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
 export async function POST(req: NextRequest) {
   try {
-    const userLocation = req.headers.get('x-user-location') || req.nextUrl.searchParams.get('location') || 'India';
     const body = await req.json();
-    const { resumeText } = body;
     
-    if (!resumeText) {
-      return NextResponse.json({ error: 'Resume text is required' }, { status: 400 });
-    }
-
-    console.log('=== JOB SEARCH START ===');
-
-    // Step 1: Extract skills from resume using Groq
-    const extractResponse = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        {
-          role: 'system',
-          content: `Extract skills and search terms from this resume. Return ONLY valid JSON.
-{
-  "skills": ["skill1", "skill2"],
-  "roleTypes": ["Frontend Developer", "Full Stack"],
-  "experience": "fresher",
-  "searchQueries": ["React developer intern", "Python intern"]
-}`
-        },
-        {
-          role: 'user',
-          content: resumeText
-        }
-      ],
-      max_tokens: 500,
-      temperature: 0.1,
-    });
-
-    let searchTerms: { skills?: string[]; searchQueries?: string[]; experience?: string; roleTypes?: string[] };
-    try {
-      let raw = extractResponse.choices[0]?.message?.content || '{"skills":[],"searchQueries":[]}';
-      raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
-      searchTerms = JSON.parse(raw);
-    } catch {
-      // Fallback: basic keyword extraction
-      const words = resumeText.split(/\s+/).filter((w: string) => w.length > 3).slice(0, 10);
-      searchTerms = { skills: words, searchQueries: ['software developer intern'] };
-    }
-
-    console.log('Extracted skills:', searchTerms.skills);
-
-    // Step 2: Search for jobs using the REAL aggregator
-    const allJobs: any[] = [];
-    const queries = searchTerms.searchQueries || searchTerms.skills?.map((s: string) => `${s} internship`) || ['software developer intern'];
-
-    for (const query of queries.slice(0, 5)) {
-      try {
-        console.log(`Searching for: ${query}`);
-        const jobs = await aggregateJobs(query);
-        console.log(`Found ${jobs.length} jobs for: ${query}`);
-        allJobs.push(...jobs);
-      } catch (err) {
-        console.error(`Search failed for ${query}:`, err);
+    // Fallback search parameters
+    const { 
+      query = 'software developer', 
+      location: bodyLocation = '', 
+      skills = [], 
+      experience = 'fresher',
+      preferredRoles = [] 
+    } = body;
+    
+    const userLocation = req.headers.get('x-user-location') || req.nextUrl.searchParams.get('location') || bodyLocation || 'India';
+    
+    console.log('=== MATCH DEBUG ===');
+    console.log('User Skills:', skills);
+    console.log('Experience:', experience);
+    console.log('Preferred Roles:', preferredRoles);
+    console.log('User Location:', userLocation);
+    
+    // Fetch both internships and general jobs
+    console.log('Fetching internships and jobs from aggregator...');
+    const searchTermsInternship = `${query} internship`;
+    const searchTermsJob = `${query} job developer`;
+    
+    const internshipJobs = await aggregateJobs(searchTermsInternship, userLocation);
+    const fullTimeJobs = await aggregateJobs(searchTermsJob, userLocation);
+    
+    // Combine and deduplicate
+    const allJobsMap = new Map();
+    for (const job of [...internshipJobs, ...fullTimeJobs]) {
+      const key = `${job.title}-${job.company}`.toLowerCase();
+      if (!allJobsMap.has(key)) {
+        allJobsMap.set(key, job);
       }
     }
+    const uniqueJobs = Array.from(allJobsMap.values());
+    console.log(`Total unique jobs/internships found: ${uniqueJobs.length}`);
 
-    console.log(`Total jobs found: ${allJobs.length}`);
+    // Helper to extract required tech skills from job text
+    const extractRequiredSkills = (jobText: string): string[] => {
+      const commonSkills = [
+        'javascript', 'typescript', 'python', 'java', 'react', 'angular', 'vue',
+        'node', 'nextjs', 'next.js', 'mongodb', 'sql', 'postgresql', 'mysql',
+        'aws', 'docker', 'kubernetes', 'git', 'figma', 'ui/ux', 'machine learning',
+        'data science', 'android', 'ios', 'flutter', 'react native', 'django',
+        'flask', 'spring', 'express', 'tailwind', 'css', 'html', 'api', 'rest',
+        'graphql', 'firebase', 'redux', 'c++', 'c#', 'go', 'rust', 'ruby', 'php'
+      ];
+      
+      const found: string[] = [];
+      for (const skill of commonSkills) {
+        if (jobText.includes(skill)) {
+          found.push(skill);
+        }
+      }
+      return found;
+    };
+    
+    // Helper to check language
+    const isEnglish = (text: string): boolean => {
+      if (!text) return true;
+      const nonEnglishPatterns = /[\u0900-\u097F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F]/;
+      if (nonEnglishPatterns.test(text)) return false;
+      const asciiCount = (text.match(/[\x00-\x7F]/g) || []).length;
+      return asciiCount / text.length > 0.95;
+    };
 
-    // Step 3: Deduplicate
-    const seen = new Set<string>();
-    const uniqueJobs = allJobs.filter(job => {
-      const key = job.url || `${job.title}-${job.company}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-
-    // Step 4: Calculate match scores
-    const userSkills = searchTerms.skills || [];
-    const userRoles = searchTerms.roleTypes || [];
+    // Calculate match scores
     const userLocLower = userLocation.toLowerCase();
     const userLocCity = userLocLower.split(',')[0].trim();
 
-    let rankedJobs = uniqueJobs.map(job => {
+    const rankedJobs = uniqueJobs.map(job => {
       const jobText = `${job.title} ${job.description || ''} ${job.company}`.toLowerCase();
       const jobLocation = (job.location || '').toLowerCase();
       
-      // Skills Match (50%)
-      const matchingSkills = userSkills.filter((s: string) => jobText.includes(s.toLowerCase()));
-      const skillScore = userSkills.length > 0 ? (matchingSkills.length / userSkills.length) * 100 : 50;
+      // 1. Skills Match (50% weight)
+      const requiredSkills = extractRequiredSkills(jobText);
+      let skillMatches = 0;
+      for (const reqSkill of requiredSkills) {
+        for (const userSkill of skills) {
+          if (reqSkill.toLowerCase().includes(userSkill.toLowerCase()) || userSkill.toLowerCase().includes(reqSkill.toLowerCase())) {
+            skillMatches++;
+            break;
+          }
+        }
+      }
+      const skillScore = requiredSkills.length > 0 ? (skillMatches / requiredSkills.length) * 100 : 50;
 
-      // Location Match (20%)
+      // 2. Title/Role Match (30% weight)
+      let roleScore = 50;
+      for (const role of preferredRoles) {
+        if (job.title.toLowerCase().includes(role.toLowerCase())) {
+          roleScore = 100;
+          break;
+        }
+      }
+      
+      // 3. Experience Match (20% weight)
+      let expScore = 100; // Fresher/junior matches most internships
+      if (experience === 'mid') expScore = 70;
+      if (experience === 'senior') expScore = 50;
+
+      // Apply Location boost implicitly or flag it
       const isRemote = jobLocation.includes('remote');
       const isLocMatch = isRemote || 
                          (userLocCity.length > 2 && jobLocation.includes(userLocCity)) || 
                          (userLocLower.includes('india') && jobLocation.includes('india'));
-      const locationMatchScore = isLocMatch ? 100 : 0;
-
-      // Role Match (15%)
-      const matchingRoles = userRoles.filter((r: string) => jobText.includes(r.toLowerCase()));
-      const roleScore = (userRoles.length > 0 && matchingRoles.length > 0) ? 100 : (userRoles.length === 0 ? 50 : 0);
-
-      // Experience Match (15%)
-      const experienceScore = 100; // Simplified
       
-      const rawMatchScore = (skillScore * 0.5) + (locationMatchScore * 0.2) + (roleScore * 0.15) + (experienceScore * 0.15);
-      const matchScore = Math.round(rawMatchScore / 10) * 10;
+      const matchScore = Math.round((skillScore * 0.50) + (roleScore * 0.30) + (expScore * 0.20));
       
       let matchLabel = 'Low Match';
       if (matchScore >= 80) matchLabel = 'Excellent Match';
       else if (matchScore >= 60) matchLabel = 'Good Match';
       else if (matchScore >= 40) matchLabel = 'Moderate Match';
 
+      const needsTranslation = !isEnglish(job.description || '') || !isEnglish(job.title);
+
       return {
         ...job,
         matchScore,
         matchLabel,
-        locationMatch: isLocMatch
+        locationMatch: isLocMatch,
+        needsTranslation
       };
     });
 
-    // Step 4.5: Filter out jobs below 40%
-    rankedJobs = rankedJobs.filter(job => job.matchScore >= 40);
+    // Sort: Indian jobs first (by match score), then international (by match score)
+    const INDIAN_CITIES = [
+      'india', 'bangalore', 'bengaluru', 'mumbai', 'delhi', 'new delhi',
+      'hyderabad', 'pune', 'chennai', 'kolkata', 'ahmedabad', 'jaipur',
+      'noida', 'gurgaon', 'gurugram', 'kochi', 'coimbatore', 'indore',
+      'chandigarh', 'nagpur', 'surat', 'bhopal', 'visakhapatnam'
+    ];
 
-    // Step 5: Sort by Match Score AND Indian jobs first
-    const isIndianJob = (job: any) => {
-      const loc = (job.location || '').toLowerCase();
-      return loc.includes('india') || loc.includes('bangalore') || loc.includes('mumbai') ||
-             loc.includes('delhi') || loc.includes('hyderabad') || loc.includes('pune') ||
-             loc.includes('chennai') || loc.includes('kolkata') || loc.includes('ahmedabad') ||
-             loc.includes('jaipur') || loc.includes('remote');
+    const isIndianJob = (job: any): boolean => {
+      const location = (job.location || '').toLowerCase();
+      if (INDIAN_CITIES.some(city => location.includes(city))) return true;
+      if (job.isRemote || location.includes('remote')) return true;
+      if (job.salary?.includes('INR') || job.salary?.includes('₹')) return true;
+      return false;
     };
 
     rankedJobs.sort((a, b) => {
@@ -141,22 +155,22 @@ export async function POST(req: NextRequest) {
       if (aIsIndian && !bIsIndian) return -1;
       if (!aIsIndian && bIsIndian) return 1;
       
-      return b.matchScore - a.matchScore;
+      return (b.matchScore || 0) - (a.matchScore || 0);
     });
 
-    console.log(`Returning ${rankedJobs.length} jobs`);
+    console.log(`Returning ${rankedJobs.length} ALL jobs (No 40% filter)`);
 
     return NextResponse.json({
       success: true,
       total: rankedJobs.length,
       jobs: rankedJobs,
-      searchTerms
+      count: rankedJobs.length
     });
 
   } catch (error) {
     console.error('Search error:', error);
     return NextResponse.json(
-      { error: 'Search failed', details: error instanceof Error ? error.message : 'Unknown' },
+      { success: false, error: 'Search failed', details: error instanceof Error ? error.message : 'Unknown' },
       { status: 500 }
     );
   }

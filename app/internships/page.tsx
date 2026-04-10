@@ -66,20 +66,30 @@ export default function InternshipsPage() {
 
     try {
       const userLocation = localStorage.getItem('userLocation') || '';
-      const res = await fetch(`/api/internships/search?location=${encodeURIComponent(userLocation)}`, {
+      const userSkills = JSON.parse(localStorage.getItem('userSkills') || '[]');
+      const userExperience = localStorage.getItem('userExperience') || 'fresher';
+      const userRoles = JSON.parse(localStorage.getItem('userRoles') || '[]');
+
+      const res = await fetch(`/api/internships/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resumeText: text })
+        body: JSON.stringify({ 
+          resumeText: text,
+          location: userLocation,
+          skills: userSkills,
+          experience: userExperience,
+          preferredRoles: userRoles,
+          query: 'internship'
+        })
       });
 
       const data = await res.json();
 
       if (data.success) {
-        const filteredJobs = (data.jobs || data.data || []).filter(
-          (job: Job) => job.matchScore >= 40
-        );
+        // No client-side 40% filter, show all jobs
+        const filteredJobs = data.jobs || data.data || [];
         setJobs(filteredJobs);
-        setSkills(data.searchTerms?.skills || []);
+        setSkills(userSkills || []);
       } else {
         setError(data.error || 'Failed to search jobs');
       }
@@ -143,6 +153,14 @@ export default function InternshipsPage() {
     );
   }
 
+  function getJobTypeBadge(title: string) {
+    const lowerTitle = (title || '').toLowerCase();
+    if (lowerTitle.includes('intern')) return { text: 'Internship', bgColor: 'bg-blue-500/10', textColor: 'text-blue-400', border: 'border-blue-500/20' };
+    if (lowerTitle.includes('junior') || lowerTitle.includes('entry')) return { text: 'Entry Level', bgColor: 'bg-green-500/10', textColor: 'text-green-400', border: 'border-green-500/20' };
+    if (lowerTitle.includes('senior') || lowerTitle.includes('lead')) return { text: 'Senior', bgColor: 'bg-purple-500/10', textColor: 'text-purple-400', border: 'border-purple-500/20' };
+    return { text: 'Job', bgColor: 'bg-gray-500/10', textColor: 'text-gray-400', border: 'border-gray-500/20' };
+  }
+
   // Main view (has resume)
   return (
     <div className="min-h-screen bg-[#050505] text-white">
@@ -176,7 +194,7 @@ export default function InternshipsPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-white tracking-tight mb-2">
-              Internships For You
+              Jobs & Internships for You
             </h1>
             {skills.length > 0 && (
               <p className="text-[#777]">
@@ -234,7 +252,7 @@ export default function InternshipsPage() {
         {!loading && jobs.length > 0 && (
           <div>
             <p className="text-[#777] text-sm mb-6">
-              Found {jobs.length} internship{jobs.length !== 1 ? 's' : ''} with 40%+ match
+              Found {jobs.length} jobs and internships for you
             </p>
 
             <div className="space-y-4">
@@ -246,8 +264,18 @@ export default function InternshipsPage() {
                 >
                   <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
                     <div className="flex-1">
-                      <h3 className="text-xl font-semibold text-white">{job.title}</h3>
-                      <p className="text-[#777] mt-1">{job.company}</p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-xl font-semibold text-white">{job.title}</h3>
+                        {(() => {
+                           const badge = getJobTypeBadge(job.title);
+                           return (
+                             <span className={`text-xs font-medium px-2 py-0.5 rounded-lg border ${badge.bgColor} ${badge.textColor} ${badge.border}`}>
+                               {badge.text}
+                             </span>
+                           );
+                        })()}
+                      </div>
+                      <p className="text-[#777]">{job.company}</p>
                       {job.location && (
                         <p className="text-[#555] text-sm">{job.location}</p>
                       )}

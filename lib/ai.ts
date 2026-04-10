@@ -1,6 +1,7 @@
 "use server";
 
 import Groq from 'groq-sdk';
+import ZAI from 'z-ai-web-dev-sdk';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
@@ -58,4 +59,51 @@ Return JSON:
       location: 'India'
     };
   }
+}
+
+export function isEnglish(text: string): boolean {
+  if (!text) return true;
+  // Check for common non-English characters
+  const nonEnglishPatterns = /[\u0900-\u097F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F]/;
+  
+  if (nonEnglishPatterns.test(text)) {
+    return false;
+  }
+  
+  // If mostly ASCII characters, assume English
+  const asciiCount = (text.match(/[\x00-\x7F]/g) || []).length;
+  return asciiCount / text.length > 0.95;
+}
+
+export async function translateJobToEnglish(text: string, sourceLanguage?: string): Promise<string> {
+  // Skip if already in English or empty
+  if (!text || isEnglish(text)) {
+    return text;
+  }
+  
+  const zai = await ZAI.create();
+  
+  const response = await zai.chat.completions.create({
+    messages: [
+      {
+        role: 'system',
+        content: `You are a professional translator. Translate the following job posting to English.
+        
+Rules:
+1. Maintain all formatting and structure
+2. Keep company names, URLs, and technical terms unchanged
+3. Use professional business English
+4. Preserve all job details accurately
+5. Return ONLY the translated text, no explanations`
+      },
+      {
+        role: 'user',
+        content: `Translate this job posting to English:\n\n${text}`
+      }
+    ],
+    model: 'claude-haiku-4-20250514', // Fast and cheap for translation
+    max_tokens: 2000
+  });
+
+  return response.choices[0]?.message?.content || text;
 }
