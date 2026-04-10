@@ -1,16 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Download, ArrowLeft, Sparkles } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 
-export default function TailorPage() {
+function TailorContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [job, setJob] = useState<any>(null);
   const [resumeText, setResumeText] = useState('');
   const [tailoredResume, setTailoredResume] = useState('');
@@ -19,22 +21,37 @@ export default function TailorPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Load job from sessionStorage
-    const jobData = sessionStorage.getItem('selectedJob');
-    if (jobData) {
-      try {
-        setJob(JSON.parse(jobData));
-      } catch (e) {
-        console.error('Failed to parse selectedJob:', e);
+    // 1. Try to load job from URL search params
+    const jobId = searchParams.get('jobId');
+    const title = searchParams.get('title');
+    const company = searchParams.get('company');
+    const description = searchParams.get('description');
+
+    if (jobId && title) {
+      setJob({
+        id: jobId,
+        title: title,
+        company: company || 'Unknown Company',
+        description: description || ''
+      });
+    } else {
+      // 2. Fallback to Load job from sessionStorage
+      const jobData = sessionStorage.getItem('selectedJob');
+      if (jobData) {
+        try {
+          setJob(JSON.parse(jobData));
+        } catch (e) {
+          console.error('Failed to parse selectedJob:', e);
+        }
       }
     }
     
-    // Load resume from localStorage
+    // 3. Load resume from localStorage
     const resume = localStorage.getItem('resumeText');
     if (resume) {
       setResumeText(resume);
     }
-  }, []);
+  }, [searchParams]);
 
   async function handleTailorResume() {
     if (!resumeText) {
@@ -94,10 +111,10 @@ export default function TailorPage() {
 
   if (!job) {
     return (
-      <div className="container py-8 bg-gray-900 min-h-screen text-white">
-        <Alert className="max-w-md mx-auto">
+      <div className="container py-8 bg-gray-900 min-h-screen text-white flex flex-col items-center">
+        <Alert className="max-w-md">
           <AlertDescription>
-            No job selected. <Link href="/internships" className="underline text-blue-400">Browse jobs</Link>
+            No job selected. <Link href="/internships" className="underline text-blue-400 font-bold">Browse jobs</Link> to find one to tailor for.
           </AlertDescription>
         </Alert>
       </div>
@@ -105,7 +122,7 @@ export default function TailorPage() {
   }
 
   return (
-    <div className="container py-8 max-w-4xl mx-auto min-h-screen">
+    <div className="container py-8 max-w-4xl mx-auto min-h-screen text-white">
       <Link href="/internships" className="flex items-center gap-2 text-gray-400 mb-6 hover:text-white transition-colors">
         <ArrowLeft className="w-4 h-4" />
         Back to jobs
@@ -119,6 +136,11 @@ export default function TailorPage() {
           <h2 className="text-xl font-bold text-white">{job.title}</h2>
           <p className="text-gray-400">{job.company}</p>
           <p className="text-sm mt-2 text-gray-500">{job.location || 'Remote'}</p>
+          {job.description && (
+            <div className="mt-4 p-3 bg-black/30 rounded border border-gray-800 text-xs text-gray-400 line-clamp-3">
+              {job.description}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -136,7 +158,7 @@ export default function TailorPage() {
             onClick={handleTailorResume} 
             disabled={isTailoring || !resumeText}
             size="lg"
-            className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white"
+            className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold"
           >
             {isTailoring ? (
               <>
@@ -168,12 +190,15 @@ export default function TailorPage() {
         <Card className="mt-6 border-blue-900/30 bg-gray-900">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-white">Your Tailored Resume</CardTitle>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Sparkles className="w-5 h-5 text-blue-400" />
+                Your Tailored Resume
+              </CardTitle>
               <div className="flex items-center gap-2">
-                <Badge variant="default">ATS Score: {atsScore}%</Badge>
-                <Button onClick={handleDownload} variant="outline" size="sm" className="border-gray-700 hover:bg-gray-800">
+                <Badge variant="default" className="bg-green-600">ATS Score: {atsScore}%</Badge>
+                <Button onClick={handleDownload} variant="outline" size="sm" className="border-gray-700 hover:bg-gray-800 text-white">
                   <Download className="w-4 h-4 mr-2" />
-                  Download
+                  Download (.txt)
                 </Button>
               </div>
             </div>
@@ -187,15 +212,29 @@ export default function TailorPage() {
             
             <div className="mt-6 p-4 bg-blue-900/10 border border-blue-900/30 rounded-lg">
               <h4 className="text-blue-400 font-bold mb-2 flex items-center gap-2">
-                <Sparkles className="w-4 h-4" /> Pro Tip
+                <Target className="w-4 h-4" /> Optimization Tip
               </h4>
               <p className="text-sm text-gray-400 italic">
-                This version has been optimized for ATS keyword mapping while maintaining professional readability. Use this for your application to significantly increase your callback rate.
+                This version highlights your relevant experience for {job.company} by mapping your skills directly to their requirements. Use this for your application!
               </p>
             </div>
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
+
+export default function TailorPage() {
+  return (
+    <div className="bg-[#050505] min-h-screen">
+      <Suspense fallback={
+        <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        </div>
+      }>
+        <TailorContent />
+      </Suspense>
     </div>
   );
 }

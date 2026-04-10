@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
-import { ArrowLeft, MapPin, DollarSign, Calendar, Target, ExternalLink, FileEdit, Zap } from 'lucide-react';
+import { ArrowLeft, MapPin, DollarSign, Calendar, Target, ExternalLink, FileEdit, Zap, Loader2, Check, Download, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface InternshipDetail {
   id: string;
@@ -26,6 +27,62 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
   const [translating, setTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const matchScore = Math.floor(Math.random() * 25) + 75;
+  const [resumeText, setResumeText] = useState<string | null>(null);
+  const [isTailoring, setIsTailoring] = useState(false);
+  const [tailoredResume, setTailoredResume] = useState<string | null>(null);
+  const [tailoringMatchScore, setTailoringMatchScore] = useState<number>(85);
+
+  useEffect(() => {
+    const savedResume = localStorage.getItem('resumeText');
+    if (savedResume) {
+      setResumeText(savedResume);
+    }
+  }, []);
+
+  async function handleTailorResume() {
+    if (!resumeText || !internship) return;
+    
+    setIsTailoring(true);
+    setError(null);
+    try {
+      console.log('=== TAILOR DEBUG (Inline) ===');
+      const res = await fetch('/api/tailor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resume: resumeText,
+          jobDescription: `${internship.title}\n${internship.company}\n\n${internship.description}`
+        })
+      });
+      const data = await res.json();
+      
+      console.log('Tailor response:', data.success ? 'Success' : 'Failed');
+      
+      if (data.success && data.tailoredResume) {
+        console.log('SET tailoredResume (Inline)');
+        setTailoredResume(data.tailoredResume);
+        setTailoringMatchScore(data.atsScore || 85);
+      } else {
+        setError(data.error || 'Tailoring failed');
+      }
+    } catch (err) {
+      console.error('Tailoring failed:', err);
+      setError('Failed to tailor resume');
+    } finally {
+      setIsTailoring(false);
+    }
+  }
+
+  const handleDownload = () => {
+    if (!tailoredResume) return;
+    const blob = new Blob([tailoredResume], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `tailored_resume_${internship?.company || 'job'}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   useEffect(() => {
     params.then((p) => setId(p.id));
@@ -244,32 +301,113 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
         </div>
 
         {/* CTA buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {isAuthenticated ? (
-            <Link
-              href={`/tailor?jobId=${internship.id}&title=${encodeURIComponent(internship.title)}&company=${encodeURIComponent(internship.company)}&description=${encodeURIComponent(internship.description)}`}
-              className="bg-[#3B82F6] text-white font-medium py-4 px-6 rounded-xl hover:bg-[#2563EB] transition-colors flex items-center justify-center gap-2"
-            >
-              <FileEdit size={20} />
-              Tailor My Resume for This Job
-            </Link>
-          ) : (
-            <Link
-              href="/"
-              className="bg-[#3B82F6] text-white font-medium py-4 px-6 rounded-xl hover:bg-[#2563EB] transition-colors flex items-center justify-center gap-2"
-            >
-              <FileEdit size={20} />
-              Sign in to Tailor Resume
-            </Link>
-          )}
+        <div className="flex flex-col gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {isAuthenticated ? (
+              <Button
+                onClick={() => {
+                  // Scroll to tailoring section or toggle it
+                  const section = document.getElementById('tailoring-section');
+                  section?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="bg-[#3B82F6] text-white font-medium py-6 rounded-xl hover:bg-[#2563EB] transition-colors flex items-center justify-center gap-2"
+              >
+                <Sparkles size={20} />
+                Tailor Resume Inline
+              </Button>
+            ) : (
+              <Link
+                href="/"
+                className="bg-[#3B82F6] text-white font-medium py-4 px-6 rounded-xl hover:bg-[#2563EB] transition-colors flex items-center justify-center gap-2 text-center"
+              >
+                <FileEdit size={20} />
+                Sign in to Tailor Resume
+              </Link>
+            )}
 
-          <button
-            onClick={handleExternalApply}
-            className="bg-[#0D0D0D] border border-[#1F1F1F] text-white font-medium py-4 px-6 rounded-xl hover:border-[#3B82F6] transition-colors flex items-center justify-center gap-2"
-          >
-            <ExternalLink size={20} />
-            Apply Externally
-          </button>
+            <button
+              onClick={handleExternalApply}
+              className="bg-[#0D0D0D] border border-[#1F1F1F] text-white font-medium py-4 px-6 rounded-xl hover:border-[#3B82F6] transition-colors flex items-center justify-center gap-2"
+            >
+              <ExternalLink size={20} />
+              Apply Externally
+            </button>
+          </div>
+
+          {/* Inline Tailoring Section */}
+          {isAuthenticated && (
+            <div id="tailoring-section" className="bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl p-8 mt-4 scroll-mt-20">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                  <Sparkles className="text-blue-400" />
+                  AI Resume Tailoring
+                </h3>
+              </div>
+
+              {!resumeText && (
+                <div className="bg-yellow-900/20 border border-yellow-600/30 text-yellow-500 p-4 rounded-xl mb-6">
+                  <p className="text-sm">
+                    No resume found in your profile. Please <Link href="/dashboard" className="underline font-bold">upload your resume</Link> first.
+                  </p>
+                </div>
+              )}
+
+              {resumeText && !tailoredResume && (
+                <div className="space-y-4">
+                  <p className="text-[#777] text-sm">
+                    Our AI will analyze this job description and your resume to highlight your most relevant matching skills.
+                  </p>
+                  <Button
+                    onClick={handleTailorResume}
+                    disabled={isTailoring}
+                    size="lg"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  >
+                    {isTailoring ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Analyzing and Tailoring...
+                      </>
+                    ) : (
+                      "Optimize My Resume for This Role"
+                    )}
+                  </Button>
+                </div>
+              )}
+
+              {tailoredResume && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
+                  <div className="flex items-center justify-between">
+                    <div className="bg-green-600/10 border border-green-600/20 text-green-400 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2">
+                       <Check size={14} /> ATS Score: {tailoringMatchScore}%
+                    </div>
+                    <Button onClick={handleDownload} variant="ghost" size="sm" className="text-blue-400 hover:text-blue-300">
+                      <Download className="w-4 h-4 mr-2" />
+                      Download (.txt)
+                    </Button>
+                  </div>
+                  
+                  <div className="bg-black/50 border border-gray-800 rounded-xl p-5 overflow-hidden">
+                    <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans max-h-96 overflow-y-auto">
+                      {tailoredResume}
+                    </pre>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <Button onClick={handleDownload} className="flex-1 bg-white text-black hover:bg-gray-200">
+                      <Download className="w-4 h-4 mr-2" />
+                      Save Tailored Version
+                    </Button>
+                    <Link href={`/tailor?jobId=${internship.id}&title=${encodeURIComponent(internship.title)}&company=${encodeURIComponent(internship.company)}&description=${encodeURIComponent(internship.description)}`} className="flex-1">
+                      <Button variant="outline" className="w-full border-gray-700 text-gray-300">
+                        View Fullscreen
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Sign in CTA for non-authenticated users */}
