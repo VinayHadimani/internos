@@ -16,6 +16,7 @@ interface Job {
   source: string;
   matchScore: number;
   matchLabel: string;
+  locationMatch?: boolean;
 }
 
 export default function InternshipsPage() {
@@ -64,7 +65,8 @@ export default function InternshipsPage() {
     setError(null);
 
     try {
-      const res = await fetch('/api/internships/search', {
+      const userLocation = localStorage.getItem('userLocation') || '';
+      const res = await fetch(`/api/internships/search?location=${encodeURIComponent(userLocation)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resumeText: text })
@@ -265,15 +267,40 @@ export default function InternshipsPage() {
                           ))}
                         </div>
                       )}
+                      
+                      <div className="flex flex-wrap items-center gap-2 mt-3">
+                        {job.locationMatch && (
+                          <span className="text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">
+                            📍 Location Match
+                          </span>
+                        )}
+                        {((job.location || '').toLowerCase().includes('india') || 
+                          (job.location || '').toLowerCase().includes('remote') || 
+                          (job.location || '').toLowerCase().includes('bangalore') || 
+                          (job.location || '').toLowerCase().includes('mumbai') || 
+                          (job.location || '').toLowerCase().includes('delhi') || 
+                          (job.location || '').toLowerCase().includes('pune') || 
+                          (job.location || '').toLowerCase().includes('chennai') || 
+                          (job.location || '').toLowerCase().includes('hyderabad')) ? (
+                          <span className="text-xs font-medium px-2 py-1 bg-orange-500/10 text-orange-400 rounded-lg border border-orange-500/20">
+                            🇮🇳 India
+                          </span>
+                        ) : (
+                          <span className="text-xs font-medium px-2 py-1 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20">
+                            🌍 International
+                          </span>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="flex flex-col items-end gap-3">
-                      <span className={`text-lg font-bold px-3 py-1 rounded-full ${
-                        job.matchScore >= 80 ? 'bg-green-500/10 text-green-400' :
-                        job.matchScore >= 60 ? 'bg-blue-500/10 text-blue-400' :
-                        'bg-yellow-500/10 text-yellow-400'
+                    <div className="flex flex-col items-end gap-3 mt-4 md:mt-0">
+                      <span className={`text-sm font-bold px-3 py-1 rounded-full ${
+                        job.matchScore >= 90 ? 'bg-green-100 text-green-700' :
+                        job.matchScore >= 70 ? 'bg-yellow-100 text-yellow-700' :
+                        job.matchScore >= 50 ? 'bg-orange-100 text-orange-700' :
+                        'bg-gray-100 text-gray-600'
                       }`}>
-                        {job.matchScore}% {job.matchLabel}
+                        {job.matchScore}% match
                       </span>
 
                       {job.url && (

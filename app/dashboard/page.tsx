@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { Upload, Briefcase, FileText, ArrowRight, Loader2, Zap, User } from 'lucide-react';
+import { extractSkillsFromResume } from '@/lib/ai';
 
 export default function DashboardPage() {
   const { user, isAuthenticated, loading, signOut } = useAuth();
@@ -32,6 +33,11 @@ export default function DashboardPage() {
       const text = await file.text();
       setResumeText(text);
       localStorage.setItem('resumeText', text);
+      
+      const extracted = await extractSkillsFromResume(text);
+      if (extracted.location) {
+        localStorage.setItem('userLocation', extracted.location);
+      }
     } catch (error) {
       console.error('Upload failed:', error);
     } finally {
