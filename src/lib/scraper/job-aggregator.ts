@@ -15,6 +15,33 @@ export interface Job {
   skills?: string[];
 }
 
+function cleanText(text: string): string {
+  if (!text) return '';
+  
+  return text
+    // Remove all non-ASCII characters except common ones
+    .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
+    // Fix HTML entities
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    // Fix mojibake
+    .replace(/â€™/g, "'")
+    .replace(/â€"/g, '-')
+    .replace(/â€˜/g, "'")
+    .replace(/â€œ/g, '"')
+    .replace(/â€/g, '"')
+    .replace(/Â/g, '')
+    // Clean up whitespace
+    .replace(/\s+/g, ' ')
+    .replace(/\n\s*\n/g, '\n\n')
+    .trim();
+}
+
+
 export interface JobProvider {
   name: string;
   search: (query: string) => Promise<Job[]>;
@@ -56,8 +83,18 @@ export class JobAggregator {
     const results = await Promise.all(allJobsPromises);
     const flattenedJobs = results.flat();
 
+    // Clean all job text to fix encoding issues
+    const cleanedJobs = flattenedJobs.map(job => ({
+      ...job,
+      title: cleanText(job.title),
+      description: cleanText(job.description),
+      company: cleanText(job.company),
+      location: cleanText(job.location)
+    }));
+
     // Deduplicate jobs based on URL or a combination of title and company
-    return this.deduplicate(flattenedJobs);
+    return this.deduplicate(cleanedJobs);
+
   }
 
   private async expandQueryWithAI(query: string): Promise<string[]> {

@@ -154,49 +154,64 @@ export default function JobDetailPage() {
   }, [jobId]);
 
   async function handleTailorResume() {
-    console.log('=== TAILOR DEBUG ===');
-    console.log('resumeText:', resumeText ? 'exists' : 'NULL');
-    console.log('job:', job ? 'exists' : 'NULL');
-
-    if (!resumeText || !job) {
-      toast.error('Missing resume or job data');
+    if (!resumeText) {
+      toast.error('Please upload your resume first');
+      setError('Please upload your resume first');
       return;
     }
-
-    setTailoring(true);
-    setTailoredResume(null);
-    setError(null);
+    
+    if (!job) {
+      toast.error('No job selected');
+      setError('No job selected');
+      return;
+    }
+    
+    setIsTailoring(true);
+    setError('');
+    setTailoredResume('');
     
     try {
-      const res = await fetch('/api/tailor', {
+      const response = await fetch('/api/tailor', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json; charset=utf-8' 
+        },
         body: JSON.stringify({
           resume: resumeText,
-          jobDescription: `${job.title}\n${job.company}\n${job.location}\n\n${job.description}\n\nRequired Skills: ${job.skills?.join(', ')}`
+          jobDescription: `${job.title}\n\n${job.description || ''}`
         })
       });
       
-      console.log('[Frontend] Response status:', res.status);
-      const data = await res.json();
-      console.log('[Frontend] Response data:', data);
+      if (!response.ok) {
+        throw new Error(`HTTP error: ${response.status}`);
+      }
       
-      if (res.ok && data.success && data.tailoredResume) {
-        setTailoredResume(data.tailoredResume);
-        setMatchScore(data.atsScore || 85);
+      const data = await response.json();
+      
+      if (data.success && data.tailoredResume) {
+        // Double-check the content is valid
+        const cleanResume = data.tailoredResume
+          .replace(/[^\x20-\x7E\n\r\t]/g, '')
+          .trim();
+          
+        if (cleanResume.length < 50) {
+          throw new Error('Resume too short - something went wrong');
+        }
+        
+        setTailoredResume(cleanResume);
+        setMatchScore(data.atsScore || 80);
         toast.success('Resume tailored successfully!');
       } else {
-        const errorMsg = data.error || 'Failed to tailor resume';
-        console.error('[Frontend] Error:', errorMsg);
-        setError(errorMsg);
-        toast.error(errorMsg);
+        throw new Error(data.error || 'Failed to tailor resume');
       }
+      
     } catch (err: any) {
-      console.error('[Frontend] Tailoring failed:', err);
-      setError('Network error. Please check your connection and try again.');
-      toast.error('Network error occurred');
+      console.error('Tailor error:', err);
+      const errorMsg = err.message || 'Failed to tailor resume. Please try again.';
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
-      setTailoring(false);
+      setIsTailoring(false);
     }
   }
 
@@ -329,22 +344,30 @@ export default function JobDetailPage() {
               {/* Tailored Result */}
               {tailoredResume && (
                 <div className="mt-6">
-                  {matchScore && (
-                    <p className="text-green-400 mb-4">
-                      ✓ Resume tailored! ATS Score: {matchScore}%
-                    </p>
-                  )}
-                  <div className="bg-gray-900 border border-gray-600 rounded-lg p-4 mb-4 max-h-96 overflow-y-auto">
-                    <pre className="text-sm text-gray-300 whitespace-pre-wrap font-mono">
-                      {tailoredResume}
-                    </pre>
+                  <div className="bg-gray-800/80 border border-gray-700 rounded-xl overflow-hidden">
+                    <div className="p-6 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
+                      <div>
+                        <h3 className="text-xl font-bold text-white">Your Tailored Resume</h3>
+                        <div className="flex items-center mt-1">
+                          <Badge variant="default" className="bg-green-600/20 text-green-400 border-green-600/30">
+                            ATS Score: {matchScore}%
+                          </Badge>
+                        </div>
+                      </div>
+                      <Button onClick={() => downloadResumeAsPDF(tailoredResume, job?.company || 'resume')}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download PDF
+                      </Button>
+                    </div>
+                    <div className="p-6 bg-black/40">
+                      <pre className="whitespace-pre-wrap font-mono text-sm text-gray-300 leading-relaxed max-h-[600px] overflow-y-auto custom-scrollbar">
+                        {tailoredResume}
+                      </pre>
+                    </div>
                   </div>
-                  <Button onClick={() => downloadResumeAsPDF(tailoredResume, job?.company || 'resume')}>
-                    <Download className="h-4 w-4 mr-2" />
-                    Download as PDF
-                  </Button>
                 </div>
               )}
+
             </>
           )}
         </div>
