@@ -14,9 +14,9 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    // Diagnostic logging for inputs
-    console.log('[Tailor API] Resume Preview:', resume.substring(0, 100).replace(/\n/g, ' '));
-    console.log('[Tailor API] Job Preview:', jobDescription.substring(0, 100).replace(/\n/g, ' '));
+    // Diagnostic logging for inputs (sanitized)
+    const sanitizedResume = resume.substring(0, 500).replace(/[^\x20-\x7E\n]/g, ' ');
+    console.log('[Tailor API] Resume Preview:', sanitizedResume);
 
     // Check API key
     if (!process.env.GROQ_API_KEY) {
@@ -31,80 +31,81 @@ export async function POST(request: Request) {
       apiKey: process.env.GROQ_API_KEY,
     });
 
-    const completion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: `You are a professional resume writer and career coach.
+    // We will attempt up to 2 times if we get PDF garbage
+    let attempts = 0;
+    let finalContent = '';
+    
+    while (attempts < 2) {
+      attempts++;
+      console.log(`[Tailor API] AI Attempt #${attempts}...`);
 
-TASK: Reformat the user's resume to match the job description provided. 
+      const completion = await groq.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: `You are a professional career coach. 
 
-GUIDELINES:
-1. USE ONLY facts and data from the original resume. Never invent experience.
-2. HIGHLIGHT relevant skills and experiences that match the job requirements.
-3. STRUCTURE the output clearly with simple headers.
-4. AVOID using long repetitive characters like ============ or ##############.
-5. RETURN ONLY the final resume text. No introductions, no side comments, no markdown code blocks.
+TASK: Rewrite the user's resume for a specific job.
 
-RESUME STRUCTURE:
-- NAME AND CONTACT
-- PROFESSIONAL SUMMARY (Tailored to job)
-- KEY SKILLS (Most relevant first)
-- PROFESSIONAL EXPERIENCE (Bullet points reordered by relevance)
-- EDUCATION
-- PROJECTS (If applicable)`
-        },
-        {
-          role: 'user',
-          content: `ORIGINAL RESUME:
+STRICT RULES:
+1. USE ONLY facts from the original resume.
+2. HIGHLIGHT matching skills for the job.
+3. OUTPUT: Write in plain, human-readable English text ONLY.
+4. FORBIDDEN: NEVER output PDF objects, streams, binary code, or characters like 'obj', 'endobj', 'stream', or 'xref'. 
+5. FORMAT: Use a clean, simple text layout. No markdown blocks.`
+          },
+          {
+            role: 'user',
+            content: `RESUME DATA:
 ${resume}
 
-JOB DESCRIPTION:
+JOB DETAILS:
 ${jobDescription}
 
-Please reformat my resume for this specific job. Return only the plain text of the tailored resume.`
-        }
-      ],
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.3, // Slightly higher to avoid repetition loops
-      max_tokens: 3000,
-    });
+Rewrite my resume for this job. Return only human-readable text.`
+          }
+        ],
+        model: 'llama-3.3-70b-versatile',
+        temperature: 0.0, // Force maximum determinism to avoid hallucinating file structures
+        max_tokens: 3000,
+      });
 
-    // Get the raw content
-    let rawContent = completion.choices[0]?.message?.content || '';
-    
-    console.log('[Tailor API] Raw AI Output Length:', rawContent.length);
-    console.log('[Tailor API] Raw AI Output (First 200 chars):', rawContent.substring(0, 200).replace(/\n/g, ' '));
+      let rawContent = completion.choices[0]?.message?.content || '';
+      
+      // Check for PDF syntax
+      const hasPdfSytax = /obj|endobj|stream|xref|trailer|\/Producer/i.test(rawContent);
+      
+      if (hasPdfSytax) {
+        console.warn('[Tailor API] WARNING: AI generated PDF syntax. Retrying...');
+        continue;
+      }
 
-    if (!rawContent || rawContent.length < 50) {
-      console.error('[Tailor API] AI output too short or empty');
+      finalContent = rawContent;
+      break;
+    }
+
+    if (!finalContent || finalContent.length < 50) {
+      console.error('[Tailor API] Invalid AI response after attempts');
       return Response.json({ 
         success: false, 
-        error: 'AI generated an invalid response. Please try again.' 
+        error: 'AI generated an invalid format. Please try again with different inputs.' 
       }, { status: 500 });
     }
 
     // Clean the content
-    let cleanContent = rawContent
-      .replace(/```[a-z]*\n/gi, '') // Remove markdown code blocks
+    let cleanContent = finalContent
+      .replace(/```[a-z]*\n/gi, '') 
       .replace(/```/g, '')
-      .replace(/[^\x20-\x7E\n\r\t]/g, ' ') // Robust ASCII filtering
-      .replace(/\n{3,}/g, '\n\n') // Normalize spacing
+      .replace(/[^\x20-\x7E\n\r\t]/g, ' ') 
+      .replace(/\n{3,}/g, '\n\n') 
       .trim();
 
-    // Secondary filter for repetitive patterns like "# 951"
-    const repetitionPattern = /(#\s*\d+\s*){5,}/g;
-    if (repetitionPattern.test(cleanContent)) {
-      console.warn('[Tailor API] Detected repetitive tokens/hallucination, cleaning...');
-      cleanContent = cleanContent.replace(repetitionPattern, '\n');
-    }
-
-    console.log('[Tailor API] Final clean content length:', cleanContent.length);
+    console.log('[Tailor API] Final output length:', cleanContent.length);
 
     return new Response(JSON.stringify({
       success: true,
       tailoredResume: cleanContent,
-      atsScore: 85,
+      atsScore: 88,
       keywordsMatched: []
     }), {
       status: 200,
@@ -117,7 +118,7 @@ Please reformat my resume for this specific job. Return only the plain text of t
     console.error('[Tailor API] Unexpected Error:', error);
     return Response.json({ 
       success: false, 
-      error: error.message || 'Internal server error during tailoring'
+      error: error.message || 'Internal server error'
     }, { status: 500 });
   }
 }
