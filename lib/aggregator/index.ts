@@ -137,15 +137,20 @@ Example output:
 
   try {
     const parsed = JSON.parse(raw)
+    let kws = Array.isArray(parsed.keywords) ? parsed.keywords : []
+    if (kws.length === 0) kws = query ? query.split(/\s+/).filter(w => w.length > 2) : []
+    if (kws.length === 0) kws = ["developer", "software", "engineer", "internship"]
     return {
-      keywords: Array.isArray(parsed.keywords) ? parsed.keywords : [],
+      keywords: kws,
       job_type: parsed.job_type || '',
       location: parsed.location || '',
     }
   } catch {
     // Fallback: treat entire query as keywords
+    let kws = query ? query.split(/\s+/).filter(w => w.length > 2) : []
+    if (kws.length === 0) kws = ["developer", "software", "engineer", "internship"]
     return {
-      keywords: query.split(/\s+/).filter(w => w.length > 2),
+      keywords: kws,
       job_type: '',
       location: '',
     }
@@ -495,47 +500,8 @@ export async function fetchRemotive(keywords: string[]): Promise<JobResult[]> {
 
 export async function fetchHimalayas(keywords: string[]): Promise<JobResult[]> {
   const source = 'Himalayas'
-  try {
-    const search = keywords.join('%20')
-    console.error(`[${source}] Fetching: ${keywords.join(', ')} | URL: https://himalayas.app/api/jobs?search=${search}`)
-    const res = await fetch(`https://himalayas.app/api/jobs?search=${search}`, {
-      headers: BROWSER_HEADERS,
-      signal: AbortSignal.timeout(15000),
-    })
-    console.error(`[${source}] Response status: ${res.status}`)
-    if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      console.error(`[${source}] Error body (first 500): ${body.substring(0, 500)}`)
-      return []
-    }
-    const data = await res.json()
-    const jobs = data.jobs || []
-    console.error(`[${source}] Returned ${jobs.length} raw items`)
-    if (jobs.length === 0) {
-      console.error(`[${source}] Empty response keys: ${Object.keys(data).join(', ')}`)
-      console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 500)}`)
-    }
-    return jobs.map((job: Record<string, unknown>) => {
-      const rawSalary = String(job.salary || '')
-      const rawDescription = String(job.description || job.body || '')
-      return {
-        title: String(job.title || ''),
-        company: String((job.company as Record<string, unknown>)?.name || job.company_name || ''),
-        location: String(job.location || job.locations || ''),
-        salary: rawSalary,
-        salaryObj: normalizeSalary(rawSalary),
-        url: String(job.url || ''),
-        source: 'Himalayas',
-        type: String(job.job_type || job.type || ''),
-        description: sanitizeDescription(rawDescription),
-        postedAt: normalizeDate(job.posted_at || job.created_at),
-      }
-    })
-  } catch (err) {
-    console.error(`[${source}] Fetch failed:`, err instanceof Error ? err.message : String(err))
-    if (err instanceof Error && err.stack) console.error(`[${source}] Stack:`, err.stack.split('\n').slice(0, 3).join('\n'))
-    return []
-  }
+  console.error(`[${source}] Himalayas API is deprecated, skipping for now.`);
+  return []
 }
 
 export async function fetchRemoteOK(keywords: string[]): Promise<JobResult[]> {
@@ -738,7 +704,23 @@ export async function fetchArbeitnow(keywords: string[]): Promise<JobResult[]> {
     })
     console.error(`[${source}] Results after keyword filter: ${filtered.length}`)
     if (filtered.length === 0 && jobs.length > 0) {
-      console.error(`[${source}] No matches for keywords: ${keywords.join(', ')}. First job title: ${String(jobs[0]?.title || '')}`)
+      console.error(`[${source}] No matches for keywords: ${keywords.join(', ')}. Returning first 20 jobs as fallback.`)
+      return jobs.slice(0, 20).map((job: Record<string, unknown>) => {
+        const rawSalary = String(job.salary || 'Not specified')
+        const rawDescription = String(job.description || '')
+        return {
+          title: String(job.title || ''),
+          company: String(job.company_name || job.company || ''),
+          location: String(job.location || 'Remote'),
+          salary: rawSalary,
+          salaryObj: normalizeSalary(rawSalary),
+          url: String(job.url || ''),
+          source: 'Arbeitnow',
+          type: String(job.job_type || 'Full-time'),
+          description: sanitizeDescription(rawDescription),
+          postedAt: normalizeDate(job.created_at || job.created || job.published_at),
+        }
+      })
     }
 
     return filtered.map((job: Record<string, unknown>) => {

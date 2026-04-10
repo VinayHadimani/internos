@@ -32,23 +32,35 @@ export default function InternshipsPage() {
 
   async function fetchJobs() {
     setLoading(true);
+    
+    // Get user data from localStorage
+    const userSkills = JSON.parse(localStorage.getItem('userSkills') || '[]');
+    const userExperience = localStorage.getItem('userExperience') || 'fresher';
+    const userRoles = JSON.parse(localStorage.getItem('userRoles') || '[]');
+    const userLocation = localStorage.getItem('userLocation') || 'India';
+    
+    console.log('=== FETCHING JOBS WITH ===');
+    console.log('Skills:', userSkills);
+    console.log('Experience:', userExperience);
+    console.log('Roles:', userRoles);
+    
     try {
-      // In a real app, this would call an internal API that uses lib/aggregator
-
-      const resumeText = localStorage.getItem('resumeText') || '';
-      const res = await fetch('/api/internships/search', {
+      const response = await fetch('/api/internships/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ resumeText })
+        body: JSON.stringify({
+          query: searchQuery || 'internship',
+          location: userLocation,
+          skills: userSkills,
+          experience: userExperience,
+          preferredRoles: userRoles
+        })
       });
-      const data = await res.json();
-      if (data.success) {
-        setJobs(data.jobs);
-      } else {
-        console.error('Failed to fetch jobs');
-      }
+      
+      const data = await response.json();
+      setJobs(data.jobs || []);
     } catch (error) {
-      console.error('Error fetching jobs:', error);
+      console.error('Failed to fetch jobs:', error);
     } finally {
       setLoading(false);
     }

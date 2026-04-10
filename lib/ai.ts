@@ -48,17 +48,40 @@ Return JSON:
     let raw = extractResponse.choices[0]?.message?.content || '{}';
     raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
     
-    return JSON.parse(raw) as ExtractedSkills;
+    const result = JSON.parse(raw) as ExtractedSkills;
+    
+    return {
+      skills: result.skills?.length > 0 ? result.skills : extractSkillsByKeywords(resumeText),
+      experienceLevel: result.experienceLevel || 'fresher',
+      industries: result.industries || [],
+      roleTypes: result.roleTypes || [],
+      location: result.location || 'India'
+    };
   } catch (error) {
     console.error("Failed to extract skills:", error);
     return {
-      skills: [],
+      skills: extractSkillsByKeywords(resumeText),
       experienceLevel: 'fresher',
       industries: [],
       roleTypes: [],
       location: 'India'
     };
   }
+}
+
+// Fallback keyword extraction
+function extractSkillsByKeywords(text: string): string[] {
+  const techSkills = [
+    'javascript', 'typescript', 'python', 'java', 'react', 'angular', 'vue', 'node',
+    'mongodb', 'sql', 'postgresql', 'mysql', 'aws', 'docker', 'kubernetes', 'git',
+    'html', 'css', 'tailwind', 'bootstrap', 'figma', 'redux', 'nextjs', 'django',
+    'flask', 'spring', 'android', 'ios', 'flutter', 'react native', 'machine learning',
+    'data science', 'pandas', 'numpy', 'tensorflow', 'pytorch', 'graphql', 'rest api',
+    'c++', 'c#', 'go', 'rust', 'php', 'laravel', 'ruby', 'swift', 'kotlin'
+  ];
+  
+  const lowerText = text.toLowerCase();
+  return techSkills.filter(skill => lowerText.includes(skill));
 }
 
 function isEnglish(text: string): boolean {

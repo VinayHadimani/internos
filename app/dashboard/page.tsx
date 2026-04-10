@@ -35,12 +35,19 @@ export default function DashboardPage() {
       localStorage.setItem('resumeText', text);
       
       const extracted = await extractSkillsFromResume(text);
-      if (extracted.location) {
-        localStorage.setItem('userLocation', extracted.location);
-      }
-    } catch (error) {
-      console.error('Upload failed:', error);
-    } finally {
+      
+      console.log('=== SKILLS EXTRACTED ===', extracted);
+      
+      localStorage.setItem('userSkills', JSON.stringify(extracted.skills || []));
+      localStorage.setItem('userExperience', extracted.experienceLevel || 'fresher');
+      localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
+      localStorage.setItem('userLocation', extracted.location || 'India');
+      localStorage.setItem('resumeText', text);
+      
+      // Verify saved:
+      console.log('=== SAVED TO STORAGE ===');
+      console.log('userSkills:', localStorage.getItem('userSkills'));
+      console.log('userExperience:', localStorage.getItem('userExperience'));
       setUploading(false);
     }
   }

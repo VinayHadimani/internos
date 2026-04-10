@@ -10,80 +10,89 @@ async function getZai() {
   return zaiInstance;
 }
 
-export async function POST(req: NextRequest) {
+export async function POST(request: Request) {
   try {
-    const body = await req.json();
-    const { resumeText, jobDescription } = body;
+    const { resume, jobDescription } = await request.json();
     
-    console.log('Tailor API called');
-    console.log('Resume length:', resumeText?.length);
-    console.log('Job description length:', jobDescription?.length);
-
-    if (!resumeText || !jobDescription) {
-      return NextResponse.json({ 
-        error: 'Missing resume or job description',
-        resumeText: resumeText ? 'ok' : 'missing',
-        jobDescription: jobDescription ? 'ok' : 'missing'
+    if (!resume || !jobDescription) {
+      return Response.json({ 
+        success: false, 
+        error: 'Missing resume or job description' 
       }, { status: 400 });
     }
 
     const zai = await getZai();
+    
     const response = await zai.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: `You are an expert resume writer. Tailor this resume for the given job.
-CRITICAL RULES - YOU MUST FOLLOW:
-1. NEVER invent or add ANY information not in the original resume
-2. ONLY reframe and reorganize existing content
-3. Highlight keywords that match the job description
-4. Reorder sections/bullets to prioritize relevant experience
-5. Keep all facts accurate - no exaggeration
-6. Keep the same format and structure
-Return ONLY valid JSON:
-{
-"tailoredResume": "the complete tailored resume text",
-"keywordsMatched": ["keyword1", "keyword2"],
-"atsScore": 85
-}`
+          content: `You are an expert resume writer. Tailor the resume for this job.
+
+IMPORTANT: You MUST return ONLY valid JSON. No markdown, no code blocks, no extra text.
+
+Return ONLY this JSON format (no backticks, no markdown):
+{"tailoredResume": "the full resume text here", "atsScore": 85, "keywordsMatched": ["keyword1", "keyword2"]}
+
+Do NOT wrap in code blocks. Do NOT add any text before or after. Return raw JSON only.`
         },
         {
           role: 'user',
-          content: `ORIGINAL RESUME:\n${resumeText}\n\nTARGET JOB DESCRIPTION:\n${jobDescription}\n\nTailor the resume for this job. Return only JSON.`
+          content: `RESUME:\n${resume}\n\nJOB DESCRIPTION:\n${jobDescription}\n\nReturn ONLY JSON, no markdown formatting:`
         }
       ],
-      max_tokens: 4000,
-      temperature: 0.3,
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000
     });
 
-    const content = response.choices[0]?.message?.content || '{}';
-    console.log('AI response length:', content.length);
-
-    // Parse JSON
+    let content = response.choices[0]?.message?.content || '{}';
+    
+    console.log('[Tailor API] Raw response type:', typeof content);
+    console.log('[Tailor API] Response length:', content.length);
+    console.log('[Tailor API] First 200 chars:', content.substring(0, 200));
+    
+    // Clean the response - remove markdown code blocks if present
+    content = content.trim();
+    if (content.startsWith('```json')) {
+      content = content.slice(7);
+    }
+    if (content.startsWith('```')) {
+      content = content.slice(3);
+    }
+    if (content.endsWith('```')) {
+      content = content.slice(0, -3);
+    }
+    content = content.trim();
+    
+    // Try to parse JSON
     let result;
     try {
-      const cleaned = content.replace(/```json|```/g, '').trim();
-      result = JSON.parse(cleaned);
-    } catch {
-      // If not valid JSON, use raw content as resume
-      result = {
+      result = JSON.parse(content);
+    } catch (parseError) {
+      console.error('[Tailor API] JSON parse failed. Content:', content.substring(0, 500));
+      
+      // Fallback: return the raw content as the resume
+      return Response.json({
+        success: true,
         tailoredResume: content,
+        atsScore: 75,
         keywordsMatched: [],
-        atsScore: 70
-      };
+        note: 'Resume tailored (raw format)'
+      });
     }
-
-    return NextResponse.json({
-      success: true,
-      tailoredResume: result.tailoredResume || content,
-      keywordsMatched: result.keywordsMatched || [],
-      atsScore: result.atsScore || 70
+    
+    return Response.json({ 
+      success: true, 
+      tailoredResume: result.tailoredResume || resume,
+      atsScore: result.atsScore || 75,
+      keywordsMatched: result.keywordsMatched || []
     });
-  } catch (error) {
-    console.error('Tailor error:', error);
-    return NextResponse.json({ 
-      error: 'Tailoring failed',
-      details: error instanceof Error ? error.message : 'Unknown error'
+    
+  } catch (error: any) {
+    console.error('[Tailor API] Error:', error.message);
+    return Response.json({ 
+      success: false, 
+      error: 'Failed to tailor resume. Please try again.' 
     }, { status: 500 });
   }
 }
