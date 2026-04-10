@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
       temperature: 0.1,
     });
 
-    let searchTerms: { skills?: string[]; searchQueries?: string[]; experience?: string };
+    let searchTerms: { skills?: string[]; searchQueries?: string[]; experience?: string; roleTypes?: string[] };
     try {
       let raw = extractResponse.choices[0]?.message?.content || '{"skills":[],"searchQueries":[]}';
       raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
