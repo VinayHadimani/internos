@@ -53,16 +53,26 @@ export default function JobDetailPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          resumeText,
+          resume: resumeText,
           jobDescription: `${job.title}\n${job.company}\n${job.location}\n\n${job.description}\n\nRequired Skills: ${job.skills?.join(', ')}`
         })
       });
       const data = await res.json();
-      console.log('Tailor response:', data);
       
-      if (data.success) {
+      console.log('=== TAILOR RESPONSE ===');
+      console.log('Success:', data.success);
+      console.log('Has tailoredResume:', !!data.tailoredResume);
+      console.log('Resume length:', data.tailoredResume?.length);
+      console.log('Full data:', data);
+      
+      if (data.success && data.tailoredResume) {
+        console.log('SET tailoredResume to:', data.tailoredResume.substring(0, 100));
         setTailoredResume(data.tailoredResume);
-        setMatchScore(data.atsScore);
+        setMatchScore(data.atsScore || 85);
+        // Quick verification log
+        setTimeout(() => {
+          console.log('tailoredResume state after set (deferred):', data.tailoredResume.substring(0, 100));
+        }, 100);
       } else {
         alert('Error: ' + (data.error || 'Tailoring failed'));
       }
