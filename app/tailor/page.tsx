@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Download, ArrowLeft, Sparkles } from 'lucide-react';
+import { Loader2, Download, ArrowLeft, Sparkles, Target } from 'lucide-react';
 import Link from 'next/link';
 
 function TailorContent() {
