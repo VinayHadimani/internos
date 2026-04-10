@@ -3,8 +3,10 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, ExternalLink, ArrowLeft, Download } from 'lucide-react';
+import { Loader2, ExternalLink, ArrowLeft, Download, AlertCircle } from 'lucide-react';
 import { jsPDF } from 'jspdf';
+import { toast } from 'sonner';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 
 export default function JobDetailPage() {
   const params = useParams();
@@ -16,6 +18,7 @@ export default function JobDetailPage() {
   const [tailoredResume, setTailoredResume] = useState<string | null>(null);
   const [matchScore, setMatchScore] = useState<number | null>(null);
   const [resumeText, setResumeText] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function formatJobDescription(description: string): React.ReactNode {
     if (!description) return null;
@@ -156,13 +159,14 @@ export default function JobDetailPage() {
     console.log('job:', job ? 'exists' : 'NULL');
 
     if (!resumeText || !job) {
-      console.log('Missing resume or job!');
-      alert('Missing resume or job data');
+      toast.error('Missing resume or job data');
       return;
     }
 
     setTailoring(true);
     setTailoredResume(null);
+    setError(null);
+    
     try {
       const res = await fetch('/api/tailor', {
         method: 'POST',
@@ -172,28 +176,25 @@ export default function JobDetailPage() {
           jobDescription: `${job.title}\n${job.company}\n${job.location}\n\n${job.description}\n\nRequired Skills: ${job.skills?.join(', ')}`
         })
       });
+      
+      console.log('[Frontend] Response status:', res.status);
       const data = await res.json();
+      console.log('[Frontend] Response data:', data);
       
-      console.log('=== TAILOR RESPONSE ===');
-      console.log('Success:', data.success);
-      console.log('Has tailoredResume:', !!data.tailoredResume);
-      console.log('Resume length:', data.tailoredResume?.length);
-      console.log('Full data:', data);
-      
-      if (data.success && data.tailoredResume) {
-        console.log('SET tailoredResume to:', data.tailoredResume.substring(0, 100));
+      if (res.ok && data.success && data.tailoredResume) {
         setTailoredResume(data.tailoredResume);
         setMatchScore(data.atsScore || 85);
-        // Quick verification log
-        setTimeout(() => {
-          console.log('tailoredResume state after set (deferred):', data.tailoredResume.substring(0, 100));
-        }, 100);
+        toast.success('Resume tailored successfully!');
       } else {
-        alert('Error: ' + (data.error || 'Tailoring failed'));
+        const errorMsg = data.error || 'Failed to tailor resume';
+        console.error('[Frontend] Error:', errorMsg);
+        setError(errorMsg);
+        toast.error(errorMsg);
       }
-    } catch (error) {
-      console.error('Tailoring failed:', error);
-      alert('Failed to tailor resume. Please try again.');
+    } catch (err: any) {
+      console.error('[Frontend] Tailoring failed:', err);
+      setError('Network error. Please check your connection and try again.');
+      toast.error('Network error occurred');
     } finally {
       setTailoring(false);
     }
@@ -314,6 +315,16 @@ export default function JobDetailPage() {
                   'Tailor My Resume for This Job'
                 )}
               </Button>
+
+              {/* Error Alert */}
+              {error && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <span className="font-bold">Error:</span> {error}
+                  </AlertDescription>
+                </Alert>
+              )}
 
               {/* Tailored Result */}
               {tailoredResume && (

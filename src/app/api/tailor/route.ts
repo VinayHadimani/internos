@@ -22,10 +22,38 @@ function cleanAIResponse(text: string): string {
 }
 
 export async function POST(request: Request) {
+  console.log('[Tailor API] === STARTING TAILOR REQUEST ===');
+  
   try {
-    const { resume, jobDescription } = await request.json();
+    // Check if GROQ_API_KEY exists
+    if (!process.env.GROQ_API_KEY) {
+      console.error('[Tailor API] ERROR: GROQ_API_KEY not found');
+      return Response.json({ 
+        success: false, 
+        error: 'Server configuration error - missing API key' 
+      }, { status: 500 });
+    }
+    
+    console.log('[Tailor API] GROQ_API_KEY exists, length:', process.env.GROQ_API_KEY.length);
+    
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseError) {
+      console.error('[Tailor API] Failed to parse request body:', parseError);
+      return Response.json({ 
+        success: false, 
+        error: 'Invalid request body' 
+      }, { status: 400 });
+    }
+    
+    const { resume, jobDescription } = body;
+    
+    console.log('[Tailor API] Resume length:', resume?.length || 0);
+    console.log('[Tailor API] Job description length:', jobDescription?.length || 0);
     
     if (!resume || !jobDescription) {
+      console.error('[Tailor API] Missing resume or job description');
       return Response.json({ 
         success: false, 
         error: 'Missing resume or job description' 
@@ -34,111 +62,110 @@ export async function POST(request: Request) {
 
     // Extract keywords from job description for highlighting
     const jobKeywords = extractKeywords(jobDescription);
-    
-    const completion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: `You are an expert resume writer. Your task is to REFORMAT the user's existing resume to better match a job description.
 
-CRITICAL RULES:
-1. DO NOT invent, add, or fabricate ANY information
-2. ONLY use information that already exists in the user's resume
-3. Reorganize and reorder bullet points to prioritize relevant experience
-4. The output must be PLAIN TEXT, properly formatted
-5. Use these section headers in CAPS: NAME, CONTACT, SUMMARY, SKILLS, EXPERIENCE, EDUCATION, PROJECTS
-
-OUTPUT FORMAT - Return ONLY plain text resume, formatted like this:
-
-JOHN DOE
-Software Developer
-Email: john@email.com | Phone: +91 9876543210 | Location: Bangalore, India
-LinkedIn: linkedin.com/in/johndoe | GitHub: github.com/johndoe
-
-================================================================================
-
-PROFESSIONAL SUMMARY
-Results-driven software developer with X years of experience building web applications. Skilled in React, Node.js, and TypeScript. Passionate about clean code and user experience.
-
-================================================================================
-
-TECHNICAL SKILLS
-Languages: JavaScript, TypeScript, Python
-Frameworks: React, Node.js, Next.js, Express
-Databases: PostgreSQL, MongoDB
-Tools: Git, Docker, AWS, VS Code
-
-================================================================================
-
-PROFESSIONAL EXPERIENCE
-
-Company Name | Job Title | Location | Dates
-• Achievement or responsibility (use action verbs)
-• Another achievement with quantifiable results
-• Led team of X developers to deliver Y features
-
-Another Company | Another Title | Location | Dates
-• More achievements
-• Built Z feature using A, B, C technologies
-
-================================================================================
-
-EDUCATION
-Degree Name | University Name | Year
-• Relevant coursework or achievements
-
-================================================================================
-
-PROJECTS
-Project Name | Technologies Used
-• What the project does
-• Your contribution
-
-================================================================================
-
-Do NOT use any JSON. Do NOT use markdown. Return ONLY the formatted plain text resume.`
-        },
-        {
-          role: 'user',
-          content: `MY ORIGINAL RESUME:
-${resume}
-
-TARGET JOB DESCRIPTION:
-${jobDescription}
-
-KEYWORDS FROM JOB (highlight these if present in my resume): ${jobKeywords.join(', ')}
-
-Please reformat my resume to better match this job. Remember: ONLY use information that already exists in my resume. Do NOT add anything new. Return ONLY the formatted plain text resume.`
-        }
-      ],
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.3, // Lower temperature for more consistent output
-      max_tokens: 4000,
+    console.log('[Tailor API] Initializing Groq client...');
+    const groq = new Groq({
+      apiKey: process.env.GROQ_API_KEY,
     });
 
-    let tailoredResume = completion.choices[0]?.message?.content || resume;
+    console.log('[Tailor API] Calling Groq API...');
+    
+    // Add timeout wrapper
+    async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+      const timeout = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Request timed out')), ms)
+      );
+      return Promise.race([promise, timeout]);
+    }
+
+    let completion;
+    try {
+      completion = await withTimeout(
+        groq.chat.completions.create({
+          messages: [
+            {
+              role: 'system',
+              content: `You are an expert resume writer. Reformat the user's resume to match a job description better.
+
+CRITICAL RULES:
+1. DO NOT invent or add any new information
+2. ONLY use information from the user's existing resume
+3. Reorganize bullet points to highlight relevant experience
+4. Output MUST be plain text, properly formatted
+
+Format the resume with these sections:
+- NAME (uppercase)
+- Contact Information  
+- Professional Summary
+- Skills
+- Experience
+- Education
+- Projects
+
+Return ONLY the formatted resume text. No JSON, no markdown, no explanations.`
+            },
+            {
+              role: 'user',
+              content: `RESUME:\n${resume}\n\nJOB:\n${jobDescription}\n\nReformat this resume. Return ONLY plain text:`
+            }
+          ],
+          model: 'llama-3.3-70b-versatile',
+          temperature: 0.3,
+          max_tokens: 3000,
+        }),
+        25000 // 25 second timeout (Vercel has 10-30s limit)
+      );
+    } catch (error: any) {
+      if (error.message === 'Request timed out') {
+        console.error('[Tailor API] Timeout error: Request took too long');
+        return Response.json({ 
+          success: false, 
+          error: 'Request timed out. Please try again with a shorter resume.' 
+        }, { status: 504 });
+      }
+      console.error('[Tailor API] Groq API error:', error.message);
+      console.error('[Tailor API] Groq error details:', error);
+      return Response.json({ 
+        success: false, 
+        error: `AI service error: ${error.message}` 
+      }, { status: 500 });
+    }
+
+    console.log('[Tailor API] Groq response received');
+    
+    const tailoredResume = completion.choices[0]?.message?.content;
+    
+    if (!tailoredResume) {
+      console.error('[Tailor API] No content in Groq response');
+      return Response.json({ 
+        success: false, 
+        error: 'AI returned empty response' 
+      }, { status: 500 });
+    }
     
     // Clean any encoding issues
-    tailoredResume = cleanAIResponse(tailoredResume);
+    const cleanedResume = cleanAIResponse(tailoredResume);
     
-    console.log('[Tailor API] Success! Resume length:', tailoredResume.length);
-    console.log('[Tailor API] First 200 chars:', tailoredResume.substring(0, 200));
+    console.log('[Tailor API] Success! Resume length:', cleanedResume.length);
+    console.log('[Tailor API] First 100 chars:', cleanedResume.substring(0, 100));
     
     return Response.json({ 
       success: true, 
-      tailoredResume: tailoredResume,
+      tailoredResume: cleanedResume,
       atsScore: 82,
       keywordsMatched: jobKeywords.slice(0, 10)
     });
     
   } catch (error: any) {
-    console.error('[Tailor API] Error:', error);
+    console.error('[Tailor API] Unexpected error:', error.message);
+    console.error('[Tailor API] Error stack:', error.stack);
     return Response.json({ 
       success: false, 
-      error: 'Failed to tailor resume. Please try again.' 
+      error: `Unexpected error: ${error.message}` 
     }, { status: 500 });
   }
 }
+
 
 function extractKeywords(jobDesc: string): string[] {
   const techKeywords = [
