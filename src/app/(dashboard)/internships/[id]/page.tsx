@@ -166,7 +166,7 @@ export default function JobDetailPage() {
       return;
     }
     
-    setIsTailoring(true);
+    setTailoring(true);
     setError('');
     setTailoredResume('');
     
@@ -211,8 +211,9 @@ export default function JobDetailPage() {
       setError(errorMsg);
       toast.error(errorMsg);
     } finally {
-      setIsTailoring(false);
+      setTailoring(false);
     }
+
   }
 
   function handleDownload() {
