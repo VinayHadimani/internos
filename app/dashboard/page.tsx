@@ -48,6 +48,9 @@ export default function DashboardPage() {
       console.log('=== SAVED TO STORAGE ===');
       console.log('userSkills:', localStorage.getItem('userSkills'));
       console.log('userExperience:', localStorage.getItem('userExperience'));
+    } catch (error) {
+      console.error('Upload failed:', error);
+    } finally {
       setUploading(false);
     }
   }
