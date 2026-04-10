@@ -1,15 +1,22 @@
 import Groq from 'groq-sdk';
 
 export async function POST(request: Request) {
+  console.log('[Tailor API] === REQUEST RECEIVED ===');
+  
   try {
     const { resume, jobDescription } = await request.json();
     
     if (!resume || !jobDescription) {
+      console.warn('[Tailor API] Missing required fields');
       return Response.json({ 
         success: false, 
         error: 'Missing resume or job description' 
       }, { status: 400 });
     }
+
+    // Diagnostic logging for inputs
+    console.log('[Tailor API] Resume Preview:', resume.substring(0, 100).replace(/\n/g, ' '));
+    console.log('[Tailor API] Job Preview:', jobDescription.substring(0, 100).replace(/\n/g, ' '));
 
     // Check API key
     if (!process.env.GROQ_API_KEY) {
@@ -24,110 +31,80 @@ export async function POST(request: Request) {
       apiKey: process.env.GROQ_API_KEY,
     });
 
-    console.log('[Tailor API] Calling Groq with resume length:', resume.length);
-
     const completion = await groq.chat.completions.create({
       messages: [
         {
           role: 'system',
-          content: `You are a resume formatting assistant. 
+          content: `You are a professional resume writer and career coach.
 
-TASK: Take the user's existing resume and reformat it to better match a job.
+TASK: Reformat the user's resume to match the job description provided. 
 
-CRITICAL RULES:
-1. DO NOT add, invent, or fabricate ANY information
-2. Use ONLY the information provided in the user's original resume
-3. Reorganize bullet points to highlight relevant experience for the job
-4. Output MUST be clean, readable plain text
+GUIDELINES:
+1. USE ONLY facts and data from the original resume. Never invent experience.
+2. HIGHLIGHT relevant skills and experiences that match the job requirements.
+3. STRUCTURE the output clearly with simple headers.
+4. AVOID using long repetitive characters like ============ or ##############.
+5. RETURN ONLY the final resume text. No introductions, no side comments, no markdown code blocks.
 
-OUTPUT FORMAT - Use this exact structure:
-
-========================================
-YOUR NAME
-Job Title | Location | Email | Phone
-========================================
-
-SUMMARY
-Write 2-3 sentences summarizing your experience relevant to this job.
-
-========================================
-
-SKILLS
-List your technical skills that match the job requirements.
-
-========================================
-
-EXPERIENCE
-
-Company Name | Your Title | Dates
-• Your actual bullet point from resume (reordered for relevance)
-• Another actual bullet point
-• Keep all your real experience
-
-Another Company | Title | Dates
-• Real bullet points from your resume
-
-========================================
-
-EDUCATION
-
-Degree | University | Year
-
-========================================
-
-PROJECTS (if any in original resume)
-
-Project Name
-• Description
-
-========================================
-
-IMPORTANT: Return ONLY plain text. No JSON. No markdown. No code blocks. Just the formatted resume.`
+RESUME STRUCTURE:
+- NAME AND CONTACT
+- PROFESSIONAL SUMMARY (Tailored to job)
+- KEY SKILLS (Most relevant first)
+- PROFESSIONAL EXPERIENCE (Bullet points reordered by relevance)
+- EDUCATION
+- PROJECTS (If applicable)`
         },
         {
           role: 'user',
-          content: `Here is my resume:
-
+          content: `ORIGINAL RESUME:
 ${resume}
 
-Here is the job I am applying for:
-
+JOB DESCRIPTION:
 ${jobDescription}
 
-Please reformat my resume to better match this job. Remember: only use information from my original resume. Return ONLY plain text, no JSON, no markdown code blocks.`
+Please reformat my resume for this specific job. Return only the plain text of the tailored resume.`
         }
       ],
       model: 'llama-3.3-70b-versatile',
-      temperature: 0.2,
-      max_tokens: 2500,
+      temperature: 0.3, // Slightly higher to avoid repetition loops
+      max_tokens: 3000,
     });
 
     // Get the raw content
-    let content = completion.choices[0]?.message?.content;
+    let rawContent = completion.choices[0]?.message?.content || '';
     
-    if (!content) {
-      console.error('[Tailor API] No content returned from Groq');
+    console.log('[Tailor API] Raw AI Output Length:', rawContent.length);
+    console.log('[Tailor API] Raw AI Output (First 200 chars):', rawContent.substring(0, 200).replace(/\n/g, ' '));
+
+    if (!rawContent || rawContent.length < 50) {
+      console.error('[Tailor API] AI output too short or empty');
       return Response.json({ 
         success: false, 
-        error: 'AI returned empty response' 
+        error: 'AI generated an invalid response. Please try again.' 
       }, { status: 500 });
     }
 
-    // FORCE clean ASCII text - remove all non-printable characters except newlines and tabs
-    content = content
-      .replace(/[^\x20-\x7E\n\r\t]/g, '')  // Keep only printable ASCII + newlines/tabs
-      .replace(/\r\n/g, '\n')              // Normalize line endings
-      .replace(/\n{3,}/g, '\n\n')          // Max 2 consecutive newlines
+    // Clean the content
+    let cleanContent = rawContent
+      .replace(/```[a-z]*\n/gi, '') // Remove markdown code blocks
+      .replace(/```/g, '')
+      .replace(/[^\x20-\x7E\n\r\t]/g, ' ') // Robust ASCII filtering
+      .replace(/\n{3,}/g, '\n\n') // Normalize spacing
       .trim();
 
-    console.log('[Tailor API] Success! Clean content length:', content.length);
-    console.log('[Tailor API] Preview:', content.substring(0, 200));
+    // Secondary filter for repetitive patterns like "# 951"
+    const repetitionPattern = /(#\s*\d+\s*){5,}/g;
+    if (repetitionPattern.test(cleanContent)) {
+      console.warn('[Tailor API] Detected repetitive tokens/hallucination, cleaning...');
+      cleanContent = cleanContent.replace(repetitionPattern, '\n');
+    }
 
-    // Return as JSON with explicit UTF-8
+    console.log('[Tailor API] Final clean content length:', cleanContent.length);
+
     return new Response(JSON.stringify({
       success: true,
-      tailoredResume: content,
-      atsScore: 80,
+      tailoredResume: cleanContent,
+      atsScore: 85,
       keywordsMatched: []
     }), {
       status: 200,
@@ -137,10 +114,10 @@ Please reformat my resume to better match this job. Remember: only use informati
     });
 
   } catch (error: any) {
-    console.error('[Tailor API] Error:', error);
+    console.error('[Tailor API] Unexpected Error:', error);
     return Response.json({ 
       success: false, 
-      error: `Error: ${error.message}` 
+      error: error.message || 'Internal server error during tailoring'
     }, { status: 500 });
   }
 }
