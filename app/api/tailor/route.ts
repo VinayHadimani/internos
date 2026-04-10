@@ -87,7 +87,7 @@ Please tailor this resume. Return ONLY the resume and the keywords list.`
     if (keywordIndex !== -1) {
       tailoredResume = fullOutput.substring(0, keywordIndex).trim();
       const keywordStr = fullOutput.substring(keywordIndex).replace('KEYWORDS:', '').trim();
-      keywordsMatched = keywordStr.split(',').map(k => k.trim().toLowerCase());
+      keywordsMatched = keywordStr.split(',').map((k: string) => k.trim().toLowerCase());
     }
 
     console.log('[Tailor API] Success! Resume length:', tailoredResume.length);
