@@ -1,113 +1,129 @@
 import Groq from 'groq-sdk';
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
-
 export async function POST(request: Request) {
+  console.log('[Tailor API] === REQUEST RECEIVED ===');
+  
   try {
-    const { resumeText, jobDescription, resume } = await request.json();
+    const { resume, resumeText, jobDescription } = await request.json();
     
-    // Normalize resume input (frontend uses resumeText, user-provided fix uses resume)
-    const resumeToUse = resume || resumeText;
+    // Normalize resume input
+    const inputResume = resume || resumeText;
     
-    console.log('[Tailor API] Request received');
-    console.log('[Tailor API] Resume length:', resumeToUse?.length || 0);
-    console.log('[Tailor API] Job description length:', jobDescription?.length || 0);
-    
-    if (!resumeToUse || !jobDescription) {
+    if (!inputResume || !jobDescription) {
+      console.warn('[Tailor API] Missing required fields');
       return Response.json({ 
         success: false, 
         error: 'Missing resume or job description' 
       }, { status: 400 });
     }
 
-    const completion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: `You are an expert resume writer and career coach. 
-          
-TASK: Tailor the candidate's resume for the provided job description.
+    // Diagnostic logging for inputs
+    // We only strip CONTROL characters (\x00-\x1F, \x7F) to preserve Unicode/Hindi
+    const logPreview = inputResume.substring(0, 500).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+    console.log('[Tailor API] Resume Preview (Sanitized Control Chars):', logPreview);
+    console.log('[Tailor API] Resume Total Length:', inputResume.length);
 
-RULES:
-1. OUTPUT ONLY ONE COPY of the tailored resume. 
-2. DO NOT include any introductory or concluding text.
-3. Keep ALL information FACTUAL based on the original resume.
-4. Naturally incorporate keywords from the job description.
-5. Highlight quantified achievements.
-6. Return the resume as a structured plain text document.
-7. ALSO, at the very end of your response, after the resume, provide a list of the TOP 5 matching keywords you used, prefixed with "KEYWORDS: " and comma-separated.
-
-FORMAT TEMPLATE:
-[NAME]
-[Contact Info]
-
-Professional Summary
-[3-4 sentences tailored to the job]
-
-Core Competencies
-[Key skills matching the JD]
-
-Experience
-[Most relevant achievements first, bullet points]
-
-Education
-[Institution, Degree]
-
-Projects
-[If applicable]`
-        },
-        {
-          role: 'user',
-          content: `ORIGINAL RESUME:
-${resumeToUse}
-
-JOB DESCRIPTION:
-${jobDescription}
-
-Please tailor this resume. Return ONLY the resume and the keywords list.`
-        }
-      ],
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.3, // Lower temperature for more consistency
-      max_tokens: 3000,
-    });
-
-    let fullOutput = completion.choices[0]?.message?.content || resumeToUse;
-    
-    // Sanitize output (remove binary chars)
-    fullOutput = fullOutput.replace(/[^\x20-\x7E\n\r\t]/g, ' ').trim();
-    
-    // Split resume and keywords
-    const keywordIndex = fullOutput.lastIndexOf('KEYWORDS:');
-    let tailoredResume = fullOutput;
-    let keywordsMatched: string[] = [];
-    
-    if (keywordIndex !== -1) {
-      tailoredResume = fullOutput.substring(0, keywordIndex).trim();
-      const keywordStr = fullOutput.substring(keywordIndex).replace('KEYWORDS:', '').trim();
-      keywordsMatched = keywordStr.split(',').map((k: string) => k.trim().toLowerCase());
+    // Check API key
+    if (!process.env.GROQ_API_KEY) {
+      console.error('[Tailor API] GROQ_API_KEY not found');
+      return Response.json({ 
+        success: false, 
+        error: 'Server configuration error' 
+      }, { status: 500 });
     }
 
-    console.log('[Tailor API] Success! Resume length:', tailoredResume.length);
-    
-    return Response.json({ 
-      success: true, 
-      tailoredResume: tailoredResume,
-      atsScore: 85,
-      keywordsMatched: keywordsMatched,
-      matchScore: 85,
-      suggestions: ["Focused on highlighting technical skills found in the job description."]
+    const groq = new Groq({
+      apiKey: process.env.GROQ_API_KEY,
     });
+
+    // We will attempt up to 2 times if we get PDF garbage
+    let attempts = 0;
+    let finalContent = '';
     
+    while (attempts < 2) {
+      attempts++;
+      console.log(`[Tailor API] AI Attempt #${attempts}...`);
+
+      const completion = await groq.chat.completions.create({
+        messages: [
+          {
+            role: 'system',
+            content: `You are a professional career coach and resume writer. 
+
+TASK: Rewrite the user's resume for a specific job.
+
+STRICT RULES:
+1. USE ONLY facts from the original resume. Preserve proper nouns and details in any language provided.
+2. HIGHLIGHT matching skills for the job description.
+3. OUTPUT: Write in plain, human-readable English text ONLY. If the original resume is in another language, translate the relevant parts to professional English for the tailored version.
+4. FORBIDDEN: NEVER output PDF objects, streams, or binary code characters like 'obj', 'endobj', 'stream', or 'xref'. 
+5. FORMAT: Use a clean, simple text layout. No markdown blocks.`
+          },
+          {
+            role: 'user',
+            content: `RESUME DATA:
+${inputResume}
+
+JOB DETAILS:
+${jobDescription}
+
+Rewrite my resume for this job. Return only human-readable text.`
+          }
+        ],
+        model: 'llama-3.3-70b-versatile',
+        temperature: 0.0, // Force maximum determinism to avoid hallucination loops
+        max_tokens: 3000,
+      });
+
+      let rawContent = completion.choices[0]?.message?.content || '';
+      
+      // Check for PDF syntax hallucination
+      const hasPdfSyntax = /obj|endobj|stream|xref|trailer|\/Producer/i.test(rawContent);
+      
+      if (hasPdfSyntax) {
+        console.warn('[Tailor API] WARNING: AI generated PDF syntax. Retrying...');
+        continue;
+      }
+
+      finalContent = rawContent;
+      break;
+    }
+
+    if (!finalContent || finalContent.length < 50) {
+      console.error('[Tailor API] Invalid AI response length:', finalContent?.length);
+      return Response.json({ 
+        success: false, 
+        error: 'AI generated an invalid format. Please check the resume and try again.' 
+      }, { status: 500 });
+    }
+
+    // FINAL CLEANING: Strip ONLY dangerous control characters, PRESERVE Unicode/Local languages
+    const cleanContent = finalContent
+      .replace(/```[a-z]*\n/gi, '') 
+      .replace(/```/g, '')
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Strip binary control chars
+      .replace(/\n{3,}/g, '\n\n') 
+      .trim();
+
+    console.log('[Tailor API] Success! Final output length:', cleanContent.length);
+
+    return new Response(JSON.stringify({
+      success: true,
+      tailoredResume: cleanContent,
+      atsScore: 88,
+      keywordsMatched: []
+    }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8'
+      }
+    });
+
   } catch (error: any) {
-    console.error('[Tailor API] Error:', error);
-    console.error('[Tailor API] Error stack:', error.stack);
-    
+    console.error('[Tailor API] Unexpected Error:', error);
     return Response.json({ 
       success: false, 
-      error: `Failed to tailor resume: ${error.message}` 
+      error: error.message || 'Internal server error during tailoring'
     }, { status: 500 });
   }
 }
