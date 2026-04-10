@@ -1,13 +1,8 @@
-import ZAI from 'z-ai-web-dev-sdk';
+import Groq from 'groq-sdk';
 import { aggregateJobs, Job } from './job-aggregator';
 import { calculateMatchScore } from '@/lib/matching/skills';
 
-let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
-
-async function getZai() {
-  if (!zaiInstance) zaiInstance = await ZAI.create();
-  return zaiInstance;
-}
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
 export interface SearchTerms {
   skills: string[];
@@ -22,17 +17,15 @@ export interface SearchTerms {
 export async function extractSearchTerms(
   resumeText: string
 ): Promise<SearchTerms> {
-  const zai = await getZai();
-
   try {
-    const response = await zai.chat.completions.create({
-      model: "gpt-4o",
+    const response = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
       temperature: 0.1,
       messages: [
         {
           role: "system",
           content: `Analyze this resume and extract job search terms.
-          Return ONLY valid JSON, no markdown, no explanation.
+          Return ONLY valid JSON.
           Format:
           {
             "skills": ["skill1", "skill2"],
@@ -56,7 +49,7 @@ export async function extractSearchTerms(
     });
 
     const content = response.choices[0].message.content;
-    if (!content) throw new Error("No content returned from ZAI");
+    if (!content) throw new Error("No content returned from AI");
     
     return JSON.parse(content);
   } catch (error) {

@@ -1,7 +1,6 @@
 "use server";
 
 import Groq from 'groq-sdk';
-import ZAI from 'z-ai-web-dev-sdk';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
@@ -104,29 +103,32 @@ export async function translateJobToEnglish(text: string, sourceLanguage?: strin
     return text;
   }
   
-  const zai = await ZAI.create();
-  
-  const response = await zai.chat.completions.create({
-    messages: [
-      {
-        role: 'system',
-        content: `You are a professional translator. Translate the following job posting to English.
-        
-Rules:
-1. Maintain all formatting and structure
-2. Keep company names, URLs, and technical terms unchanged
-3. Use professional business English
-4. Preserve all job details accurately
-5. Return ONLY the translated text, no explanations`
-      },
-      {
-        role: 'user',
-        content: `Translate this job posting to English:\n\n${text}`
-      }
-    ],
-    model: 'claude-haiku-4-20250514', // Fast and cheap for translation
-    max_tokens: 2000
-  });
+  try {
+    const response = await groq.chat.completions.create({
+      messages: [
+        {
+          role: 'system',
+          content: `You are a professional translator. Translate the following job posting to English.
+          
+  Rules:
+  1. Maintain all formatting and structure
+  2. Keep company names, URLs, and technical terms unchanged
+  3. Use professional business English
+  4. Preserve all job details accurately
+  5. Return ONLY the translated text, no explanations`
+        },
+        {
+          role: 'user',
+          content: `Translate this job posting to English:\n\n${text}`
+        }
+      ],
+      model: 'llama-3.3-70b-versatile',
+      max_tokens: 2000
+    });
 
-  return response.choices[0]?.message?.content || text;
+    return response.choices[0]?.message?.content || text;
+  } catch (error) {
+    console.error("Translation failed:", error);
+    return text; // Fallback to original text
+  }
 }

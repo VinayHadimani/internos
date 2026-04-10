@@ -78,42 +78,9 @@ Please tailor my resume for this job. Return ONLY the resume text, no JSON, no e
     console.error('[Tailor API] Error:', error);
     console.error('[Tailor API] Error stack:', error.stack);
     
-    // Fallback: Return a simple template-based tailoring
-    try {
-      const { resume, jobDescription } = await request.clone().json();
-      const simpleTailored = generateSimpleTailoredResume(resume, jobDescription);
-      
-      return Response.json({ 
-        success: true, 
-        tailoredResume: simpleTailored,
-        atsScore: 70,
-        keywordsMatched: [],
-        note: 'Used fallback tailoring'
-      });
-    } catch {
-      return Response.json({ 
-        success: false, 
-        error: `Failed to tailor resume: ${error.message}` 
-      }, { status: 500 });
-    }
+    return Response.json({ 
+      success: false, 
+      error: `Failed to tailor resume: ${error.message}` 
+    }, { status: 500 });
   }
-}
-
-function generateSimpleTailoredResume(resume: string, jobDesc: string): string {
-  // Extract key terms from job description
-  const jobKeywords = jobDesc.toLowerCase()
-    .match(/\b(javascript|typescript|react|node|python|java|sql|aws|docker|git|api|rest|frontend|backend|full.?stack|developer|engineer)\b/gi) 
-    || [];
-  
-  const uniqueKeywords = [...new Set(jobKeywords)];
-  
-  // Highlight matching skills in resume
-  let tailored = resume;
-  
-  for (const keyword of uniqueKeywords) {
-    const regex = new RegExp(`(${keyword})`, 'gi');
-    tailored = tailored.replace(regex, '**$1**');
-  }
-  
-  return tailored;
 }

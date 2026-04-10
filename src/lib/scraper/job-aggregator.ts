@@ -1,11 +1,6 @@
-import ZAI from 'z-ai-web-dev-sdk';
+import Groq from 'groq-sdk';
 
-let zaiInstance: Awaited<ReturnType<typeof ZAI.create>> | null = null;
-
-async function getZai() {
-  if (!zaiInstance) zaiInstance = await ZAI.create();
-  return zaiInstance;
-}
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
 export interface Job {
   id: string;
@@ -42,14 +37,12 @@ export class JobAggregator {
 
   /**
    * Searches all configured providers for jobs matching the query.
-   * Uses ZAI to potentially optimize the search query first.
+   * Uses AI to potentially optimize the search query first.
    */
   async search(query: string): Promise<Job[]> {
-    const zai = await getZai();
-    
-    // Use ZAI to expand the query for better results across different APIs
+    // Use AI to expand the query for better results across different APIs
     // This ensures we capture synonyms and related roles
-    const expandedQueries = await this.expandQueryWithZAI(zai, query);
+    const expandedQueries = await this.expandQueryWithAI(query);
     
     const allJobsPromises = expandedQueries.flatMap(q => 
       this.providers.map(provider => 
@@ -67,18 +60,18 @@ export class JobAggregator {
     return this.deduplicate(flattenedJobs);
   }
 
-  private async expandQueryWithZAI(zai: any, query: string): Promise<string[]> {
+  private async expandQueryWithAI(query: string): Promise<string[]> {
     try {
-      const response = await zai.chat.completions.create({
-        model: "gpt-4o", // Or the appropriate model supported by z-ai-web-dev-sdk
+      const response = await groq.chat.completions.create({
+        model: "llama-3.3-70b-versatile",
         messages: [
           {
             role: "system",
-            content: "You are a job search expert. Expand the user's job query into 3-5 diverse but relevant search strings that would work well across different job boards (e.g., LinkedIn, Indeed, Glassdoor). Return ONLY a JSON array of strings."
+            content: "You are a job search expert. Expand the user's job query into 3-5 diverse but relevant search strings that would work well across different job boards (e.g., LinkedIn, Indeed, Glassdoor). Return ONLY valid JSON."
           },
           {
             role: "user",
-            content: query
+            content: `Expand this job query: "${query}". Return JSON: {"queries": ["string1", "string2"]}`
           }
         ],
         response_format: { type: "json_object" }
@@ -92,7 +85,7 @@ export class JobAggregator {
       
       return Array.isArray(queries) ? queries : [queries, query];
     } catch (error) {
-      console.error("ZAI query expansion failed, using original query:", error);
+      console.error("AI query expansion failed, using original query:", error);
       return [query];
     }
   }
