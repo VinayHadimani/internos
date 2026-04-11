@@ -228,7 +228,7 @@ export async function generateResumePdfPdfKit(payload: ResumePdfPayload): Promis
     sy -= 4;
     sbHeading('Certifications');
     for (const c of payload.certifications.slice(0, 14)) {
-      page.drawText(`\u2726  ${c.slice(0, 76)}`, { x: M, y: sy, size: 8, font: fonts.reg, color: WHITE });
+      page.drawText(`${BULLET}  ${c.slice(0, 76)}`, { x: M, y: sy, size: 8, font: fonts.reg, color: WHITE });
       sy -= 12;
     }
   }
@@ -237,7 +237,7 @@ export async function generateResumePdfPdfKit(payload: ResumePdfPayload): Promis
     sy -= 4;
     sbHeading('Achievements');
     for (const a of payload.achievements.slice(0, 12)) {
-      page.drawText(`\u2726  ${a.slice(0, 76)}`, { x: M, y: sy, size: 8, font: fonts.reg, color: WHITE });
+      page.drawText(`${BULLET}  ${a.slice(0, 76)}`, { x: M, y: sy, size: 8, font: fonts.reg, color: WHITE });
       sy -= 12;
     }
   }
