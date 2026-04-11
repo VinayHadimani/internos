@@ -1,6 +1,7 @@
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { buildResumePdfPayloadFromText, type ResumePdfPayload } from '@/lib/build-resume-pdf-payload';
+import { generateResumePdfPdfKit, isServerlessRuntime } from '@/lib/generate-resume-pdf-pdfkit';
 import { runReportLabPdfScript } from '@/lib/run-reportlab-pdf';
 
 function slugFileName(name: string): string {
@@ -27,15 +28,33 @@ export async function POST(req: NextRequest) {
 
     if (!payload.name?.trim()) payload = { ...payload, name: 'Candidate' };
 
-    const scriptPath = path.join(process.cwd(), 'python', 'generate_resume_pdf.py');
-    const pdfBuffer = await runReportLabPdfScript(scriptPath, JSON.stringify(payload));
+    const usePdfKit =
+      isServerlessRuntime() ||
+      process.env.RESUME_PDF_ENGINE === 'pdfkit' ||
+      process.env.RESUME_PDF_ENGINE === 'node';
+
+    let pdfBuffer: Buffer;
+    if (usePdfKit) {
+      pdfBuffer = await generateResumePdfPdfKit(payload);
+    } else {
+      const scriptPath = path.join(process.cwd(), 'python', 'generate_resume_pdf.py');
+      try {
+        pdfBuffer = await runReportLabPdfScript(scriptPath, JSON.stringify(payload));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '';
+        if (msg.includes('Could not find Python')) {
+          pdfBuffer = await generateResumePdfPdfKit(payload);
+        } else {
+          throw err;
+        }
+      }
+    }
 
     if (!pdfBuffer.length) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            'PDF generation returned empty output. Install Python dependencies: pip install -r python/requirements.txt',
+          error: 'PDF generation returned empty output.',
         },
         { status: 500 }
       );
@@ -57,7 +76,8 @@ export async function POST(req: NextRequest) {
       {
         success: false,
         error: msg,
-        hint: 'Ensure Python 3 and reportlab are installed (see python/requirements.txt). Set PYTHON_PATH if needed.',
+        hint:
+          'On Vercel/AWS, PDFs use PDFKit (no Python). Locally you can use ReportLab: install Python + pip install -r python/requirements.txt, or set RESUME_PDF_ENGINE=pdfkit to force PDFKit.',
       },
       { status: 500 }
     );
