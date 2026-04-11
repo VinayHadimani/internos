@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractText } from 'unpdf';
+import { applyResumeQualityGuard } from '@/lib/resume-quality-guard';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -53,10 +54,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('[Parse Resume] Success — text length:', trimmedText.length);
+    const guardedText = applyResumeQualityGuard(trimmedText);
+
+    console.log('[Parse Resume] Success — text length:', guardedText.length);
 
     return NextResponse.json({
-      text: trimmedText,
+      text: guardedText,
       pages: totalPages,
       fileName: file.name,
     });

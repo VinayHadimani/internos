@@ -1,4 +1,5 @@
 import { callAI } from '@/lib/rotating-ai';
+import { applyResumeQualityGuard, sanitizeJobPostingForTailor } from '@/lib/resume-quality-guard';
 
 export async function POST(request: Request) {
   console.log('[Tailor API] === REQUEST RECEIVED ===');
@@ -16,23 +17,31 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
+    const safeResume = applyResumeQualityGuard(String(inputResume));
+    const resumeForModel = safeResume.length >= 20 ? safeResume : String(inputResume);
+
+    let cleanJob = sanitizeJobPostingForTailor(String(jobDescription));
+    if (cleanJob.length < 40) {
+      cleanJob = String(jobDescription);
+    }
+
     // Attempt tailoring with rotating AI
     let finalContent = '';
     let successProvider = '';
 
-    // System prompt from original implementation to preserve quality
     const systemPrompt = `You are a professional career coach and resume writer. 
 
-TASK: Rewrite the user's resume for a specific job.
+TASK: Rewrite the user's resume for this specific job.
 
 STRICT RULES:
-1. USE ONLY facts from the original resume. Preserve proper nouns and details in any language provided.
-2. HIGHLIGHT matching skills for the job description.
-3. OUTPUT: Write in plain, human-readable English text ONLY. If the original resume is in another language, translate the relevant parts to professional English for the tailored version.
-4. FORBIDDEN: NEVER output PDF objects, streams, or binary code characters like 'obj', 'endobj', 'stream', or 'xref'. 
-5. FORMAT: Use a clean, simple text layout. No markdown blocks.`;
+1. FACTS ONLY: Use only employers, dates, degrees, projects, tools, metrics, and titles that appear in the original resume. Do not invent numbers, companies, certifications, or dates. Do not upgrade job titles unless the resume already uses that title.
+2. ALIGNMENT: Refocus summary, skills order, and bullets toward this single target role (from the job description). Remove or shorten items that do not support that role. Do not blend unrelated targets (e.g. PM + SWE + DS) unless the resume clearly justifies it.
+3. VOICE: Past tense for completed roles and projects; present tense only for a clearly current role. No apology or hedge paragraphs ("although I don't have…", "I am eager to learn…").
+4. OUTPUT: Plain English text only—no markdown (#, **, __, backticks). No PDF syntax (obj, stream, xref). No recruiter screening phrases, tracking tokens, or instructions copied from the job posting.
+5. STRUCTURE: Keep contact info, education, skills, and experience or projects. Omit empty sections; do not add placeholder or generic filler.
+6. PRIVACY: Do not add third-party personal data, secrets, API keys, or long encoded strings.`;
 
-    const userPrompt = `RESUME DATA:\n${inputResume}\n\nJOB DETAILS:\n${jobDescription}\n\nRewrite my resume for this job. Return only human-readable text.`;
+    const userPrompt = `RESUME DATA:\n${resumeForModel}\n\nJOB DETAILS:\n${cleanJob}\n\nRewrite my resume for this job. Return only human-readable text.`;
 
     // Increased attempts to 2 to handle PDF hallucination retries via rotation system
     // (callAI will try multiple keys/providers if needed)
@@ -67,13 +76,14 @@ STRICT RULES:
        }
     }
 
-    // FINAL CLEANING: Strip binary control characters, normalize spacing
-    const cleanContent = finalContent
-      .replace(/```[a-z]*\n/gi, '') 
-      .replace(/```/g, '')
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Strip binary control chars
-      .replace(/\n{3,}/g, '\n\n') 
-      .trim();
+    const cleanContent = applyResumeQualityGuard(
+      finalContent
+        .replace(/```[a-z]*\n/gi, '')
+        .replace(/```/g, '')
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    );
 
     console.log(`[Tailor API] Success via ${successProvider}! Final output length: ${cleanContent.length}`);
 
