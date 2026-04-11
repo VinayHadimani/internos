@@ -44,8 +44,17 @@ async function filterAndScoreJobs(resumeText, rawScrapedJobs) {
   // STEP 2: AI scoring on pre-filtered results only
   const scored = await matchInBatches(resumeText, preFiltered);
   
-  // STEP 3: Final sort and cap
-  return scored
+  // STEP 3: Map snake_case AI fields to camelCase for frontend compatibility
+  const normalized = scored.map(job => ({
+    ...job,
+    matchScore: job.match_score,
+    matchLabel: job.match_score >= 80 ? 'Excellent Match' :
+                job.match_score >= 60 ? 'Good Match' :
+                job.match_score >= 40 ? 'Moderate Match' : 'Low Match'
+  }));
+  
+  // Final sort and cap
+  return normalized
     .filter(job => job.match_score >= 40)
     .sort((a, b) => b.match_score - a.match_score)
     .slice(0, 30);
