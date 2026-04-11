@@ -1,7 +1,7 @@
-import { spawn } from 'child_process';
 import path from 'path';
 import { NextRequest, NextResponse } from 'next/server';
 import { buildResumePdfPayloadFromText, type ResumePdfPayload } from '@/lib/build-resume-pdf-payload';
+import { runReportLabPdfScript } from '@/lib/run-reportlab-pdf';
 
 function slugFileName(name: string): string {
   const s = name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') || 'Candidate';
@@ -28,32 +28,7 @@ export async function POST(req: NextRequest) {
     if (!payload.name?.trim()) payload = { ...payload, name: 'Candidate' };
 
     const scriptPath = path.join(process.cwd(), 'python', 'generate_resume_pdf.py');
-    const pythonBin = process.env.PYTHON_PATH || (process.platform === 'win32' ? 'python' : 'python3');
-
-    const pdfBuffer: Buffer = await new Promise((resolve, reject) => {
-      const proc = spawn(pythonBin, [scriptPath], {
-        stdio: ['pipe', 'pipe', 'pipe'],
-        windowsHide: true,
-      });
-      const chunks: Buffer[] = [];
-      const errChunks: Buffer[] = [];
-      proc.stdout.on('data', (d) => chunks.push(Buffer.from(d)));
-      proc.stderr.on('data', (d) => errChunks.push(Buffer.from(d)));
-      proc.on('error', (e) => reject(e));
-      proc.on('close', (code) => {
-        if (code !== 0) {
-          reject(
-            new Error(
-              `Python exited ${code}: ${Buffer.concat(errChunks).toString('utf8') || 'no stderr'}`
-            )
-          );
-          return;
-        }
-        resolve(Buffer.concat(chunks));
-      });
-      proc.stdin.write(JSON.stringify(payload), 'utf8');
-      proc.stdin.end();
-    });
+    const pdfBuffer = await runReportLabPdfScript(scriptPath, JSON.stringify(payload));
 
     if (!pdfBuffer.length) {
       return NextResponse.json(
