@@ -12,7 +12,7 @@ export async function GET() {
       provider: result.provider,
       response: result.content
     });
-    
+  } catch (error: any) {
     return Response.json({
       success: false,
       error: error.message

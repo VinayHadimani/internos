@@ -12,8 +12,8 @@ export async function extractSearchTerms(
   experience: string
   searchQueries: string[]
 }> {
-
-  const response = await callAI(
+  try {
+    const response = await callAI(
     `Analyze this resume and extract job search terms.
         Return ONLY valid JSON, no markdown, no explanation.
         Format:
@@ -42,7 +42,7 @@ export async function extractSearchTerms(
     throw new Error(response.error || "No content returned from AI")
   }
   
-  const text = response.content
+    const text = response.content
     const clean = text.replace(/```json|```/g, '').trim()
     return JSON.parse(clean)
   } catch {
