@@ -1,8 +1,6 @@
-import Groq from 'groq-sdk';
+import { callAI } from '@/lib/rotating-ai';
 import { aggregateJobs, Job } from './job-aggregator';
 import { calculateMatchScore } from '@/lib/matching/skills';
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
 
 export interface SearchTerms {
   skills: string[];
@@ -18,13 +16,8 @@ export async function extractSearchTerms(
   resumeText: string
 ): Promise<SearchTerms> {
   try {
-    const response = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0.1,
-      messages: [
-        {
-          role: "system",
-          content: `Analyze this resume and extract job search terms.
+    const response = await callAI(
+      `Analyze this resume and extract job search terms.
           Return ONLY valid JSON.
           Format:
           {
@@ -38,20 +31,20 @@ export async function extractSearchTerms(
             ]
           }
           searchQueries should be 3-5 specific search terms
-          based on their strongest skills and experience.`
-        },
-        {
-          role: "user",
-          content: resumeText
-        }
-      ],
-      response_format: { type: "json_object" }
-    });
+          based on their strongest skills and experience.`,
+      resumeText,
+      {
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.1,
+        response_format: { type: "json_object" }
+      }
+    );
 
-    const content = response.choices[0].message.content;
-    if (!content) throw new Error("No content returned from AI");
+    if (!response.success || !response.content) {
+       throw new Error("No content returned from AI");
+    }
     
-    return JSON.parse(content);
+    return JSON.parse(response.content);
   } catch (error) {
     console.error("Error extracting search terms:", error);
     return {

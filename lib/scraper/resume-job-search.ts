@@ -1,11 +1,7 @@
-import Groq from 'groq-sdk'
+import { callAI } from '@/lib/rotating-ai'
 import { aggregateJobs } from '../aggregator'
 import { calculateMatchScore } from '../matching/skills'
 import { createAdminClient } from '../supabase/admin'
-
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY
-})
 
 // Step 1: Extract search terms from resume
 export async function extractSearchTerms(
@@ -17,14 +13,8 @@ export async function extractSearchTerms(
   searchQueries: string[]
 }> {
 
-  const response = await groq.chat.completions.create({
-    model: "llama-3.3-70b-versatile",
-    temperature: 0.1,
-    max_tokens: 500,
-    messages: [
-      {
-        role: "system",
-        content: `Analyze this resume and extract job search terms.
+  const response = await callAI(
+    `Analyze this resume and extract job search terms.
         Return ONLY valid JSON, no markdown, no explanation.
         Format:
         {
@@ -38,17 +28,21 @@ export async function extractSearchTerms(
           ]
         }
         searchQueries should be 3-5 specific search terms
-        based on their strongest skills and experience.`
-      },
-      {
-        role: "user",
-        content: resumeText
-      }
-    ]
-  })
+        based on their strongest skills and experience.`,
+    resumeText,
+    {
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.1,
+      max_tokens: 500,
+      response_format: { type: 'json_object' }
+    }
+  )
 
-  try {
-    const text = response.choices[0].message.content || '{}'
+  if (!response.success || !response.content) {
+    throw new Error(response.error || "No content returned from AI")
+  }
+  
+  const text = response.content
     const clean = text.replace(/```json|```/g, '').trim()
     return JSON.parse(clean)
   } catch {

@@ -1,8 +1,6 @@
 "use server";
 
-import Groq from 'groq-sdk';
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
+import { callAI } from '@/lib/rotating-ai';
 
 export interface ExtractedSkills {
   skills: string[];
@@ -14,12 +12,8 @@ export interface ExtractedSkills {
 
 export async function extractSkillsFromResume(resumeText: string): Promise<ExtractedSkills> {
   try {
-    const extractResponse = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a skill extraction expert. Extract from the resume:
+    const extractResponse = await callAI(
+      `You are a skill extraction expert. Extract from the resume:
 - Technical and soft skills
 - Experience level (fresher/junior/mid/senior based on years)
 - Industries they've worked in
@@ -33,18 +27,21 @@ Return JSON:
   "industries": ["tech"],
   "roleTypes": ["frontend"],
   "location": "Bangalore, India"
-}`
-        },
-        {
-          role: 'user',
-          content: resumeText
-        }
-      ],
-      max_tokens: 500,
-      temperature: 0.1,
-    });
+}`,
+      resumeText,
+      {
+        model: 'llama-3.3-70b-versatile',
+        temperature: 0.1,
+        max_tokens: 500,
+        response_format: { type: 'json_object' }
+      }
+    );
 
-    let raw = extractResponse.choices[0]?.message?.content || '{}';
+    if (!extractResponse.success) {
+      throw new Error(extractResponse.error || 'AI Extraction failed');
+    }
+
+    let raw = extractResponse.content || '{}';
     raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
     
     const result = JSON.parse(raw) as ExtractedSkills;
@@ -104,29 +101,23 @@ export async function translateJobToEnglish(text: string, sourceLanguage?: strin
   }
   
   try {
-    const response = await groq.chat.completions.create({
-      messages: [
-        {
-          role: 'system',
-          content: `You are a professional translator. Translate the following job posting to English.
+    const response = await callAI(
+      `You are a professional translator. Translate the following job posting to English.
           
   Rules:
   1. Maintain all formatting and structure
   2. Keep company names, URLs, and technical terms unchanged
   3. Use professional business English
   4. Preserve all job details accurately
-  5. Return ONLY the translated text, no explanations`
-        },
-        {
-          role: 'user',
-          content: `Translate this job posting to English:\n\n${text}`
-        }
-      ],
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 2000
-    });
+  5. Return ONLY the translated text, no explanations`,
+      `Translate this job posting to English:\n\n${text}`,
+      {
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 2000
+      }
+    );
 
-    return response.choices[0]?.message?.content || text;
+    return response.content || text;
   } catch (error) {
     console.error("Translation failed:", error);
     return text; // Fallback to original text

@@ -1,6 +1,4 @@
-import Groq from 'groq-sdk';
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! });
+import { callAI } from '@/lib/rotating-ai';
 
 export interface Job {
   id: string;
@@ -99,22 +97,16 @@ export class JobAggregator {
 
   private async expandQueryWithAI(query: string): Promise<string[]> {
     try {
-      const response = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        messages: [
-          {
-            role: "system",
-            content: "You are a job search expert. Expand the user's job query into 3-5 diverse but relevant search strings that would work well across different job boards (e.g., LinkedIn, Indeed, Glassdoor). Return ONLY valid JSON."
-          },
-          {
-            role: "user",
-            content: `Expand this job query: "${query}". Return JSON: {"queries": ["string1", "string2"]}`
-          }
-        ],
-        response_format: { type: "json_object" }
-      });
+      const response = await callAI(
+        "You are a job search expert. Expand the user's job query into 3-5 diverse but relevant search strings that would work well across different job boards (e.g., LinkedIn, Indeed, Glassdoor). Return ONLY valid JSON.",
+        `Expand this job query: "${query}". Return JSON: {"queries": ["string1", "string2"]}`,
+        {
+          model: "llama-3.3-70b-versatile",
+          response_format: { type: "json_object" }
+        }
+      );
 
-      const content = response.choices[0].message.content;
+      const content = response.content;
       if (!content) return [query];
       
       const parsed = JSON.parse(content);

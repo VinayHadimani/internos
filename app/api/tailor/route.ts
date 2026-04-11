@@ -1,4 +1,4 @@
-import Groq from 'groq-sdk';
+import { callAI } from '@/lib/rotating-ai';
 
 export async function POST(request: Request) {
   console.log('[Tailor API] === REQUEST RECEIVED ===');
@@ -10,45 +10,18 @@ export async function POST(request: Request) {
     const inputResume = resume || resumeText;
     
     if (!inputResume || !jobDescription) {
-      console.warn('[Tailor API] Missing required fields');
       return Response.json({ 
         success: false, 
         error: 'Missing resume or job description' 
       }, { status: 400 });
     }
 
-    // Diagnostic logging for inputs
-    // We only strip CONTROL characters (\x00-\x1F, \x7F) to preserve Unicode/Hindi
-    const logPreview = inputResume.substring(0, 500).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-    console.log('[Tailor API] Resume Preview (Sanitized Control Chars):', logPreview);
-    console.log('[Tailor API] Resume Total Length:', inputResume.length);
-
-    // Check API key
-    if (!process.env.GROQ_API_KEY) {
-      console.error('[Tailor API] GROQ_API_KEY not found');
-      return Response.json({ 
-        success: false, 
-        error: 'Server configuration error' 
-      }, { status: 500 });
-    }
-
-    const groq = new Groq({
-      apiKey: process.env.GROQ_API_KEY,
-    });
-
-    // We will attempt up to 2 times if we get PDF garbage
-    let attempts = 0;
+    // Attempt tailoring with rotating AI
     let finalContent = '';
-    
-    while (attempts < 2) {
-      attempts++;
-      console.log(`[Tailor API] AI Attempt #${attempts}...`);
+    let successProvider = '';
 
-      const completion = await groq.chat.completions.create({
-        messages: [
-          {
-            role: 'system',
-            content: `You are a professional career coach and resume writer. 
+    // System prompt from original implementation to preserve quality
+    const systemPrompt = `You are a professional career coach and resume writer. 
 
 TASK: Rewrite the user's resume for a specific job.
 
@@ -57,47 +30,44 @@ STRICT RULES:
 2. HIGHLIGHT matching skills for the job description.
 3. OUTPUT: Write in plain, human-readable English text ONLY. If the original resume is in another language, translate the relevant parts to professional English for the tailored version.
 4. FORBIDDEN: NEVER output PDF objects, streams, or binary code characters like 'obj', 'endobj', 'stream', or 'xref'. 
-5. FORMAT: Use a clean, simple text layout. No markdown blocks.`
-          },
-          {
-            role: 'user',
-            content: `RESUME DATA:
-${inputResume}
+5. FORMAT: Use a clean, simple text layout. No markdown blocks.`;
 
-JOB DETAILS:
-${jobDescription}
+    const userPrompt = `RESUME DATA:\n${inputResume}\n\nJOB DETAILS:\n${jobDescription}\n\nRewrite my resume for this job. Return only human-readable text.`;
 
-Rewrite my resume for this job. Return only human-readable text.`
-          }
-        ],
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.0, // Force maximum determinism to avoid hallucination loops
-        max_tokens: 3000,
-      });
+    // Increased attempts to 2 to handle PDF hallucination retries via rotation system
+    // (callAI will try multiple keys/providers if needed)
+    const response = await callAI(systemPrompt, userPrompt, {
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.0, // Force maximum determinism
+      max_tokens: 3000
+    });
 
-      let rawContent = completion.choices[0]?.message?.content || '';
-      
-      // Check for PDF syntax hallucination
-      const hasPdfSyntax = /obj|endobj|stream|xref|trailer|\/Producer/i.test(rawContent);
-      
-      if (hasPdfSyntax) {
-        console.warn('[Tailor API] WARNING: AI generated PDF syntax. Retrying...');
-        continue;
-      }
-
-      finalContent = rawContent;
-      break;
-    }
-
-    if (!finalContent || finalContent.length < 50) {
-      console.error('[Tailor API] Invalid AI response length:', finalContent?.length);
+    if (!response.success || !response.content) {
+      console.error('[Tailor API] AI Failure:', response.error);
       return Response.json({ 
         success: false, 
-        error: 'AI generated an invalid format. Please check the resume and try again.' 
+        error: response.error || 'AI generated an invalid format.' 
       }, { status: 500 });
     }
 
-    // FINAL CLEANING: Strip ONLY dangerous control characters, PRESERVE Unicode/Local languages
+    finalContent = response.content;
+    successProvider = response.provider || 'unknown';
+
+    // Content-level validation (PDF syntax hallucination)
+    if (/obj|endobj|stream|xref|trailer|\/Producer/i.test(finalContent)) {
+       // If it hallucinated PDF syntax, we try one more time specifically with Gemini
+       console.warn('[Tailor API] Hallucinated PDF syntax, retrying with priority Gemini...');
+       const retryResponse = await callAI(systemPrompt, userPrompt, {
+         providerPriority: ['gemini', 'openai'],
+         temperature: 0.1
+       });
+       if (retryResponse.success && retryResponse.content) {
+         finalContent = retryResponse.content;
+         successProvider = retryResponse.provider || 'gemini';
+       }
+    }
+
+    // FINAL CLEANING: Strip binary control characters, normalize spacing
     const cleanContent = finalContent
       .replace(/```[a-z]*\n/gi, '') 
       .replace(/```/g, '')
@@ -105,25 +75,22 @@ Rewrite my resume for this job. Return only human-readable text.`
       .replace(/\n{3,}/g, '\n\n') 
       .trim();
 
-    console.log('[Tailor API] Success! Final output length:', cleanContent.length);
+    console.log(`[Tailor API] Success via ${successProvider}! Final output length: ${cleanContent.length}`);
 
-    return new Response(JSON.stringify({
+    return Response.json({
       success: true,
       tailoredResume: cleanContent,
       atsScore: 88,
-      keywordsMatched: []
-    }), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json; charset=utf-8'
-      }
+      provider: successProvider
+    }, {
+      headers: { 'Content-Type': 'application/json; charset=utf-8' }
     });
 
   } catch (error: any) {
-    console.error('[Tailor API] Unexpected Error:', error);
+    console.error('[Tailor API] Error:', error);
     return Response.json({ 
       success: false, 
-      error: error.message || 'Internal server error during tailoring'
+      error: error.message || 'Internal server error'
     }, { status: 500 });
   }
 }

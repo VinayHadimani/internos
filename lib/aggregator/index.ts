@@ -1,8 +1,6 @@
-import Groq from 'groq-sdk'
+import { callAI } from '@/lib/rotating-ai'
 import * as cheerio from 'cheerio'
 import { normalizeSalary, type SalaryInfo } from '@/lib/utils/salary'
-
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY! })
 
 // Add this helper function at the top:
 function cleanText(text: string): string {
@@ -139,14 +137,8 @@ export interface ParsedQuery {
 
 // ─── Query Parser ────────────────────────────────────────────
 export async function parseJobQuery(query: string): Promise<ParsedQuery> {
-  const completion = await groq.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
-    temperature: 0,
-    max_tokens: 300,
-    messages: [
-      {
-        role: 'system',
-        content: `You are a job search assistant. Extract keywords, job_type (internship/full-time/contract/part-time), and location from the user query. Return ONLY valid JSON.
+  const response = await callAI(
+    `You are a job search assistant. Extract keywords, job_type (internship/full-time/contract/part-time), and location from the user query. Return ONLY valid JSON.
 
 Example output:
 {
@@ -154,15 +146,16 @@ Example output:
   "job_type": "internship",
   "location": "remote"
 }`,
-      },
-      {
-        role: 'user',
-        content: query,
-      },
-    ],
-  })
+    query,
+    {
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0,
+      max_tokens: 300,
+      response_format: { type: 'json_object' }
+    }
+  );
 
-  let raw = completion.choices[0]?.message?.content || '{}'
+  let raw = response.content || '{}'
   raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
 
   try {
