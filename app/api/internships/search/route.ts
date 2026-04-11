@@ -83,12 +83,27 @@ export async function POST(req: NextRequest) {
     // Assume resumeText is passed in the request body
     const resumeText = body.resumeText; 
 
+    // Run original keyword scoring first for base match percentages
+    // This is used when AI is not running or before AI results come back
+    function calculateBaseMatchScore(job: any, skills: unknown[]) {
+      const jobText = `${job.title} ${job.description || ''}`.toLowerCase();
+      let matchedSkills = 0;
+      
+      for (const skill of skills as string[]) {
+        if (jobText.includes(skill.toLowerCase())) {
+          matchedSkills++;
+        }
+      }
+      
+      const skillScore = skills.length > 0 ? Math.round((matchedSkills / skills.length) * 100) : 50;
+      return Math.max(30, skillScore);
+    }
+
     // Always add matchScore field for frontend
-    // This prevents empty % match display
     const normalizedJobs = rawScrapedJobs.map(job => ({
       ...job,
-      // @ts-ignore JobResult does not define these fields but frontend expects them
-      matchScore: (job as any).matchScore || 50,
+      // @ts-ignore
+      matchScore: (job as any).matchScore || calculateBaseMatchScore(job, skills),
       // @ts-ignore
       matchLabel: (job as any).matchLabel || 'Moderate Match'
     }));
