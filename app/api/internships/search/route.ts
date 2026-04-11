@@ -83,13 +83,27 @@ export async function POST(req: NextRequest) {
     // Assume resumeText is passed in the request body
     const resumeText = body.resumeText; 
 
+    // Always add matchScore field for frontend
+    // This prevents empty % match display
+    const normalizedJobs = rawScrapedJobs.map(job => ({
+      ...job,
+      matchScore: job.matchScore || 50,
+      matchLabel: job.matchLabel || 'Moderate Match'
+    }));
+
     // Fallback if AI pipeline fails
     let filteredJobs;
     try {
-      filteredJobs = await filterAndScoreJobs(resumeText, rawScrapedJobs);
+      // Only run AI filter if we actually have resume text
+      if (resumeText && resumeText.length > 100) {
+        filteredJobs = await filterAndScoreJobs(resumeText, normalizedJobs);
+      } else {
+        console.log('No resume text available, skipping AI scoring');
+        filteredJobs = normalizedJobs;
+      }
     } catch (aiError) {
-      console.error('AI filter failed, falling back to raw results:', aiError);
-      filteredJobs = rawScrapedJobs;
+      console.error('AI filter failed, falling back to results:', aiError);
+      filteredJobs = normalizedJobs;
     }
 
     console.log(`Returning ${filteredJobs.length} FILTERED jobs`);
