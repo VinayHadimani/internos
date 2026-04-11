@@ -1,5 +1,8 @@
 
-const SYSTEM_PROMPT = require('./internos-system-prompt.txt');
+const fs = require('fs');
+const path = require('path');
+const { matchInBatches } = require('./batch-matcher');
+const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'internos-system-prompt.txt'), 'utf8');
 
 // This runs AFTER ScraperOS fetches jobs
 // BEFORE InternOS displays them

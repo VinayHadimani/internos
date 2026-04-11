@@ -354,7 +354,7 @@ export default function InternshipsPage() {
                         <span className="text-xs font-medium px-2 py-1 bg-green-500/10 text-green-400 rounded-lg border border-green-500/20">⭐ Strong Match</span>
                       }
 
-                      {job.red_flags?.length > 0 &&
+                      {job.red_flags && job.red_flags.length > 0 &&
                         <span className="text-xs font-medium px-2 py-1 bg-red-500/10 text-red-400 rounded-lg border border-red-500/20">⚠ {job.red_flags[0]}</span>
                       }
 
