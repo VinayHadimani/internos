@@ -2,7 +2,8 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { matchInBatches } from './batch-matcher.js';
+import matcher from './batch-matcher.js';
+const { matchInBatches } = matcher;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

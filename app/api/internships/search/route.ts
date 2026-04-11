@@ -83,7 +83,14 @@ export async function POST(req: NextRequest) {
     // Assume resumeText is passed in the request body
     const resumeText = body.resumeText; 
 
-    const filteredJobs = await filterAndScoreJobs(resumeText, rawScrapedJobs);
+    // Fallback if AI pipeline fails
+    let filteredJobs;
+    try {
+      filteredJobs = await filterAndScoreJobs(resumeText, rawScrapedJobs);
+    } catch (aiError) {
+      console.error('AI filter failed, falling back to raw results:', aiError);
+      filteredJobs = rawScrapedJobs;
+    }
 
     console.log(`Returning ${filteredJobs.length} FILTERED jobs`);
 
