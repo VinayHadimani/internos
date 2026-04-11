@@ -1,15 +1,13 @@
 'use client';
 
-import { Suspense, useState, useEffect, useRef } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense, useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, Download, ArrowLeft, Sparkles, Target, FileText, Check } from 'lucide-react';
 import Link from 'next/link';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 
 /**
  * Component to highlight keywords in the resume text
@@ -40,10 +38,8 @@ function HighlightedResume({ text, keywords }: { text: string; keywords: string[
 }
 
 function TailorContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
-  const resumeRef = useRef<HTMLDivElement>(null);
-  
+
   const [job, setJob] = useState<any>(null);
   const [resumeText, setResumeText] = useState('');
   const [tailoredResume, setTailoredResume] = useState('');
@@ -125,41 +121,49 @@ function TailorContent() {
   }
 
   const handleDownloadPDF = async () => {
-    if (!resumeRef.current) return;
-    
+    if (!tailoredResume) return;
+
     setIsExporting(true);
+    setError('');
     try {
-      const element = resumeRef.current;
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff'
+      let skills: string[] = [];
+      try {
+        skills = JSON.parse(localStorage.getItem('userSkills') || '[]');
+      } catch {
+        skills = [];
+      }
+
+      const res = await fetch('/api/resume/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tailoredResume,
+          jobTitle: job?.title,
+          skills: Array.isArray(skills) ? skills : [],
+        }),
       });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Tailored_Resume_${job?.company || 'Job'}.pdf`);
-    } catch (err) {
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || errJson.hint || `PDF failed (${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const cd = res.headers.get('Content-Disposition');
+      const m = cd?.match(/filename="([^"]+)"/);
+      const filename = m?.[1] || `Candidate_Resume.pdf`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: unknown) {
       console.error('PDF Generation failed:', err);
-      setError('Failed to generate PDF. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to generate PDF.');
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const handleDownloadTXT = () => {
-    if (!tailoredResume) return;
-    const blob = new Blob([tailoredResume], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tailored-resume-${job?.company || 'job'}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   if (!job) {
@@ -262,9 +266,6 @@ function TailorContent() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button onClick={handleDownloadTXT} variant="ghost" size="sm" className="text-gray-400 hover:text-white">
-                    TXT
-                  </Button>
                   <Button 
                     onClick={handleDownloadPDF} 
                     disabled={isExporting}
@@ -299,31 +300,19 @@ function TailorContent() {
                   <div className="absolute top-0 right-0 p-4 opacity-10">
                     <FileText className="w-20 h-20 text-white" />
                   </div>
+                  <p className="text-xs text-[#555] uppercase tracking-wider mb-3">Preview</p>
                   <HighlightedResume text={tailoredResume} keywords={keywordsMatched} />
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Hidden element for PDF capture - styled as a real resume */}
-          <div className="sr-only">
-            <div 
-              ref={resumeRef} 
-              className="bg-white text-black p-[20mm] w-[210mm] min-h-[297mm] font-serif"
-              style={{ position: 'fixed', left: '-9999px', top: 0 }}
-            >
-              <div className="whitespace-pre-wrap leading-relaxed text-[11pt]">
-                {tailoredResume}
-              </div>
-            </div>
-          </div>
-
           <div className="p-6 bg-gradient-to-br from-blue-600/10 to-transparent border border-blue-500/20 rounded-2xl">
             <h4 className="text-blue-400 font-bold mb-2 flex items-center gap-2">
               <Sparkles className="w-4 h-4" /> Final Step
             </h4>
             <p className="text-sm text-gray-400 leading-relaxed font-medium capitalize">
-              This resume has been engineered to trigger {job.company}'s applicant tracking system. Use the PDF version for best results during submission.
+              Download the professionally laid-out PDF (ReportLab, two-column A4). Use that file for applications—not a plain-text export.
             </p>
           </div>
         </div>

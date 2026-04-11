@@ -31,6 +31,7 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
   const [isTailoring, setIsTailoring] = useState(false);
   const [tailoredResume, setTailoredResume] = useState<string | null>(null);
   const [tailoringMatchScore, setTailoringMatchScore] = useState<number>(85);
+  const [pdfExporting, setPdfExporting] = useState(false);
 
   useEffect(() => {
     const savedResume = localStorage.getItem('resumeText');
@@ -73,15 +74,45 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
     }
   }
 
-  const handleDownload = () => {
-    if (!tailoredResume) return;
-    const blob = new Blob([tailoredResume], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `tailored_resume_${internship?.company || 'job'}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleDownloadPdf = async () => {
+    if (!tailoredResume || !internship) return;
+    setPdfExporting(true);
+    setError(null);
+    try {
+      let skills: string[] = [];
+      try {
+        skills = JSON.parse(localStorage.getItem('userSkills') || '[]');
+      } catch {
+        skills = [];
+      }
+      const res = await fetch('/api/resume/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tailoredResume: tailoredResume,
+          jobTitle: internship.title,
+          skills: Array.isArray(skills) ? skills : [],
+        }),
+      });
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        throw new Error(j.error || j.hint || 'PDF generation failed');
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get('Content-Disposition');
+      const m = cd?.match(/filename="([^"]+)"/);
+      const filename = m?.[1] || 'Candidate_Resume.pdf';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not download PDF');
+    } finally {
+      setPdfExporting(false);
+    }
   };
 
   useEffect(() => {
@@ -381,22 +412,41 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
                     <div className="bg-green-600/10 border border-green-600/20 text-green-400 px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-2">
                        <Check size={14} /> ATS Score: {tailoringMatchScore}%
                     </div>
-                    <Button onClick={handleDownload} variant="ghost" size="sm" className="text-blue-400 hover:text-blue-300">
-                      <Download className="w-4 h-4 mr-2" />
-                      Download (.txt)
+                    <Button
+                      onClick={handleDownloadPdf}
+                      disabled={pdfExporting}
+                      variant="ghost"
+                      size="sm"
+                      className="text-blue-400 hover:text-blue-300"
+                    >
+                      {pdfExporting ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-2" />
+                      )}
+                      Download PDF
                     </Button>
                   </div>
                   
                   <div className="bg-black/50 border border-gray-800 rounded-xl p-5 overflow-hidden">
+                    <p className="text-xs text-[#555] mb-2">Preview</p>
                     <pre className="text-sm text-gray-300 whitespace-pre-wrap font-sans max-h-96 overflow-y-auto">
                       {tailoredResume}
                     </pre>
                   </div>
 
                   <div className="flex gap-3">
-                    <Button onClick={handleDownload} className="flex-1 bg-white text-black hover:bg-gray-200">
-                      <Download className="w-4 h-4 mr-2" />
-                      Save Tailored Version
+                    <Button
+                      onClick={handleDownloadPdf}
+                      disabled={pdfExporting}
+                      className="flex-1 bg-white text-black hover:bg-gray-200"
+                    >
+                      {pdfExporting ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-2" />
+                      )}
+                      Download PDF
                     </Button>
                     <Link href={`/tailor?jobId=${internship.id}&title=${encodeURIComponent(internship.title)}&company=${encodeURIComponent(internship.company)}&description=${encodeURIComponent(internship.description)}`} className="flex-1">
                       <Button variant="outline" className="w-full border-gray-700 text-gray-300">
