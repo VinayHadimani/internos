@@ -1,7 +1,11 @@
 
-const fs = require('fs');
-const path = require('path');
-const { matchInBatches } = require('./batch-matcher');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { matchInBatches } from './batch-matcher.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 const SYSTEM_PROMPT = fs.readFileSync(path.join(__dirname, 'internos-system-prompt.txt'), 'utf8');
 
 // This runs AFTER ScraperOS fetches jobs
@@ -46,4 +50,4 @@ async function filterAndScoreJobs(resumeText, rawScrapedJobs) {
     .slice(0, 30);
 }
 
-module.exports = { filterAndScoreJobs };
+export { filterAndScoreJobs };
