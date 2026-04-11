@@ -18,6 +18,9 @@ interface Job {
   matchScore: number;
   matchLabel: string;
   locationMatch?: boolean;
+  apply_priority?: string;
+  red_flags?: string[];
+  why_apply?: string;
 }
 
 export default function InternshipsPage() {
@@ -346,6 +349,18 @@ export default function InternshipsPage() {
                       }`}>
                         {job.matchScore}% match
                       </span>
+
+                      {job.apply_priority === 'high' && 
+                        <span className="text-xs font-medium px-2 py-1 bg-green-500/10 text-green-400 rounded-lg border border-green-500/20">⭐ Strong Match</span>
+                      }
+
+                      {job.red_flags?.length > 0 &&
+                        <span className="text-xs font-medium px-2 py-1 bg-red-500/10 text-red-400 rounded-lg border border-red-500/20">⚠ {job.red_flags[0]}</span>
+                      }
+
+                      {job.why_apply &&
+                        <p className="text-[#777] text-xs mt-1 max-w-[200px] text-right">{job.why_apply}</p>
+                      }
 
                       {job.url && (
                         <a
