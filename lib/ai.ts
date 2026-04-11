@@ -73,11 +73,17 @@ function extractSkillsByKeywords(text: string): string[] {
     'html', 'css', 'tailwind', 'bootstrap', 'figma', 'redux', 'nextjs', 'django',
     'flask', 'spring', 'android', 'ios', 'flutter', 'react native', 'machine learning',
     'data science', 'pandas', 'numpy', 'tensorflow', 'pytorch', 'graphql', 'rest api',
-    'c++', 'c#', 'go', 'rust', 'php', 'laravel', 'ruby', 'swift', 'kotlin'
+    'c++', 'c#', 'go', 'rust', 'php', 'laravel', 'ruby', 'swift', 'kotlin',
+    'excel', 'google sheets', 'tableau', 'power bi', 'spss', 'sas', 'vba', 'stata',
+    'r studio', 'ggplot',
   ];
-  
+
   const lowerText = text.toLowerCase();
-  return techSkills.filter(skill => lowerText.includes(skill));
+  const found = techSkills.filter((skill) => lowerText.includes(skill));
+  if (/(^|[^a-z])r([^a-z]|$)/i.test(text) && !found.some((s) => s === 'r studio')) {
+    found.push('R');
+  }
+  return found;
 }
 
 function isEnglish(text: string): boolean {

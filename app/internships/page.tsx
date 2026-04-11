@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Upload, ExternalLink, Search } from 'lucide-react';
+import { extractSkillsFromResume } from '@/lib/ai';
 
 interface Job {
   title: string;
@@ -50,8 +51,19 @@ export default function InternshipsPage() {
 
     try {
       const text = await file.text();
+      if (!text || text.length < 50) {
+        setError('Could not read enough text from the file. Use .txt from the dashboard PDF flow, or paste resume text.');
+        return;
+      }
       setResumeText(text);
       localStorage.setItem('resumeText', text);
+
+      const extracted = await extractSkillsFromResume(text);
+      localStorage.setItem('userSkills', JSON.stringify(extracted.skills || []));
+      localStorage.setItem('userExperience', extracted.experienceLevel || 'fresher');
+      localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
+      localStorage.setItem('userLocation', extracted.location || 'India');
+
       await searchJobs(text);
     } catch (err) {
       setError('Failed to read resume file');
@@ -70,6 +82,10 @@ export default function InternshipsPage() {
       const userExperience = localStorage.getItem('userExperience') || 'fresher';
       const userRoles = JSON.parse(localStorage.getItem('userRoles') || '[]');
 
+      const primarySkill =
+        (Array.isArray(userSkills) && userSkills.length > 0 && String(userSkills[0])) ||
+        'software developer';
+
       const res = await fetch(`/api/internships/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -79,7 +95,7 @@ export default function InternshipsPage() {
           skills: userSkills,
           experience: userExperience,
           preferredRoles: userRoles,
-          query: 'internship'
+          query: primarySkill,
         })
       });
 
