@@ -50,7 +50,7 @@ RULES:
 - If this is a tech resume, search for developer/engineer/SWE roles
 - Be domain-aware: consulting people want McKinsey/BCG-type roles, not React developer jobs`,
       {
-        model: 'gemini-2.0-flash', // Use Gemini — Groq is often rate-limited
+        model: 'gemini-1.5-flash', // Try 1.5 flash since 2.0 quota is maxed
         temperature: 0.1,
         max_tokens: 800,
         providerPriority: ['gemini', 'groq', 'openai'] // Try Gemini first since Groq often 429s

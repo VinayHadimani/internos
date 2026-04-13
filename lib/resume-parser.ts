@@ -234,8 +234,9 @@ SCHOOL TIER RULES:
 
   try {
     const response = await callAI(systemPrompt, userPrompt, {
-        model: 'llama-3.3-70b-versatile',
+        model: 'gemini-1.5-flash',
         temperature: 0.1,
+        providerPriority: ['gemini', 'groq', 'openai'],
         response_format: { type: 'json_object' }
     });
 
