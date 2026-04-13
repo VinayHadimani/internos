@@ -55,7 +55,8 @@ STRICT RULES:
       console.error('[Tailor API] AI Failure:', response.error);
       return Response.json({ 
         success: false, 
-        error: response.error || 'AI generated an invalid format.' 
+        error: 'Resume tailoring failed. Please try again in a moment.',
+        detail: response.error
       }, { status: 500 });
     }
 

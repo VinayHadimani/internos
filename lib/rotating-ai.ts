@@ -171,12 +171,17 @@ export async function callAI(
     openai: { keys: () => getKeys('OPENAI_API_KEYS'), call: openaiCall }
   };
 
+  const errors: string[] = [];
+
   for (const providerName of providerOrder) {
     const provider = providers[providerName as keyof typeof providers];
     if (!provider) continue;
 
     const keys = provider.keys();
-    if (keys.length === 0) continue;
+    if (keys.length === 0) {
+      console.log(`[Rotating-AI] ${providerName}: no keys configured, skipping`);
+      continue;
+    }
 
     // Try up to 3 keys per provider
     for (let attempt = 0; attempt < Math.min(3, keys.length); attempt++) {
@@ -197,21 +202,28 @@ export async function callAI(
           };
         }
       } catch (error: any) {
-        console.error(`[Rotating-AI] ${providerName} Error:`, error.message);
+        const errMsg = error.message || String(error);
+        console.error(`[Rotating-AI] ${providerName} Error (Attempt ${attempt + 1}):`, errMsg);
+        errors.push(`${providerName}[${attempt + 1}]: ${errMsg}`);
         
         if (error.message?.includes('rate') || error.message?.includes('429') || error.status === 429) {
           markKeyFailed(key);
-          continue; // Try next key
         }
         
-        // Non-rate limit error, move to next provider
-        break;
+        // Always continue to next attempt/key instead of breaking
+        continue;
       }
     }
   }
 
+  const errorDetail = errors.length > 0 
+    ? `All AI providers failed. Errors: ${errors.join(' | ')}` 
+    : 'All AI providers and keys failed. No keys configured for any provider.';
+  
+  console.error(`[Rotating-AI] ${errorDetail}`);
+
   return {
     success: false,
-    error: 'All AI providers and keys failed.'
+    error: errorDetail
   };
 }
