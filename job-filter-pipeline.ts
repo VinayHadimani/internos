@@ -171,9 +171,9 @@ async function matchInBatches(resumeText: string, allListings: any[], batchSize 
   
     // Final sort across all batches
     return results
-      .filter((job: any) => (job.match_score || job.matchScore) > 30)  // drop junk matches
+      .filter((job: any) => (job.match_score || job.matchScore) > 20)  // lowered from 30 to avoid dropping everything
       .sort((a: any, b: any) => (b.match_score || b.matchScore) - (a.match_score || a.matchScore))
-      .slice(0, 30);  // top 30
+      .slice(0, 40);  // top 40
 }
 
 export async function filterAndScoreJobs(resumeText: string, rawScrapedJobs: any[]) {
@@ -203,10 +203,33 @@ export async function filterAndScoreJobs(resumeText: string, rawScrapedJobs: any
     });
   
     console.log(`Pre-filter: ${rawScrapedJobs.length} → ${preFiltered.length} jobs`);
+
+    // If pre-filtering left nothing, return empty
+    if (preFiltered.length === 0) {
+      console.log('No jobs survived pre-filter');
+      return [];
+    }
   
     // STEP 2: AI scoring on pre-filtered results only
-    const scored = await matchInBatches(resumeText, preFiltered);
+    let scored;
+    try {
+      scored = await matchInBatches(resumeText, preFiltered);
+    } catch (batchError) {
+      console.error('Batch matching failed, returning pre-filtered with base scores:', batchError);
+      // Return pre-filtered jobs with their existing matchScore
+      return preFiltered
+        .sort((a: any, b: any) => (b.matchScore || 50) - (a.matchScore || 50))
+        .slice(0, 40);
+    }
     
+    // If AI returned nothing meaningful, fall back to pre-filtered with base scores
+    if (!scored || scored.length === 0) {
+      console.warn('AI scoring returned 0 results, returning pre-filtered jobs with base scores');
+      return preFiltered
+        .sort((a: any, b: any) => (b.matchScore || 50) - (a.matchScore || 50))
+        .slice(0, 40);
+    }
+
     // STEP 3: Map snake_case AI fields to camelCase for frontend compatibility
     const normalized = scored.map(job => {
       const score = typeof job.match_score === 'number' ? job.match_score : (typeof job.matchScore === 'number' ? job.matchScore : 50);
@@ -219,8 +242,8 @@ export async function filterAndScoreJobs(resumeText: string, rawScrapedJobs: any
       }
     });
     
-    // Final sort and cap
+    // Final sort — lowered threshold from 40 to 25
     return normalized
-      .filter(job => job.matchScore >= 40)
+      .filter(job => job.matchScore >= 25)
       .sort((a, b) => b.matchScore - a.matchScore);
 }

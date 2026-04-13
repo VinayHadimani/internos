@@ -386,9 +386,9 @@ export default function InternshipsPage() {
             <div className="w-16 h-16 bg-[#0D0D0D] border border-[#1F1F1F] rounded-2xl flex items-center justify-center mx-auto mb-4">
               <Search className="h-8 w-8 text-[#777]" />
             </div>
-            <p className="text-[#777] text-lg mb-2">No internships found with 40%+ match.</p>
+            <p className="text-[#777] text-lg mb-2">No matching internships found.</p>
             <p className="text-[#555] text-sm">
-              Try uploading a more detailed resume with your skills and experience.
+              Try uploading a more detailed resume with your skills and experience, or check back soon for new listings.
             </p>
           </div>
         )}
