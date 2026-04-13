@@ -1,4 +1,10 @@
-You are an expert career coach and AI-powered internship matcher called InternOS. Your goal is to help students find the best internships by evaluating their resume against job listings. You operate in three phases:
+import { callAI } from '@/lib/rotating-ai';
+
+// This runs AFTER ScraperOS fetches jobs
+// BEFORE InternOS displays them
+
+// Directly embedding system prompt to avoid FS read errors in Next.js Serverless environments
+const SYSTEM_PROMPT = `You are an expert career coach and AI-powered internship matcher called InternOS. Your goal is to help students find the best internships by evaluating their resume against job listings. You operate in three phases:
 
 ═══════════════════════════════════════════════
 PHASE 0: DOMAIN DETECTION (Run BEFORE Phase 1)
@@ -104,3 +110,117 @@ Phase 2: Job Listing Evaluation
 - Note "red_flags" (e.g., required experience far exceeding student's, location mismatch if not desired).
 - Discard listings that have hard filters (e.g., 7+ years experience for a 1st-year student).
 - Return an array of scored job objects. Each object must contain: title, company, location, match_score, apply_priority, why_apply, missing_skills, red_flags.
+`;
+
+async function matchJobsToResume(resumeText: string, jobListings: any[]) {
+    const userMessage = `
+  ## STUDENT RESUME
+  ${resumeText}
+  
+  ## JOB LISTINGS TO EVALUATE
+  ${jobListings.map((job, i) => `
+  --- LISTING ${i + 1} ---
+  Title: ${job.title}
+  Company: ${job.company}
+  Location: ${job.location}
+  Description: ${job.description}
+  `).join("\n")}
+  
+  Run Phase 1 first to extract student profile.
+  Then run Phase 2 to score all listings.
+  Return ONLY valid JSON array of matched results in the format: { "matched_jobs": [{...}] }.
+  Discard any listing that fails hard filters.
+  `;
+  
+    try {
+      const response = await callAI(SYSTEM_PROMPT, userMessage, {
+        model: "llama-3.3-70b-versatile",
+        temperature: 0.1,
+        response_format: { type: "json_object" }
+      });
+  
+      let raw = response.content || "{}";
+      const clean = raw.replace(/\`\`\`json/g, "").replace(/\`\`\`/g, "").trim();
+      const parsed = JSON.parse(clean);
+      return parsed.matched_jobs ? parsed : { matched_jobs: Array.isArray(parsed) ? parsed : [] };
+    } catch (err) {
+      console.error("AI Matching Error:", err);
+      return { matched_jobs: [] };
+    }
+}
+
+async function matchInBatches(resumeText: string, allListings: any[], batchSize = 10) {
+    const results = [];
+  
+    // Split listings into chunks of 10
+    // (avoids hitting token limits)
+    for (let i = 0; i < allListings.length; i += batchSize) {
+      const batch = allListings.slice(i, i + batchSize);
+      
+      console.log(`Processing batch ${Math.floor(i/batchSize) + 1}...`);
+      
+      const batchResult = await matchJobsToResume(resumeText, batch);
+      
+      if (batchResult.matched_jobs) {
+        results.push(...batchResult.matched_jobs);
+      }
+  
+      // Rate limit buffer
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  
+    // Final sort across all batches
+    return results
+      .filter((job: any) => (job.match_score || job.matchScore) > 30)  // drop junk matches
+      .sort((a: any, b: any) => (b.match_score || b.matchScore) - (a.match_score || a.matchScore))
+      .slice(0, 30);  // top 30
+}
+
+export async function filterAndScoreJobs(resumeText: string, rawScrapedJobs: any[]) {
+    // STEP 1: Pre-filter before even calling AI
+    // This saves tokens and API calls
+    const preFiltered = rawScrapedJobs.filter(job => {
+      const title = String(job.title || '').toLowerCase();
+      const desc = String(job.description || '').toLowerCase();
+      
+      // Hard discard by title keywords
+      const seniorKeywords = [
+        'senior', 'sr.', 'staff', 'lead', 'manager',
+        'director', 'principal', 'head of', 'vp', 
+        'chief', 'architect'
+      ];
+      
+      const isSenior = seniorKeywords.some(k => title.includes(k));
+      if (isSenior) return false;
+      
+      // Hard discard by experience requirement in description
+      const expPattern = /(\d+)\+?\s*years?\s*(of\s*)?(experience|exp)/gi;
+      const matches = [...desc.matchAll(expPattern)];
+      const hasHighExp = matches.some(m => parseInt(m[1]) >= 2);
+      if (hasHighExp) return false;
+      
+      return true;
+    });
+  
+    console.log(`Pre-filter: ${rawScrapedJobs.length} → ${preFiltered.length} jobs`);
+  
+    // STEP 2: AI scoring on pre-filtered results only
+    const scored = await matchInBatches(resumeText, preFiltered);
+    
+    // STEP 3: Map snake_case AI fields to camelCase for frontend compatibility
+    const normalized = scored.map(job => {
+      const score = typeof job.match_score === 'number' ? job.match_score : (typeof job.matchScore === 'number' ? job.matchScore : 50);
+      return {
+        ...job,
+        matchScore: score,
+        matchLabel: score >= 80 ? 'Excellent Match' :
+                    score >= 60 ? 'Good Match' :
+                    score >= 40 ? 'Moderate Match' : 'Low Match'
+      }
+    });
+    
+    // Final sort and cap
+    return normalized
+      .filter(job => job.matchScore >= 40)
+      .sort((a, b) => b.matchScore - a.matchScore);
+}

@@ -1,6 +1,7 @@
 "use server";
 
 import { getDocumentProxy, extractText } from 'unpdf';
+import { callAI } from './rotating-ai';
 
 export interface StudentProfile {
   name: string;
@@ -184,3 +185,70 @@ export async function parseStudentProfile(resumeText: string): Promise<StudentPr
 
   return profile;
 }
+
+export interface ExtractedStudentProfile {
+  name: string;
+  school: string;
+  school_tier: 'tier1' | 'tier2' | 'tier3';
+  degrees: string[];
+  domains: string[];
+  skills: string[];
+  graduation_year: number;
+  location: string;
+  experience_level: string;
+}
+
+export async function extractStudentProfile(resumeText: string): Promise<ExtractedStudentProfile | null> {
+  const systemPrompt = `Extract student profile from resume. 
+Return ONLY valid JSON, no markdown.`;
+
+  const userPrompt = `
+Resume:
+${resumeText}
+
+Extract and return this JSON:
+{
+  "name": "...",
+  "school": "...",
+  "school_tier": "tier1/tier2/tier3",
+  "degrees": ["CS", "Finance", etc],
+  "domains": ["finance", "cs", "aiml", "fullstack", "consulting"],
+  "skills": ["python", "java", "react", etc],
+  "graduation_year": 2026,
+  "location": "US/India/UAE/other",
+  "experience_level": "student_fresher"
+}
+
+DOMAIN DETECTION RULES:
+- Wharton OR Finance OR Economics → include "finance"
+- CS OR Engineering OR Programming → include "cs"
+- Both Finance AND CS → include "finance+cs"
+- AIML OR Machine Learning OR LangChain → include "aiml"
+- React OR Vue OR Frontend → include "fullstack"
+- Consulting experience → include "consulting"
+
+SCHOOL TIER RULES:
+- Ivy League, MIT, Stanford, IIT → tier1
+- Strong state schools → tier2
+- Others → tier3`;
+
+  try {
+    const response = await callAI(systemPrompt, userPrompt, {
+        model: 'llama-3.3-70b-versatile',
+        temperature: 0.1,
+        response_format: { type: 'json_object' }
+    });
+
+    const raw = response.content || '{}';
+    let clean = raw;
+    if (raw.includes('```')) {
+      clean = raw.replace(/```json|```/g, '').trim();
+    }
+    
+    return JSON.parse(clean);
+  } catch (error) {
+    console.error('Failed to extract student profile:', error);
+    return null;
+  }
+}
+

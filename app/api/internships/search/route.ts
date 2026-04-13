@@ -1,126 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { aggregateJobs, type JobResult } from '@/lib/aggregator';
+import { getRelevantJobs } from '@/lib/scraperOS-internship-sources';
 import { filterAndScoreJobs } from '@/job-filter-pipeline';
-
-/** Build 2–4 aggregator queries from profile so results change when resume/skills change. */
-function buildSearchQueries(
-  skills: unknown[],
-  preferredRoles: unknown[],
-  fallbackQuery: string
-): string[] {
-  const sk = [...new Set(
-    (skills || [])
-      .map((s) => String(s).trim())
-      .filter((s) => s.length > 0)
-  )];
-  const roles = [...new Set(
-    (preferredRoles || [])
-      .map((r) => String(r).trim())
-      .filter((r) => r.length > 0)
-  )];
-
-  const out: string[] = [];
-
-  for (const r of roles.slice(0, 2)) {
-    out.push(`${r} internship`);
-  }
-  for (const s of sk.slice(0, 3)) {
-    out.push(`${s} internship`);
-  }
-
-  if (out.length === 0) {
-    out.push(`${fallbackQuery} internship`, `${fallbackQuery} job developer`);
-  } else {
-    const breadth = sk[0] || roles[0] || fallbackQuery;
-    out.push(`${breadth} developer job`);
-  }
-
-  return [...new Set(out.map((q) => q.replace(/\s+/g, ' ').trim()))].slice(0, 4);
-}
+import { extractStudentProfile, ExtractedStudentProfile } from '@/lib/resume-parser';
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     
-    // Fallback search parameters
-    const { 
-      query = 'software developer', 
-      location: bodyLocation = '', 
-      skills = [], 
-      experience = 'fresher',
-      preferredRoles = [],
-    } = body;
+    // Assume resumeText is passed in the request body
+    const resumeText = body.resumeText;
     
-    const userLocation = req.headers.get('x-user-location') || req.nextUrl.searchParams.get('location') || bodyLocation || 'India';
-    
-    console.log('=== MATCH DEBUG ===');
-    console.log('User Skills:', skills);
-    console.log('Experience:', experience);
-    console.log('Preferred Roles:', preferredRoles);
-    console.log('User Location:', userLocation);
-    
-    const searchQueries = buildSearchQueries(skills, preferredRoles, query);
-    console.log('Search queries from profile:', searchQueries);
-
-    const allJobsMap = new Map<string, JobResult>();
-    for (const q of searchQueries) {
-      try {
-        const batch = await aggregateJobs(q, userLocation);
-        for (const job of batch) {
-          const key = `${job.title}-${job.company}`.toLowerCase();
-          if (!allJobsMap.has(key)) {
-            allJobsMap.set(key, job);
-          }
-        }
-      } catch (e) {
-        console.error(`aggregateJobs failed for "${q}":`, e);
-      }
+    if (!resumeText || resumeText.length < 50) {
+      return NextResponse.json(
+        { success: false, error: 'Valid resume text is required for AI matching.' },
+        { status: 400 }
+      );
     }
 
-    const rawScrapedJobs: JobResult[] = Array.from(allJobsMap.values());
-    console.log(`Total unique jobs/internships found: ${rawScrapedJobs.length}`);
+    console.log('=== Step 1: Parsing Resume into Profile ===');
+    const studentProfile = await extractStudentProfile(resumeText);
+    
+    if (!studentProfile) {
+      throw new Error('Failed to extract student profile from the resume.');
+    }
 
-    // Assume resumeText is passed in the request body
-    const resumeText = body.resumeText; 
+    console.log('Detected domains:', studentProfile.domains);
+    console.log('School tier:', studentProfile.school_tier);
+    console.log('Extracted Skills:', studentProfile.skills);
+
+    console.log('=== Step 2: Fetching Jobs from Target Sources ===');
+    const rawJobs = await getRelevantJobs(studentProfile);
+    console.log(`Found ${rawJobs.length} raw jobs from domain-specific sources`);
 
     // Run original keyword scoring first for base match percentages
-    // This is used when AI is not running or before AI results come back
-    function calculateBaseMatchScore(job: any, skills: unknown[]) {
+    function calculateBaseMatchScore(job: any, skills: string[]) {
       const jobText = `${job.title} ${job.description || ''}`.toLowerCase();
       let matchedSkills = 0;
       
-      for (const skill of skills as string[]) {
+      const safeSkills = Array.isArray(skills) ? skills : [];
+      for (const skill of safeSkills) {
         if (jobText.includes(skill.toLowerCase())) {
           matchedSkills++;
         }
       }
       
-      const skillScore = skills.length > 0 ? Math.round((matchedSkills / skills.length) * 100) : 50;
+      const skillScore = safeSkills.length > 0 ? Math.round((matchedSkills / safeSkills.length) * 100) : 50;
       return Math.max(30, skillScore);
     }
 
-    // Always add matchScore field for frontend
-    const normalizedJobs = rawScrapedJobs.map(job => ({
+    const normalizedJobs = rawJobs.map((job: any) => ({
       ...job,
-      // @ts-ignore
-      matchScore: (job as any).matchScore || calculateBaseMatchScore(job, skills),
-      // @ts-ignore
-      matchLabel: (job as any).matchLabel || 'Moderate Match'
+      matchScore: job.matchScore || calculateBaseMatchScore(job, studentProfile.skills),
+      matchLabel: job.matchLabel || 'Moderate Match'
     }));
 
-    // Fallback if AI pipeline fails
+    console.log('=== Step 3: AI Filtering and Scoring ===');
     let filteredJobs;
     try {
-      // Only run AI filter if we actually have resume text
-      if (resumeText && resumeText.length > 100) {
-        filteredJobs = await filterAndScoreJobs(resumeText, normalizedJobs);
-      } else {
-        console.log('No resume text available, skipping AI scoring');
-        filteredJobs = normalizedJobs;
-      }
+      filteredJobs = await filterAndScoreJobs(resumeText, normalizedJobs);
     } catch (aiError) {
-      console.error('AI filter failed, falling back to results:', aiError);
-      filteredJobs = normalizedJobs;
+      console.error('AI filter failed, falling back to base scores:', aiError);
+      
+      filteredJobs = normalizedJobs
+        .filter((job: any) => job.matchScore >= 40)
+        .sort((a: any, b: any) => b.matchScore - a.matchScore)
+        .slice(0, 30);
     }
 
     console.log(`Returning ${filteredJobs.length} FILTERED jobs`);
@@ -128,6 +72,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       total: filteredJobs.length,
+      student_profile: studentProfile,
       jobs: filteredJobs,
       count: filteredJobs.length
     });
