@@ -1,4 +1,4 @@
-import { callAI } from '@/lib/rotating-ai'
+// AI call removed — parseJobQuery no longer needs it (search route handles AI)
 import * as cheerio from 'cheerio'
 import { normalizeSalary, type SalaryInfo } from '@/lib/utils/salary'
 
@@ -135,49 +135,37 @@ export interface ParsedQuery {
   location: string
 }
 
-// ─── Query Parser ────────────────────────────────────────────
+// ─── Query Parser (NO AI — just string parsing) ─────────────
+// The search route already uses AI to generate the right queries.
+// This just splits them into keywords for the fetch functions.
 export async function parseJobQuery(query: string): Promise<ParsedQuery> {
-  const response = await callAI(
-    `You are a job search assistant. Extract keywords, job_type (internship/full-time/contract/part-time), and location from the user query. Return ONLY valid JSON.
-
-Example output:
-{
-  "keywords": ["ai", "machine learning", "python"],
-  "job_type": "internship",
-  "location": "remote"
-}`,
-    query,
-    {
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0,
-      max_tokens: 300,
-      response_format: { type: 'json_object' }
-    }
-  );
-
-  let raw = response.content || '{}'
-  raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim()
-
-  try {
-    const parsed = JSON.parse(raw)
-    let kws = Array.isArray(parsed.keywords) ? parsed.keywords : []
-    if (kws.length === 0) kws = query ? query.split(/\s+/).filter(w => w.length > 2) : []
-    if (kws.length === 0) kws = ["developer", "software", "engineer", "internship"]
-    return {
-      keywords: kws,
-      job_type: parsed.job_type || '',
-      location: parsed.location || '',
-    }
-  } catch {
-    // Fallback: treat entire query as keywords
-    let kws = query ? query.split(/\s+/).filter(w => w.length > 2) : []
-    if (kws.length === 0) kws = ["developer", "software", "engineer", "internship"]
-    return {
-      keywords: kws,
-      job_type: '',
-      location: '',
-    }
+  // Detect job type from query
+  let job_type = ''
+  const lower = query.toLowerCase()
+  if (lower.includes('internship') || lower.includes('intern')) job_type = 'internship'
+  else if (lower.includes('full-time') || lower.includes('full time')) job_type = 'full-time'
+  else if (lower.includes('part-time') || lower.includes('part time')) job_type = 'part-time'
+  else if (lower.includes('contract')) job_type = 'contract'
+  
+  // Detect location
+  let location = ''
+  const locationPatterns = ['remote', 'india', 'us', 'usa', 'uk', 'germany', 'europe']
+  for (const loc of locationPatterns) {
+    if (lower.includes(loc)) { location = loc; break }
   }
+  
+  // Split query into keywords, preserving multi-word terms
+  const keywords = query
+    .split(/\s+/)
+    .filter(w => w.length > 1)
+    .filter(w => !['the', 'and', 'for', 'a', 'an', 'in', 'at', 'of', 'to', 'or'].includes(w.toLowerCase()))
+  
+  if (keywords.length === 0) {
+    // Use the full query as one keyword
+    return { keywords: [query || 'internship'], job_type, location }
+  }
+  
+  return { keywords, job_type, location }
 }
 
 /**
@@ -452,6 +440,26 @@ const INTERN_SHALA_PROFILES: Record<string, string> = {
   'finance': 'finance',
   'hr': 'human-resources',
   'business': 'business-analytics',
+  // Business / Consulting / Finance profiles
+  'consulting': 'management',
+  'management': 'management',
+  'strategy': 'management',
+  'analyst': 'business-analytics',
+  'analytics': 'business-analytics',
+  'accounting': 'accounting',
+  'audit': 'accounting',
+  'operations': 'operations',
+  'supply chain': 'operations',
+  'logistics': 'operations',
+  'sales': 'sales',
+  'legal': 'law',
+  'law': 'law',
+  'research': 'research',
+  'market research': 'market-research',
+  'economics': 'economics',
+  'investment': 'finance',
+  'banking': 'finance',
+  'product': 'product-management',
 }
 
 export async function fetchInternshala(keywords: string[]): Promise<JobResult[]> {
@@ -663,25 +671,9 @@ export async function fetchWeWorkRemotely(keywords: string[]): Promise<JobResult
     console.error(`[${source}] Filtered down to ${filtered.length} items`)
 
     // Fallback: if no keyword matches, return first 20 jobs
-    if (filtered.length === 0 && allJobs.length > 0) {
-      console.error(`[${source}] No keyword matches, returning first 20 jobs as fallback`)
-      return allJobs.slice(0, 20).map((job: Record<string, unknown>) => {
-        const rawSalary = String(job.salary || 'Not specified')
-        const rawDescription = String(job.description || '')
-        const jobUrl = String(job.url || '')
-        return {
-          title: String(job.title || ''),
-          company: String(job.company || ''),
-          location: 'Remote',
-          salary: rawSalary,
-          salaryObj: normalizeSalary(rawSalary),
-          url: jobUrl.startsWith('http') ? jobUrl : `https://weworkremotely.com${jobUrl}`,
-          source: 'WeWorkRemotely',
-          type: 'Full-time',
-          description: sanitizeDescription(rawDescription),
-          postedAt: normalizeDate(job.date || job.published_at || job.created_at),
-        }
-      })
+    if (filtered.length === 0) {
+      console.error(`[${source}] No keyword matches, returning empty (no random fallback).`)
+      return []
     }
 
     return filtered.map((job: Record<string, unknown>) => {
@@ -738,24 +730,9 @@ export async function fetchArbeitnow(keywords: string[]): Promise<JobResult[]> {
       return keywordSet.some(k => title.includes(k) || desc.includes(k))
     })
     console.error(`[${source}] Results after keyword filter: ${filtered.length}`)
-    if (filtered.length === 0 && jobs.length > 0) {
-      console.error(`[${source}] No matches for keywords: ${keywords.join(', ')}. Returning first 20 jobs as fallback.`)
-      return jobs.slice(0, 20).map((job: Record<string, unknown>) => {
-        const rawSalary = String(job.salary || 'Not specified')
-        const rawDescription = String(job.description || '')
-        return {
-          title: String(job.title || ''),
-          company: String(job.company_name || job.company || ''),
-          location: String(job.location || 'Remote'),
-          salary: rawSalary,
-          salaryObj: normalizeSalary(rawSalary),
-          url: String(job.url || ''),
-          source: 'Arbeitnow',
-          type: String(job.job_type || 'Full-time'),
-          description: sanitizeDescription(rawDescription),
-          postedAt: normalizeDate(job.created_at || job.created || job.published_at),
-        }
-      })
+    if (filtered.length === 0) {
+      console.error(`[${source}] No matches for keywords: ${keywords.join(', ')}. Returning empty (no random fallback).`)
+      return []
     }
 
     return filtered.map((job: Record<string, unknown>) => {
