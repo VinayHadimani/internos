@@ -105,10 +105,10 @@ export default function InternshipsPage() {
       const data = await res.json();
 
       if (data.success) {
-        // No client-side 40% filter, show all jobs
         const filteredJobs = data.jobs || data.data || [];
         setJobs(filteredJobs);
-        setSkills(userSkills || []);
+        // Use server-detected skills for display (more accurate than localStorage)
+        setSkills(data.detected_skills || userSkills || []);
       } else {
         setError(data.error || 'Failed to search jobs');
       }
