@@ -53,7 +53,8 @@ export default function InternshipsPage() {
           location: userLocation,
           skills: userSkills,
           experience: userExperience,
-          preferredRoles: userRoles
+          preferredRoles: userRoles,
+          resumeText: localStorage.getItem('resumeText') || ''
         })
       });
       

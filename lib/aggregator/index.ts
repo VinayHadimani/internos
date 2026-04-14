@@ -583,23 +583,7 @@ export async function fetchRemoteOK(keywords: string[]): Promise<JobResult[]> {
 
     // Fallback: if strict filtering returns 0 but we have jobs, return first 20
     if (filtered.length === 0 && jobs.length > 0) {
-      console.error(`[${source}] No keyword matches, returning first 20 jobs as fallback`)
-      return jobs.slice(0, 20).map((job: Record<string, unknown>) => {
-        const rawSalary = String(job.salary || '')
-        const rawDescription = String(job.description || '')
-        return {
-          title: String(job.position || ''),
-          company: String(job.company || ''),
-          location: String(job.location || ''),
-          salary: rawSalary,
-          salaryObj: normalizeSalary(rawSalary),
-          url: job.url ? (String(job.url).startsWith('http') ? String(job.url) : `https://remoteok.com${job.url}`) : '',
-          source: 'RemoteOK',
-          type: String(job.job_type || ''),
-          description: sanitizeDescription(rawDescription),
-          postedAt: normalizeDate(job.date || job.epoch),
-        }
-      })
+      return []
     }
 
     return filtered.map((job: Record<string, unknown>) => {
