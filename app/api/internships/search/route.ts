@@ -392,6 +392,7 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Search] Final profile — Industry: ${profile.industry}`);
     console.log(`[Search] Final skills (${profile.skills.length}): ${(profile.skills||[]).slice(0, 10).join(', ')}`);
+    console.log(`[Search] Final roles (${profile.roles.length}): ${(profile.roles||[]).join(', ')}`);
 
     // ────────────────────────────────────────────
     // STEP 2: Build targeted queries from AI profile
@@ -456,13 +457,13 @@ export async function POST(req: NextRequest) {
 
     // Location filter with minimum score floor
     const locationFiltered = scoredJobs.filter(job => {
-      if (job.matchScore < 5) return false;
+      if (job.matchScore < 3) return false;
       
       const jobLoc = (job.location || '').toLowerCase();
       const userLoc = (userLocation || 'india').toLowerCase();
       
       if (jobLoc.includes('remote') || jobLoc.includes('anywhere') || jobLoc.includes('wfh')) {
-        return job.matchScore >= 20;
+        return job.matchScore >= 8;
       }
       if (jobLoc.includes(userLoc)) return true;
       if (userLoc.includes('india') && (
