@@ -39,7 +39,15 @@ STRICT RULES:
 3. VOICE: Past tense for completed roles and projects; present tense only for a clearly current role. No apology or hedge paragraphs ("although I don't have…", "I am eager to learn…").
 4. OUTPUT: Plain English text only—no markdown (#, **, __, backticks). No PDF syntax (obj, stream, xref). No recruiter screening phrases, tracking tokens, or instructions copied from the job posting.
 5. STRUCTURE: Keep contact info, education, skills, and experience or projects. Omit empty sections; do not add placeholder or generic filler.
-6. PRIVACY: Do not add third-party personal data, secrets, API keys, or long encoded strings.`;
+6. PRIVACY: Do not add third-party personal data, secrets, API keys, or long encoded strings.
+7. STRUCTURE HEADERS: Use these EXACT section headers in ALL CAPS:
+   - SUMMARY (or PROFESSIONAL SUMMARY)
+   - EXPERIENCE (or WORK EXPERIENCE)  
+   - EDUCATION
+   - SKILLS
+   - PROJECTS (if applicable)
+   - CERTIFICATIONS (if applicable)
+   Each header should be on its own line, followed by content on the next line.`;
 
     const userPrompt = `RESUME DATA:\n${resumeForModel}\n\nJOB DETAILS:\n${cleanJob}\n\nRewrite my resume for this job. Return only human-readable text.`;
 
@@ -88,10 +96,26 @@ STRICT RULES:
 
     console.log(`[Tailor API] Success via ${successProvider}! Final output length: ${cleanContent.length}`);
 
+    // Calculate actual ATS score
+    const jobKeywords = cleanJob
+      .toLowerCase()
+      .split(/[\s,;|(){}\[\]]+/)
+      .filter(w => w.length > 4)
+      .filter((w, i, arr) => arr.indexOf(w) === i); // dedupe
+
+    const tailoredLower = cleanContent.toLowerCase();
+    const matchedKeywords = jobKeywords.filter(kw => tailoredLower.includes(kw));
+    const atsScore = jobKeywords.length > 0
+      ? Math.min(99, Math.round((matchedKeywords.length / jobKeywords.length) * 100))
+      : 85;
+
+    console.log(\`[Tailor API] ATS Score: \${atsScore}% (\${matchedKeywords.length}/\${jobKeywords.length} keywords matched)\`);
+
     return Response.json({
       success: true,
       tailoredResume: cleanContent,
-      atsScore: 88,
+      atsScore,
+      keywordsMatched: matchedKeywords.slice(0, 20),
       provider: successProvider
     }, {
       headers: { 'Content-Type': 'application/json; charset=utf-8' }

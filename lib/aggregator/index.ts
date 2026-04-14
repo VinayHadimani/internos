@@ -586,7 +586,13 @@ export async function fetchRemoteOK(keywords: string[]): Promise<JobResult[]> {
       const tags = String(job.tags || '').toLowerCase()
       const location = String(job.location || '').toLowerCase()
       const allText = `${title} ${desc} ${company} ${tags} ${location}`
-      return keywordSet.some(k => allText.includes(k))
+      return keywordSet.some(k => {
+        if (k.length <= 2) {
+          // Single/double char keywords must be whole-word matched
+          return new RegExp(`\\b${k}\\b`, 'i').test(title) || new RegExp(`\\b${k}\\b`, 'i').test(tags);
+        }
+        return allText.includes(k);
+      });
     })
     console.error(`[${source}] Filtered down to ${filtered.length} items`)
 
@@ -659,7 +665,12 @@ export async function fetchWeWorkRemotely(keywords: string[]): Promise<JobResult
       const desc = String(job.description || '').toLowerCase()
       const company = String(job.company || '').toLowerCase()
       const allText = `${title} ${desc} ${company}`
-      return keywordSet.some(k => allText.includes(k))
+      return keywordSet.some(k => {
+        if (k.length <= 2) {
+          return new RegExp(`\\b${k}\\b`, 'i').test(title);
+        }
+        return allText.includes(k);
+      });
     })
     console.error(`[${source}] Filtered down to ${filtered.length} items`)
 
@@ -720,7 +731,12 @@ export async function fetchArbeitnow(keywords: string[]): Promise<JobResult[]> {
     const filtered = jobs.filter((job: Record<string, unknown>) => {
       const title = String(job.title || '').toLowerCase()
       const desc = String(job.description || '').toLowerCase()
-      return keywordSet.some(k => title.includes(k) || desc.includes(k))
+      return keywordSet.some(k => {
+        if (k.length <= 2) {
+          return new RegExp(`\\b${k}\\b`, 'i').test(title);
+        }
+        return title.includes(k) || desc.includes(k);
+      });
     })
     console.error(`[${source}] Results after keyword filter: ${filtered.length}`)
     if (filtered.length === 0) {

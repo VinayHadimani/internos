@@ -71,9 +71,23 @@ export default function InternshipsPage() {
         }
         const extractData = await extractRes.json();
         text = extractData.text || '';
-      } else {
-        // For .txt, .doc, .docx — use file.text()
+      } else if (file.name.endsWith('.txt')) {
         text = await file.text();
+      } else {
+        // .doc and .docx are binary — send to server for extraction
+        const formData = new FormData();
+        formData.append('file', file);
+        const extractRes = await fetch('/api/extract-resume', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!extractRes.ok) {
+          setError('Failed to extract text from this file format. Please use .txt or .pdf.');
+          setLoading(false);
+          return;
+        }
+        const extractData = await extractRes.json();
+        text = extractData.text || '';
       }
       
       if (!text || text.length < 50) {
@@ -111,7 +125,7 @@ export default function InternshipsPage() {
 
       const primarySkill =
         (Array.isArray(userSkills) && userSkills.length > 0 && String(userSkills[0])) ||
-        'software developer';
+        'internship';
 
       const res = await fetch(`/api/internships/search`, {
         method: 'POST',

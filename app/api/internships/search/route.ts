@@ -242,7 +242,13 @@ function scoreJob(job: any, profile: ResumeProfile): number {
   const normalizedSkills = userSkills.map(s => s.toLowerCase());
   const skillsMatched = normalizedSkills.filter(skill => {
     const skillWords = skill.split(/\s+/);
-    return skillWords.every(word => jobText.includes(word));
+    if (skillWords.length === 1) {
+      // Single-word skill: must appear as whole word
+      return new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(jobText);
+    }
+    // Multi-word skill: at least half the words must appear
+    const matchedWords = skillWords.filter(word => jobText.includes(word));
+    return matchedWords.length >= Math.ceil(skillWords.length / 2);
   });
   const skillScore = userSkills.length > 0
     ? (skillsMatched.length / normalizedSkills.length) * 50
@@ -254,7 +260,8 @@ function scoreJob(job: any, profile: ResumeProfile): number {
   const normalizedRoles = userRoles.map(r => r.toLowerCase());
   const rolesMatched = normalizedRoles.filter(role => {
     const roleWords = role.split(/\s+/);
-    return roleWords.every(word => jobTitle.includes(word) || jobText.includes(word));
+    const matchedWords = roleWords.filter(word => jobTitle.includes(word) || jobText.includes(word));
+    return matchedWords.length >= Math.ceil(roleWords.length / 2);
   });
   const roleScore = userRoles.length > 0
     ? (rolesMatched.length / normalizedRoles.length) * 30
@@ -278,7 +285,7 @@ function scoreJob(job: any, profile: ResumeProfile): number {
   // If NOTHING matched, score stays at 0 (no free points)
 
   // Senior penalties
-  const seniorKw = ['senior', 'sr.', 'lead', 'manager', 'director', 'vp', 'chief', 'staff', 'principal', 'architect'];
+  const seniorKw = ['senior', 'sr.', 'lead', 'director', 'vp', 'chief', 'staff', 'principal', 'architect'];
   if (seniorKw.some(k => jobTitle.includes(k))) score -= 25;
 
   // Industry penalty: if the job is clearly from a different industry
@@ -354,17 +361,23 @@ export async function POST(req: NextRequest) {
     // ────────────────────────────────────────────
     const searchQueries: string[] = [];
 
+    // Priority 1: Industry
     if (profile.industry && profile.industry !== 'general') {
       searchQueries.push(profile.industry.replace('_', ' '));
     }
+
+    // Priority 2: Top 2 roles
     if (profile.roles && profile.roles.length > 0) {
-      searchQueries.push(...profile.roles.slice(0, 1)); // Only top 1 role
-    }
-    if (profile.keywords && profile.keywords.length > 0) {
-      searchQueries.push(...profile.keywords.slice(0, 2)); // Only top 2 keywords
+      searchQueries.push(...profile.roles.slice(0, 2));
     }
 
-    const uniqueQueries = [...new Set(searchQueries)].slice(0, 3);
+    // Priority 3: Top 3 keywords
+    if (profile.keywords && profile.keywords.length > 0) {
+      searchQueries.push(...profile.keywords.slice(0, 3));
+    }
+
+    // Deduplicate and limit to 4
+    const uniqueQueries = [...new Set(searchQueries)].slice(0, 4);
     console.log(`[Search] Running ${uniqueQueries.length} additional queries: ${uniqueQueries.join(' | ')}`);
 
     // ────────────────────────────────────────────
@@ -412,7 +425,7 @@ export async function POST(req: NextRequest) {
       const userLoc = (userLocation || 'india').toLowerCase();
       
       if (jobLoc.includes('remote') || jobLoc.includes('anywhere') || jobLoc.includes('wfh')) {
-        return job.matchScore >= 15;
+        return job.matchScore >= 20;
       }
       if (jobLoc.includes(userLoc)) return true;
       if (userLoc.includes('india') && (

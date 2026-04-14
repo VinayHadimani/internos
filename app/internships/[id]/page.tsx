@@ -17,6 +17,8 @@ interface InternshipDetail {
   requiredSkills: string[];
   applyUrl: string;
   deadline: string;
+  matchScore?: number;
+  matchLabel?: string;
 }
 
 export default function InternshipDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,7 +28,6 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
   const [loading, setLoading] = useState(true);
   const [translating, setTranslating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const matchScore = Math.floor(Math.random() * 25) + 75;
   const [resumeText, setResumeText] = useState<string | null>(null);
   const [isTailoring, setIsTailoring] = useState(false);
   const [tailoredResume, setTailoredResume] = useState<string | null>(null);
@@ -138,6 +139,8 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
           requiredSkills: item.skills || item.requiredSkills || [],
           applyUrl: item.url || item.applyUrl || '',
           deadline: item.deadline || 'Apply ASAP',
+          matchScore: item.matchScore || 0,
+          matchLabel: item.matchLabel || '',
           needsTranslation: item.needsTranslation || false,
           originalDescription: item.description,
           originalTitle: item.title,
@@ -300,8 +303,8 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
               </div>
             </div>
             <div className="text-right">
-              <p className="text-4xl font-bold text-[#3B82F6]">{matchScore}%</p>
-              <p className="text-[#777] text-sm">{matchScore >= 80 ? 'Excellent match' : matchScore >= 60 ? 'Good match' : 'Fair match'}</p>
+              <p className="text-4xl font-bold text-[#3B82F6]">{internship.matchScore || 0}%</p>
+              <p className="text-[#777] text-sm">{(internship.matchScore || 0) >= 80 ? 'Excellent match' : (internship.matchScore || 0) >= 60 ? 'Good match' : (internship.matchScore || 0) >= 35 ? 'Moderate match' : 'Low match'}</p>
             </div>
           </div>
         </div>

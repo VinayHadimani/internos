@@ -99,7 +99,14 @@ function TailorContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           resume: resumeText,
-          jobDescription: `${job.title}\n${job.company || ''}\n${job.description || ''}`
+          jobDescription: `Title: ${job.title}
+Company: ${job.company || ''}
+Location: ${job.location || ''}
+${job.skills?.length ? 'Required Skills: ' + job.skills.join(', ') : ''}
+${job.url ? 'Apply URL: ' + job.url : ''}
+
+JOB DESCRIPTION:
+${job.description || ''}`
         })
       });
       

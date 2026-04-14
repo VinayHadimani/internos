@@ -65,6 +65,7 @@ export default function DashboardPage() {
       console.log('userExperience:', localStorage.getItem('userExperience'));
     } catch (error) {
       console.error('Upload failed:', error);
+      setError(error instanceof Error ? error.message : 'Failed to process resume. Please try a .txt file.');
     } finally {
       setUploading(false);
     }

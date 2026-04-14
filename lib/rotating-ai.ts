@@ -190,22 +190,17 @@ export async function callAI(
 
       markKeyUsed(key);
       try {
-        console.log(`[Rotating-AI] Trying ${providerName} (Attempt ${attempt + 1})`);
+        console.log(`[Rotating-AI] Trying ${providerName} (Attempt ${attempt + 1}), model: ${options.model || 'default'}`);
         const result = await provider.call(key, systemMessage, userMessage, options);
         
-        console.log(`[Rotating-AI] ${providerName} returned ${result ? result.length : 0} chars`);
-        
-        if (result && result.length > 0) {
-          console.log(`[Rotating-AI] SUCCESS from ${providerName}, first 200 chars: ${result.substring(0, 200)}`);
-          return {
-            success: true,
-            content: result,
-            provider: providerName,
-            model: options.model
-          };
-        } else {
-          console.warn(`[Rotating-AI] ${providerName} returned EMPTY result (no error thrown)`);
+        if (!result || result.length === 0) {
+          console.warn(`[Rotating-AI] ${providerName} returned empty string (Attempt ${attempt + 1})`);
+          continue;
         }
+        
+        console.log(`[Rotating-AI] ${providerName} SUCCESS — ${result.length} chars, first 100: ${result.substring(0, 100)}`);
+        return { success: true, content: result, provider: providerName, model: options.model };
+
       } catch (error: any) {
         const errMsg = error.message || String(error);
         console.error(`[Rotating-AI] ${providerName} Error (Attempt ${attempt + 1}):`, errMsg);
