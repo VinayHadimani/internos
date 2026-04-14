@@ -312,17 +312,31 @@ export async function POST(req: NextRequest) {
     console.log('=== INTERNOS SEARCH ===');
 
     // ────────────────────────────────────────────
-    // Step 1: AI-powered resume analysis
-    // Uses Gemini (primary) → Groq (fallback)
+    // STEP 1: Run AI extraction AND first batch of jobs IN PARALLEL
+    // This saves 3-5 seconds by not waiting for AI before fetching
     // ────────────────────────────────────────────
-    let profile: ResumeProfile | null = null;
+    
+    // Start AI extraction in background
+    const aiPromise = (async () => {
+      if (resumeText && resumeText.length > 50) {
+        return await aiExtractProfile(resumeText);
+      }
+      return null;
+    })();
 
-    if (resumeText && resumeText.length > 50) {
-      // Try AI extraction (Gemini/Groq)
-      profile = await aiExtractProfile(resumeText);
-    }
+    // Also start fetching jobs with a basic query in parallel
+    // Use client skills/roles if available for a better initial query
+    const initialQuery = (Array.isArray(clientSkills) && clientSkills.length > 0)
+      ? String(clientSkills[0])
+      : query;
+    const initialJobsPromise = aggregateJobs(initialQuery, userLocation);
 
-    // If AI failed, use keyword fallback
+    // Wait for BOTH to complete
+    const [aiProfile, initialJobs] = await Promise.all([aiPromise, initialJobsPromise]);
+
+    let profile: ResumeProfile | null = aiProfile;
+
+    // If AI failed, use fallback
     if (!profile) {
       console.log('[Search] AI unavailable, using keyword fallback');
       profile = fallbackExtractProfile(
@@ -334,89 +348,79 @@ export async function POST(req: NextRequest) {
 
     console.log(`[Search] Final profile — Industry: ${profile.industry}`);
     console.log(`[Search] Final skills (${profile.skills.length}): ${(profile.skills||[]).slice(0, 10).join(', ')}`);
-    console.log(`[Search] Search queries: ${(profile.keywords||[]).join(' | ')}`);
 
     // ────────────────────────────────────────────
-    // Step 2: Fetch jobs using AI-generated queries
+    // STEP 2: Build targeted queries from AI profile
     // ────────────────────────────────────────────
-    // Build SMART search queries — FEWER, more targeted to avoid timeout
     const searchQueries: string[] = [];
 
-    // Priority 1: Industry-specific term (single most important query)
     if (profile.industry && profile.industry !== 'general') {
       searchQueries.push(profile.industry.replace('_', ' '));
     }
-
-    // Priority 2: Top 2 roles ONLY
     if (profile.roles && profile.roles.length > 0) {
-      searchQueries.push(...profile.roles.slice(0, 2));
+      searchQueries.push(...profile.roles.slice(0, 1)); // Only top 1 role
     }
-
-    // Priority 3: Top 2 keywords ONLY  
     if (profile.keywords && profile.keywords.length > 0) {
-      searchQueries.push(...profile.keywords.slice(0, 2));
+      searchQueries.push(...profile.keywords.slice(0, 2)); // Only top 2 keywords
     }
 
-    // Deduplicate and limit to MAX 3 queries (down from 6)
-    // This reduces total time from 6×15s to 3×15s worst case
     const uniqueQueries = [...new Set(searchQueries)].slice(0, 3);
-    console.log(`[Search] Running ${uniqueQueries.length} targeted queries: ${uniqueQueries.join(' | ')}`);
+    console.log(`[Search] Running ${uniqueQueries.length} additional queries: ${uniqueQueries.join(' | ')}`);
 
+    // ────────────────────────────────────────────
+    // STEP 3: Fetch additional jobs for remaining queries (ALL IN PARALLEL)
+    // ────────────────────────────────────────────
+    const additionalPromises = uniqueQueries
+      .filter(q => q.toLowerCase() !== initialQuery.toLowerCase())
+      .map(q => aggregateJobs(q, userLocation));
+    
+    const additionalResults = await Promise.all(additionalPromises);
+
+    // ────────────────────────────────────────────
+    // STEP 4: Combine, deduplicate, score, filter
+    // ────────────────────────────────────────────
     const allJobsMap = new Map<string, JobResult>();
-    for (const q of uniqueQueries) {
-      try {
-        const batch = await aggregateJobs(q, userLocation);
-        for (const job of batch) {
-          const key = `${job.title}-${job.company}`.toLowerCase().replace(/\s+/g, '');
-          if (!allJobsMap.has(key)) {
-            allJobsMap.set(key, job);
-          }
-        }
-      } catch (e) {
-        console.error(`aggregateJobs failed for "${q}":`, e);
+
+    // Add initial jobs
+    for (const job of initialJobs) {
+      const key = `${job.title}-${job.company}`.toLowerCase().replace(/\s+/g, '');
+      if (!allJobsMap.has(key)) allJobsMap.set(key, job);
+    }
+
+    // Add additional jobs
+    for (const batch of additionalResults) {
+      for (const job of batch) {
+        const key = `${job.title}-${job.company}`.toLowerCase().replace(/\s+/g, '');
+        if (!allJobsMap.has(key)) allJobsMap.set(key, job);
       }
     }
 
     const rawJobs = Array.from(allJobsMap.values());
     console.log(`[Search] Total unique jobs fetched: ${rawJobs.length}`);
 
-    // ────────────────────────────────────────────
-    // Step 3: Score and rank against profile
-    // ────────────────────────────────────────────
+    // Score every job
     const scoredJobs = rawJobs.map(job => {
       const matchScore = scoreJob(job, profile!);
       return { ...job, matchScore, matchLabel: getMatchLabel(matchScore) };
     });
 
-    // ────────────────────────────────────────────
-    // Step 3.5: Filter by location relevance
-    // ────────────────────────────────────────────
+    // Location filter with minimum score floor
     const locationFiltered = scoredJobs.filter(job => {
-      // HARD FLOOR: No job below 5% match should ever be shown
       if (job.matchScore < 5) return false;
       
       const jobLoc = (job.location || '').toLowerCase();
       const userLoc = (userLocation || 'india').toLowerCase();
       
-      // Always keep remote jobs IF they have at least 15% match
       if (jobLoc.includes('remote') || jobLoc.includes('anywhere') || jobLoc.includes('wfh')) {
         return job.matchScore >= 15;
       }
-      
-      // Always keep jobs in user's preferred location
       if (jobLoc.includes(userLoc)) return true;
-      
-      // Keep India jobs for Indian users
       if (userLoc.includes('india') && (
-        jobLoc.includes('india') || 
-        jobLoc.includes('bangalore') || jobLoc.includes('bengaluru') ||
-        jobLoc.includes('mumbai') || jobLoc.includes('delhi') ||
-        jobLoc.includes('pune') || jobLoc.includes('chennai') ||
-        jobLoc.includes('hyderabad') || jobLoc.includes('noida') ||
+        jobLoc.includes('india') || jobLoc.includes('bangalore') || jobLoc.includes('bengaluru') ||
+        jobLoc.includes('mumbai') || jobLoc.includes('delhi') || jobLoc.includes('pune') ||
+        jobLoc.includes('chennai') || jobLoc.includes('hyderabad') || jobLoc.includes('noida') ||
         jobLoc.includes('gurgaon') || jobLoc.includes('kolkata')
       )) return true;
-      
-      // For non-remote international jobs: only keep if matchScore >= 50%
       return job.matchScore >= 50;
     });
 
