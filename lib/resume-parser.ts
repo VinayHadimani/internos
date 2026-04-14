@@ -47,7 +47,7 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
     // Join pages and sanitize
     const cleanText = text
       .join('\n')
-      .replace(/[^\x20-\x7E\n\r\t]/g, ' ') // Remove non-printable characters
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Only strip control characters, keep printable Unicode
       .replace(/\s+/g, ' ')               // Collapse whitespace
       .trim();
       
@@ -63,7 +63,7 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
  */
 export async function parseResumeText(text: string): Promise<string> {
   return text
-    .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
+    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }

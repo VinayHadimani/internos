@@ -26,10 +26,7 @@ interface ResumeProfile {
  */
 async function aiExtractProfile(resumeText: string): Promise<ResumeProfile | null> {
   try {
-    const prompt = `You are an expert career analyst. Analyze the following resume and extract a comprehensive profile. This could be from ANY industry — consulting, finance, engineering, marketing, design, law, healthcare, data science, operations, HR, or any other field.
-
-Resume:
-${resumeText.slice(0, 4000)}
+    const prompt = `You are an expert career analyst. Analyze the resume the user provides and extract a comprehensive profile. This could be from ANY industry.
 
 Return a JSON object with exactly these fields:
 {
