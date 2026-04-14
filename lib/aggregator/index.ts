@@ -462,7 +462,6 @@ const INTERN_SHALA_PROFILES: Record<string, string> = {
   'product': 'product-management',
   'financial modeling': 'finance',
   'valuation': 'finance',
-  'market research': 'market-research',
   'business strategy': 'management',
   'due diligence': 'finance',
   'business analysis': 'business-analytics',
