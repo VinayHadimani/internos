@@ -38,7 +38,9 @@ Return a JSON object with exactly these fields:
 }
 
 Rules:
-- Extract ALL relevant skills mentioned in the resume — technical skills, soft skills, tools, methodologies, frameworks, platforms, certifications
+- Extract ALL relevant skills mentioned in the resume — technical skills, tools, methodologies, frameworks, platforms, certifications
+- EXCLUDE generic soft skills that appear in every job: communication, teamwork, leadership, problem-solving, time management, organizational skills, attention to detail, interpersonal skills, adaptability, quick learner, hard worker, self-motivated
+- ONLY include SPECIFIC and DIFFERENTIATING skills: technical tools, domain knowledge, frameworks, methodologies, certifications
 - Roles should be job titles or functions relevant to the person's experience (e.g., "Business Analyst", "Marketing Intern", "Data Scientist", "Consultant", "Project Manager")
 - Keywords should be search-friendly terms that would find relevant job postings (e.g., "business development", "market research", "financial modeling", "UI/UX design", "supply chain")
 - Do NOT assume this is a software engineering resume. Read the resume carefully and extract what is ACTUALLY there
@@ -159,8 +161,9 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
   
   const skills = [...new Set([...found, ...clientSkills])].filter(Boolean);
   
-  // Detect domain — more comprehensive
+  // Detect domain — pick the one with the MOST keyword matches
   let domain = 'general';
+  let maxMatches = 0;
   const domainChecks: [string[], string][] = [
     [['embedded', 'arduino', 'raspberry', 'microcontroller', 'fpga', 'pcb', 'firmware', 'ocaml', 'verilog', 'vhdl', 'iot', 'rtos', 'stm32', 'esp32', 'hardware design', 'circuit', 'signal processing', 'robotics', 'control systems'], 'embedded_systems'],
     [['consulting', 'strategy', 'mckinsey', 'bain', 'bcg', 'deloitte', 'advisory', 'big four', 'case study'], 'consulting'],
@@ -178,9 +181,10 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
   ];
   
   for (const [keywords, domainName] of domainChecks) {
-    if (keywords.some(k => lower.includes(k))) {
+    const matchCount = keywords.filter(k => lower.includes(k)).length;
+    if (matchCount >= 2 && matchCount > maxMatches) {
+      maxMatches = matchCount;
       domain = domainName;
-      break;
     }
   }
   
@@ -232,74 +236,113 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
  * Score a job against the AI-extracted profile.
  */
 function scoreJob(job: any, profile: ResumeProfile): number {
-  let score = 0;
   const jobTitle = (job.title || '').toLowerCase();
   const jobDesc = (job.description || '').toLowerCase();
   const jobText = `${jobTitle} ${jobDesc}`;
-
-  // 50% — Skills match
-  const userSkills = profile.skills || [];
-  const normalizedSkills = userSkills.map(s => s.toLowerCase());
-  const skillsMatched = normalizedSkills.filter(skill => {
-    const skillWords = skill.split(/\s+/);
-    if (skillWords.length === 1) {
-      // Single-word skill: must appear as whole word
-      return new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(jobText);
-    }
-    // Multi-word skill: at least half the words must appear
-    const matchedWords = skillWords.filter(word => jobText.includes(word));
-    return matchedWords.length >= Math.ceil(skillWords.length / 2);
-  });
-  const skillScore = userSkills.length > 0
-    ? (skillsMatched.length / normalizedSkills.length) * 50
-    : 0;
-  score += skillScore;
-
-  // 30% — Role/title match
-  const userRoles = profile.roles || [];
-  const normalizedRoles = userRoles.map(r => r.toLowerCase());
-  const rolesMatched = normalizedRoles.filter(role => {
-    const roleWords = role.split(/\s+/);
-    const matchedWords = roleWords.filter(word => jobTitle.includes(word) || jobText.includes(word));
-    return matchedWords.length >= Math.ceil(roleWords.length / 2);
-  });
-  const roleScore = userRoles.length > 0
-    ? (rolesMatched.length / normalizedRoles.length) * 30
-    : 0;
-  score += roleScore;
-
-  // 20% — Experience level + role-type bonus (ONLY if some skills or roles matched)
-  const hasSomeMatch = skillsMatched.length > 0 || rolesMatched.length > 0;
   
-  if (hasSomeMatch) {
-    const expLevel = (profile.experience_level || '').toLowerCase();
-    if (expLevel && jobText.includes(expLevel)) {
-      score += 10;
-    }
-    if (jobTitle.includes('intern') || jobTitle.includes('entry') || jobTitle.includes('trainee') || jobTitle.includes('junior')) {
-      score += 10;
+  const userSkills = (profile.skills || []).map(s => s.toLowerCase());
+  const userRoles = (profile.roles || []).map(r => r.toLowerCase());
+  const userKeywords = (profile.keywords || []).map(k => k.toLowerCase());
+  
+  let score = 0;
+  let skillsMatched = 0;
+  let rolesMatched = 0;
+  
+  // ─── SKILL MATCHING (0-55 points) ───
+  for (const skill of userSkills) {
+    const skillWords = skill.split(/\s+/);
+    let matched = false;
+    
+    if (skillWords.length >= 2) {
+      if (jobText.includes(skill)) {
+        matched = true;
+        score += 8;
+        if (jobTitle.includes(skill)) {
+          score += 7;
+        }
+      }
     } else {
-      score += 5;  // Reduced from 10 — mid-level jobs get less
+      const wordBoundary = new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+      if (wordBoundary.test(jobText)) {
+        matched = true;
+        score += 6;
+        if (wordBoundary.test(jobTitle)) {
+          score += 5;
+        }
+      }
+    }
+    
+    if (matched) skillsMatched++;
+  }
+  
+  // ─── ROLE MATCHING (0-25 points) ───
+  for (const role of userRoles) {
+    const roleWords = role.split(/\s+/);
+    
+    if (roleWords.length >= 2) {
+      if (jobTitle.includes(role)) {
+        score += 20;
+        rolesMatched++;
+      } else if (jobText.includes(role)) {
+        score += 10;
+        rolesMatched++;
+      }
+    } else {
+      const wordBoundary = new RegExp(`\\b${role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+      if (wordBoundary.test(jobTitle)) {
+        score += 15;
+        rolesMatched++;
+      } else if (wordBoundary.test(jobText)) {
+        score += 5;
+        rolesMatched++;
+      }
     }
   }
-  // If NOTHING matched, score stays at 0 (no free points)
-
-  // Senior penalties
-  const seniorKw = ['senior', 'sr.', 'lead', 'director', 'vp', 'chief', 'staff', 'principal', 'architect'];
-  if (seniorKw.some(k => jobTitle.includes(k))) score -= 25;
-
-  // Industry penalty: if the job is clearly from a different industry
-  const techOnlyKw = ['software engineer', 'fullstack developer', 'frontend developer', 'backend developer', 'devops engineer', 'site reliability'];
-  if (profile.industry === 'consulting' && techOnlyKw.some(k => jobTitle.includes(k))) score -= 15;
-  if (profile.industry === 'finance' && techOnlyKw.some(k => jobTitle.includes(k))) score -= 15;
-
+  
+  // ─── KEYWORD MATCHING (0-10 points) ───
+  for (const kw of userKeywords) {
+    if (kw.length >= 2 && jobText.includes(kw)) {
+      score += 3;
+    }
+  }
+  
+  // ─── EXPERIENCE BONUS (0-10 points, ONLY if something matched) ───
+  const hasMatch = skillsMatched > 0 || rolesMatched > 0;
+  if (hasMatch) {
+    const expLevel = (profile.experience_level || '').toLowerCase();
+    if (expLevel && jobText.includes(expLevel)) {
+      score += 5;
+    }
+    if (jobTitle.includes('intern') || jobTitle.includes('entry') || 
+        jobTitle.includes('trainee') || jobTitle.includes('junior')) {
+      score += 5;
+    }
+  }
+  
+  // ─── SENIOR PENALTY ───
+  const seniorKw = ['senior', 'sr.', 'sr ', 'lead ', 'manager', 'director', 'vp', 'chief', 'staff', 'principal', 'architect'];
+  if (seniorKw.some(k => jobTitle.includes(k))) score -= 20;
+  
+  // ─── INDUSTRY MISMATCH PENALTY ───
+  const industry = (profile.industry || '').replace('_', ' ');
+  if (industry && industry !== 'general') {
+    const techRoles = ['software engineer', 'fullstack developer', 'frontend developer', 
+                       'backend developer', 'devops engineer', 'site reliability'];
+    const nonTechIndustries = ['consulting', 'finance', 'healthcare', 'legal', 'education'];
+    
+    if (nonTechIndustries.includes(industry) && techRoles.some(r => jobTitle.includes(r))) {
+      score -= 15;
+    }
+  }
+  
   return Math.max(0, Math.min(Math.round(score), 100));
 }
 
 function getMatchLabel(score: number): string {
-  if (score >= 75) return 'Excellent Match';
-  if (score >= 55) return 'Good Match';
-  if (score >= 35) return 'Moderate Match';
+  if (score >= 60) return 'Excellent Match';
+  if (score >= 40) return 'Strong Match';
+  if (score >= 20) return 'Good Match';
+  if (score >= 10) return 'Partial Match';
   return 'Low Match';
 }
 

@@ -292,22 +292,24 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
           </div>
         </div>
 
-        {/* Match score */}
-        <div className="bg-gradient-to-r from-[#3B82F6]/10 to-[#3B82F6]/5 border border-[#3B82F6]/20 rounded-xl p-6 mb-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Target size={24} className="text-[#3B82F6]" />
-              <div>
-                <p className="text-[#777] text-sm">Match Score</p>
-                <p className="text-white text-sm">Based on your profile and skills</p>
+        {/* Match score — only show if we have a real score from search */}
+        {(internship.matchScore || 0) > 0 && (
+          <div className="bg-gradient-to-r from-[#3B82F6]/10 to-[#3B82F6]/5 border border-[#3B82F6]/20 rounded-xl p-6 mb-8">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Target size={24} className="text-[#3B82F6]" />
+                <div>
+                  <p className="text-[#777] text-sm">Match Score</p>
+                  <p className="text-white text-sm">Based on your profile and skills</p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-4xl font-bold text-[#3B82F6]">{internship.matchScore || 0}%</p>
+                <p className="text-[#777] text-sm">{(internship.matchScore || 0) >= 60 ? 'Excellent match' : (internship.matchScore || 0) >= 40 ? 'Good match' : 'Fair match'}</p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-4xl font-bold text-[#3B82F6]">{internship.matchScore || 0}%</p>
-              <p className="text-[#777] text-sm">{(internship.matchScore || 0) >= 80 ? 'Excellent match' : (internship.matchScore || 0) >= 60 ? 'Good match' : (internship.matchScore || 0) >= 35 ? 'Moderate match' : 'Low match'}</p>
-            </div>
           </div>
-        </div>
+        )}
 
         {/* Job description */}
         <div className="mb-8">

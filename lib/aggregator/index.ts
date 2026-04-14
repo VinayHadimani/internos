@@ -460,6 +460,30 @@ const INTERN_SHALA_PROFILES: Record<string, string> = {
   'investment': 'finance',
   'banking': 'finance',
   'product': 'product-management',
+  'financial modeling': 'finance',
+  'valuation': 'finance',
+  'market research': 'market-research',
+  'business strategy': 'management',
+  'due diligence': 'finance',
+  'business analysis': 'business-analytics',
+  'stakeholder': 'management',
+  'competitive analysis': 'market-research',
+  'presentation': 'management',
+  'client engagement': 'management',
+  'equity research': 'finance',
+  'risk management': 'finance',
+  'compliance': 'finance',
+  'business development': 'business-development',
+  'project management': 'management',
+  'recruiting': 'human-resources',
+  'healthcare': 'healthcare',
+  'product management': 'product-management',
+  'ux': 'design',
+  'user research': 'design',
+  'graphic design': 'graphic-design',
+  'data analysis': 'business-analytics',
+  'statistical': 'data-science',
+  'regression': 'data-science',
 }
 
 export async function fetchInternshala(keywords: string[]): Promise<JobResult[]> {
@@ -577,22 +601,25 @@ export async function fetchRemoteOK(keywords: string[]): Promise<JobResult[]> {
     const jobs = Array.isArray(data) ? data.slice(1) : []
     console.error(`[${source}] Returned ${jobs.length} raw items`)
 
-    // Filter locally by keywords (broadened: check tags, location, description too)
+    // Filter locally by keywords — match multi-word keywords as phrases
     const keywordSet = keywords.map(k => k.toLowerCase())
     const filtered = jobs.filter((job: Record<string, unknown>) => {
       const title = String(job.position || '').toLowerCase()
       const desc = String(job.description || '').toLowerCase()
-      const company = String(job.company || '').toLowerCase()
-      const tags = String(job.tags || '').toLowerCase()
-      const location = String(job.location || '').toLowerCase()
-      const allText = `${title} ${desc} ${company} ${tags} ${location}`
+      const tags = Array.isArray(job.tags) 
+        ? job.tags.map((t: unknown) => String(t).toLowerCase()).join(' ')
+        : String(job.tags || '').toLowerCase()
+      const allText = `${title} ${desc} ${tags}`
+      
+      // At least one keyword must match
       return keywordSet.some(k => {
-        if (k.length <= 2) {
-          // Single/double char keywords must be whole-word matched
-          return new RegExp(`\\b${k}\\b`, 'i').test(title) || new RegExp(`\\b${k}\\b`, 'i').test(tags);
+        if (k.includes(' ')) {
+          // Multi-word keyword: must appear as phrase
+          return allText.includes(k)
         }
-        return allText.includes(k);
-      });
+        // Single-word keyword: use word boundary
+        return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(allText)
+      })
     })
     console.error(`[${source}] Filtered down to ${filtered.length} items`)
 
@@ -665,12 +692,13 @@ export async function fetchWeWorkRemotely(keywords: string[]): Promise<JobResult
       const desc = String(job.description || '').toLowerCase()
       const company = String(job.company || '').toLowerCase()
       const allText = `${title} ${desc} ${company}`
+      
       return keywordSet.some(k => {
-        if (k.length <= 2) {
-          return new RegExp(`\\b${k}\\b`, 'i').test(title);
+        if (k.includes(' ')) {
+          return allText.includes(k)
         }
-        return allText.includes(k);
-      });
+        return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(allText)
+      })
     })
     console.error(`[${source}] Filtered down to ${filtered.length} items`)
 
@@ -731,12 +759,14 @@ export async function fetchArbeitnow(keywords: string[]): Promise<JobResult[]> {
     const filtered = jobs.filter((job: Record<string, unknown>) => {
       const title = String(job.title || '').toLowerCase()
       const desc = String(job.description || '').toLowerCase()
+      const allText = `${title} ${desc}`
+      
       return keywordSet.some(k => {
-        if (k.length <= 2) {
-          return new RegExp(`\\b${k}\\b`, 'i').test(title);
+        if (k.includes(' ')) {
+          return allText.includes(k)
         }
-        return title.includes(k) || desc.includes(k);
-      });
+        return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(allText)
+      })
     })
     console.error(`[${source}] Results after keyword filter: ${filtered.length}`)
     if (filtered.length === 0) {

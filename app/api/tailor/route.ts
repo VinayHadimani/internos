@@ -96,26 +96,51 @@ STRICT RULES:
 
     console.log(`[Tailor API] Success via ${successProvider}! Final output length: ${cleanContent.length}`);
 
-    // Calculate actual ATS score
-    const jobKeywords = cleanJob
-      .toLowerCase()
-      .split(/[\s,;|(){}\[\]]+/)
-      .filter(w => w.length > 4)
-      .filter((w, i, arr) => arr.indexOf(w) === i); // dedupe
+    // Extract matched keywords from the tailored resume
+    // Compare skills found in tailored resume against job description requirements
+    const jobWords = new Set(
+      cleanJob.toLowerCase()
+        .split(/[\s,;.!?()\[\]{}\/\\|"'`~@#$%^&*+=<>:]+/)
+        .filter(w => w.length >= 3)
+    );
 
-    const tailoredLower = cleanContent.toLowerCase();
-    const matchedKeywords = jobKeywords.filter(kw => tailoredLower.includes(kw));
-    const atsScore = jobKeywords.length > 0
-      ? Math.min(99, Math.round((matchedKeywords.length / jobKeywords.length) * 100))
-      : 85;
+    const resumeWords = new Set(
+      cleanContent.toLowerCase()
+        .split(/[\s,;.!?()\[\]{}\/\\|"'`~@#$%^&*+=<>:]+/)
+        .filter(w => w.length >= 3)
+    );
 
-    console.log(`[Tailor API] ATS Score: ${atsScore}% (${matchedKeywords.length}/${jobKeywords.length} keywords matched)`);
+    // Find words that appear in BOTH the job description and the tailored resume
+    // These are the "matched keywords" that would pass ATS screening
+    const matchedKeywords = [...jobWords]
+      .filter(w => resumeWords.has(w))
+      .filter(w => {
+        // Filter out common stop words that match everything
+        const stopWords = new Set(['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 
+          'can', 'had', 'her', 'was', 'one', 'our', 'out', 'has', 'have', 'from', 'been',
+          'some', 'them', 'than', 'its', 'over', 'such', 'that', 'with', 'will', 'this',
+          'each', 'make', 'like', 'just', 'also', 'into', 'could', 'other', 'which',
+          'their', 'there', 'would', 'about', 'these', 'many', 'then', 'more', 'very',
+          'when', 'what', 'your', 'where', 'who', 'how', 'does', 'did', 'may', 'should',
+          'must', 'need', 'well', 'work', 'using', 'through', 'during', 'before', 'after',
+          'between', 'both', 'under', 'within', 'without', 'experience', 'including',
+          'ability', 'able', 'ensuring', 'various', 'strong', 'looking', 'role',
+          'team', 'will', 'working', 'join', 'across', 'world', 'every', 'day']);
+        return !stopWords.has(w);
+      })
+      .slice(0, 15);
+
+    // Calculate a rough ATS score based on keyword overlap
+    // This is a heuristic, not a real ATS scan
+    const atsScore = Math.min(95, Math.max(60, 60 + matchedKeywords.length * 2));
+
+    console.log(`[Tailor API] Matched keywords (${matchedKeywords.length}): ${matchedKeywords.slice(0, 8).join(', ')}`);
 
     return Response.json({
       success: true,
       tailoredResume: cleanContent,
       atsScore,
-      keywordsMatched: matchedKeywords.slice(0, 20),
+      keywordsMatched: matchedKeywords,
       provider: successProvider
     }, {
       headers: { 'Content-Type': 'application/json; charset=utf-8' }
