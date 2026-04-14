@@ -51,13 +51,13 @@ Rules:
 Return ONLY valid JSON, no explanation.`;
 
     const response = await callAI(
-      prompt,
-      ``,
+      prompt,  // system prompt with instructions
+      resumeText.slice(0, 4000),  // Put resume in USER message, not system
       {
-        model: 'gemini-1.5-flash', // Try 1.5 flash since 2.0 quota is maxed
+        model: 'llama-3.3-70b-versatile',  // Use Groq model (most reliable free tier)
         temperature: 0.1,
         max_tokens: 800,
-        providerPriority: ['gemini', 'groq', 'openai'] // Try Gemini first since Groq often 429s
+        providerPriority: ['groq', 'gemini', 'openai']  // Try Groq FIRST — it's your most reliable provider
       }
     );
 
@@ -93,17 +93,66 @@ Return ONLY valid JSON, no explanation.`;
 function fallbackExtractProfile(resumeText: string, clientSkills: string[], clientRoles: string[]): ResumeProfile {
   const lower = resumeText.toLowerCase();
   
+  // Industry-agnostic keyword list — covers ALL major fields
   const allKeywords = [
+    // Tech & Engineering
     'javascript', 'typescript', 'python', 'java', 'react', 'angular', 'vue', 'node',
     'mongodb', 'sql', 'postgresql', 'aws', 'docker', 'kubernetes', 'git',
     'html', 'css', 'figma', 'redux', 'nextjs', 'django', 'flask', 'spring',
     'machine learning', 'deep learning', 'tensorflow', 'pytorch', 'nlp',
-    'excel', 'powerpoint', 'tableau', 'power bi', 'r', 'stata', 'spss',
+    'c++', 'c#', 'go', 'rust', 'php', 'swift', 'kotlin',
+    
+    // Data & Analytics
+    'excel', 'google sheets', 'tableau', 'power bi', 'r studio', 'spss', 'sas', 'vba', 'stata',
+    'data analysis', 'data visualization', 'statistical analysis', 'regression analysis',
+    'sql', 'mysql', 'bigquery', 'pandas', 'numpy',
+    
+    // Consulting & Strategy
     'financial modeling', 'valuation', 'consulting', 'strategy', 'case study',
-    'marketing', 'seo', 'social media', 'brand management', 'salesforce',
-    'product management', 'agile', 'scrum', 'jira',
-    'supply chain', 'logistics', 'operations',
-    'photoshop', 'illustrator', 'indesign',
+    'due diligence', 'business analysis', 'market research', 'competitive analysis',
+    'stakeholder management', 'client engagement', 'presentation skills',
+    'management consulting', 'business strategy', 'financial analysis',
+    'mcKinsey', 'bain', 'bcg', 'deloitte', 'advisory', 'big four',
+    'problem solving', 'analytical skills', 'critical thinking',
+    
+    // Finance & Accounting
+    'investment banking', 'equity research', 'portfolio management',
+    'risk management', 'compliance', 'audit', 'accounting', 'tax',
+    'financial planning', 'budgeting', 'forecasting', 'treasury',
+    'derivatives', 'private equity', 'venture capital', 'hedge fund',
+    
+    // Marketing & Sales
+    'marketing', 'seo', 'sem', 'social media', 'brand management', 'salesforce',
+    'content marketing', 'digital marketing', 'email marketing', 'google analytics',
+    'market segmentation', 'customer acquisition', 'lead generation',
+    'brand strategy', 'public relations', 'event management',
+    
+    // Product & Design
+    'product management', 'product design', 'ux research', 'user research',
+    'wireframing', 'prototyping', 'adobe creative suite', 'photoshop', 'illustrator',
+    'indesign', 'sketch', 'invision', 'figma',
+    
+    // Operations & Supply Chain
+    'supply chain', 'logistics', 'operations management', 'process improvement',
+    'lean six sigma', 'project management', 'agile', 'scrum', 'jira',
+    'erp', 'sap', 'salesforce', 'crm',
+    
+    // HR & People
+    'human resources', 'recruiting', 'talent acquisition', 'organizational development',
+    'performance management', 'compensation', 'employee relations',
+    
+    // Legal
+    'contract negotiation', 'legal research', 'compliance', 'regulatory affairs',
+    'intellectual property', 'corporate law', 'litigation',
+    
+    // Healthcare & Life Sciences
+    'clinical research', 'healthcare management', 'pharmaceutical', 'biotechnology',
+    'medical devices', 'regulatory affairs', 'fda',
+    
+    // General Business
+    'business development', 'partnership management', 'revenue growth',
+    'customer success', 'account management', 'relationship management',
+    'cross-functional', 'leadership', 'team management', 'communication',
   ];
   
   const found = allKeywords.filter(kw => {
@@ -113,22 +162,70 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
   
   const skills = [...new Set([...found, ...clientSkills])].filter(Boolean);
   
-  // Detect domain
+  // Detect domain — more comprehensive
   let domain = 'general';
-  if (['consulting', 'strategy', 'mckinsey', 'bain', 'bcg', 'deloitte', 'advisory'].some(k => lower.includes(k))) domain = 'consulting';
-  else if (['finance', 'banking', 'investment', 'valuation', 'equity'].some(k => lower.includes(k))) domain = 'finance';
-  else if (['react', 'angular', 'node', 'python', 'javascript', 'developer', 'engineer'].some(k => lower.includes(k))) domain = 'software_engineering';
-  else if (['machine learning', 'data science', 'tensorflow', 'pytorch'].some(k => lower.includes(k))) domain = 'data_science';
-  else if (['marketing', 'seo', 'social media', 'brand'].some(k => lower.includes(k))) domain = 'marketing';
+  const domainChecks: [string[], string][] = [
+    [['consulting', 'strategy', 'mckinsey', 'bain', 'bcg', 'deloitte', 'advisory', 'big four', 'case study'], 'consulting'],
+    [['finance', 'banking', 'investment', 'valuation', 'equity', 'portfolio', 'derivatives', 'private equity', 'venture capital'], 'finance'],
+    [['marketing', 'seo', 'social media', 'brand', 'content marketing', 'digital marketing', 'market research'], 'marketing'],
+    [['react', 'angular', 'node', 'python', 'javascript', 'developer', 'engineer', 'software'], 'software_engineering'],
+    [['machine learning', 'data science', 'tensorflow', 'pytorch', 'data analysis', 'statistical'], 'data_science'],
+    [['supply chain', 'logistics', 'operations', 'lean', 'six sigma', 'erp'], 'operations'],
+    [['human resources', 'recruiting', 'talent', 'organizational', 'performance management'], 'hr'],
+    [['legal', 'compliance', 'contract', 'regulatory', 'intellectual property'], 'legal'],
+    [['healthcare', 'clinical', 'pharmaceutical', 'biotech', 'medical'], 'healthcare'],
+    [['product management', 'product design', 'ux', 'user research'], 'product'],
+    [['accounting', 'audit', 'tax', 'financial planning', 'budgeting'], 'accounting'],
+    [['business development', 'partnership', 'revenue', 'customer success', 'account management'], 'business_development'],
+  ];
   
-  const roles = clientRoles.length > 0 ? clientRoles : [domain.replace('_', ' ') + ' intern'];
+  for (const [keywords, domainName] of domainChecks) {
+    if (keywords.some(k => lower.includes(k))) {
+      domain = domainName;
+      break;
+    }
+  }
+  
+  // Better role generation from domain
+  const domainRoleMap: Record<string, string[]> = {
+    'consulting': ['consultant', 'business analyst', 'strategy analyst', 'management consultant'],
+    'finance': ['financial analyst', 'investment analyst', 'risk analyst'],
+    'marketing': ['marketing analyst', 'marketing coordinator', 'digital marketing specialist'],
+    'software_engineering': ['software developer', 'web developer', 'full stack developer'],
+    'data_science': ['data analyst', 'data scientist', 'ml engineer'],
+    'operations': ['operations analyst', 'supply chain analyst', 'process analyst'],
+    'hr': ['hr coordinator', 'talent acquisition specialist', 'hr analyst'],
+    'legal': ['legal assistant', 'compliance analyst', 'paralegal'],
+    'healthcare': ['healthcare analyst', 'clinical research coordinator'],
+    'product': ['product analyst', 'product manager', 'ux researcher'],
+    'accounting': ['accounting assistant', 'audit associate', 'financial analyst'],
+    'business_development': ['business development associate', 'account manager', 'partnership manager'],
+    'general': ['business analyst', 'project coordinator', 'operations associate'],
+  };
+  
+  const roles = clientRoles.length > 0 ? clientRoles : (domainRoleMap[domain] || ['intern']);
+  
+  // Generate better search keywords from found skills
+  const searchKeywords: string[] = [];
+  if (domain !== 'general') {
+    searchKeywords.push(`${domain.replace('_', ' ')} intern`);
+    searchKeywords.push(`${domain.replace('_', ' ')} analyst`);
+  }
+  // Add top 3 most relevant found skills as search terms
+  for (const skill of found.slice(0, 3)) {
+    searchKeywords.push(`${skill} intern`);
+  }
+  // Add roles as search terms
+  for (const role of roles.slice(0, 2)) {
+    searchKeywords.push(`${role} internship`);
+  }
   
   return {
     skills,
     roles,
     industry: domain,
     experience_level: 'student',
-    keywords: roles.map(r => `${r} internship`).slice(0, 4)
+    keywords: [...new Set(searchKeywords)].slice(0, 6)
   };
 }
 
@@ -141,11 +238,10 @@ function scoreJob(job: any, profile: ResumeProfile): number {
   const jobDesc = (job.description || '').toLowerCase();
   const jobText = `${jobTitle} ${jobDesc}`;
 
-  // 50% — Skills match (any skills, not just tech)
+  // 50% — Skills match
   const userSkills = profile.skills || [];
   const normalizedSkills = userSkills.map(s => s.toLowerCase());
   const skillsMatched = normalizedSkills.filter(skill => {
-    // Check for exact match or the skill word appearing in job text
     const skillWords = skill.split(/\s+/);
     return skillWords.every(word => jobText.includes(word));
   });
@@ -166,20 +262,30 @@ function scoreJob(job: any, profile: ResumeProfile): number {
     : 0;
   score += roleScore;
 
-  // 20% — Experience level match
-  const expLevel = (profile.experience_level || '').toLowerCase();
-  if (expLevel && jobText.includes(expLevel)) {
-    score += 15;
+  // 20% — Experience level + role-type bonus (ONLY if some skills or roles matched)
+  const hasSomeMatch = skillsMatched.length > 0 || rolesMatched.length > 0;
+  
+  if (hasSomeMatch) {
+    const expLevel = (profile.experience_level || '').toLowerCase();
+    if (expLevel && jobText.includes(expLevel)) {
+      score += 10;
+    }
+    if (jobTitle.includes('intern') || jobTitle.includes('entry') || jobTitle.includes('trainee') || jobTitle.includes('junior')) {
+      score += 10;
+    } else {
+      score += 5;  // Reduced from 10 — mid-level jobs get less
+    }
   }
-  if (jobTitle.includes('intern') || jobTitle.includes('entry') || jobTitle.includes('trainee')) {
-    score += 5;
-  } else {
-    score += 10;
-  }
+  // If NOTHING matched, score stays at 0 (no free points)
 
   // Senior penalties
-  const seniorKw = ['senior', 'sr.', 'lead', 'manager', 'director', 'vp', 'chief'];
+  const seniorKw = ['senior', 'sr.', 'lead', 'manager', 'director', 'vp', 'chief', 'staff', 'principal', 'architect'];
   if (seniorKw.some(k => jobTitle.includes(k))) score -= 25;
+
+  // Industry penalty: if the job is clearly from a different industry
+  const techOnlyKw = ['software engineer', 'fullstack developer', 'frontend developer', 'backend developer', 'devops engineer', 'site reliability'];
+  if (profile.industry === 'consulting' && techOnlyKw.some(k => jobTitle.includes(k))) score -= 15;
+  if (profile.industry === 'finance' && techOnlyKw.some(k => jobTitle.includes(k))) score -= 15;
 
   return Math.max(0, Math.min(Math.round(score), 100));
 }
@@ -234,14 +340,40 @@ export async function POST(req: NextRequest) {
     // ────────────────────────────────────────────
     // Step 2: Fetch jobs using AI-generated queries
     // ────────────────────────────────────────────
-    const searchQueries = [
-      ...(profile.skills || []).slice(0, 5),
-      ...(profile.keywords || []).slice(0, 5),
-      ...(profile.roles || []).slice(0, 2)
-    ];
-    
+    // Build SMART search queries — fewer, more targeted
+    const searchQueries: string[] = [];
+
+    // Priority 1: Industry-specific terms (most relevant)
+    if (profile.industry && profile.industry !== 'general') {
+      searchQueries.push(profile.industry.replace('_', ' '));
+    }
+
+    // Priority 2: Top roles (these are the most search-friendly)
+    if (profile.roles && profile.roles.length > 0) {
+      searchQueries.push(...profile.roles.slice(0, 2));
+    }
+
+    // Priority 3: Top 3 keywords (already search-friendly from AI/fallback)
+    if (profile.keywords && profile.keywords.length > 0) {
+      searchQueries.push(...profile.keywords.slice(0, 3));
+    }
+
+    // Priority 4: Top 2 most relevant skills ONLY (not all skills)
+    if (profile.skills && profile.skills.length > 0) {
+      // Use longer, more specific skills (short ones like "C" or "R" create noise)
+      const specificSkills = profile.skills
+        .filter(s => s.length > 3)
+        .sort((a, b) => b.length - a.length)  // Longer = more specific = better search term
+        .slice(0, 2);
+      searchQueries.push(...specificSkills);
+    }
+
+    // Deduplicate and limit to max 6 queries to avoid timeout
+    const uniqueQueries = [...new Set(searchQueries)].slice(0, 6);
+    console.log(`[Search] Running ${uniqueQueries.length} targeted queries: ${uniqueQueries.join(' | ')}`);
+
     const allJobsMap = new Map<string, JobResult>();
-    for (const q of searchQueries) {
+    for (const q of uniqueQueries) {
       try {
         const batch = await aggregateJobs(q, userLocation);
         for (const job of batch) {
@@ -266,7 +398,35 @@ export async function POST(req: NextRequest) {
       return { ...job, matchScore, matchLabel: getMatchLabel(matchScore) };
     });
 
-    const finalJobs = scoredJobs
+    // ────────────────────────────────────────────
+    // Step 3.5: Filter by location relevance
+    // ────────────────────────────────────────────
+    const locationFiltered = scoredJobs.filter(job => {
+      const jobLoc = (job.location || '').toLowerCase();
+      const userLoc = (userLocation || 'india').toLowerCase();
+      
+      // Always keep remote jobs
+      if (jobLoc.includes('remote') || jobLoc.includes('anywhere') || jobLoc.includes('wfh')) return true;
+      
+      // Always keep jobs in user's preferred location
+      if (jobLoc.includes(userLoc)) return true;
+      
+      // Keep India jobs for Indian users
+      if (userLoc.includes('india') && (
+        jobLoc.includes('india') || 
+        jobLoc.includes('bangalore') || jobLoc.includes('bengaluru') ||
+        jobLoc.includes('mumbai') || jobLoc.includes('delhi') ||
+        jobLoc.includes('pune') || jobLoc.includes('chennai') ||
+        jobLoc.includes('hyderabad') || jobLoc.includes('noida') ||
+        jobLoc.includes('gurgaon') || jobLoc.includes('kolkata')
+      )) return true;
+      
+      // For non-remote international jobs: only keep if matchScore >= 40%
+      // This prevents random German jobs from appearing for Indian consulting students
+      return job.matchScore >= 40;
+    });
+
+    const finalJobs = locationFiltered
       .sort((a, b) => b.matchScore - a.matchScore)
       .slice(0, 50);
 
