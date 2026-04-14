@@ -14,7 +14,8 @@ export async function POST(req: NextRequest) {
     
     if (file.name.endsWith('.pdf')) {
       // Dynamic import pdf-parse (server-side only)
-      const pdfParse = (await import('pdf-parse')).default;
+      const pdfParseModule = await import('pdf-parse');
+      const pdfParse = (pdfParseModule as any).default || pdfParseModule;
       const result = await pdfParse(buffer);
       return NextResponse.json({ text: result.text });
     }
