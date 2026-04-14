@@ -13,19 +13,20 @@ export interface ExtractedSkills {
 export async function extractSkillsFromResume(resumeText: string): Promise<ExtractedSkills> {
   try {
     const extractResponse = await callAI(
-      `You are a skill extraction expert. Extract from the resume:
-- Technical and soft skills
-- Experience level (fresher/junior/mid/senior based on years)
-- Industries they've worked in
-- Role types they're suited for
-- Location/City from their address or contact info
+      `You are an expert recruiter and skill extraction AI. Analyze the resume thoroughly.
+Extract:
+- Technical, domain-specific, and soft skills (Pay special attention to business, consulting, strategy, and finance skills like financial modeling, market research, case studies, etc. - not just tech).
+- Experience level (fresher/junior/mid/senior based on years).
+- Industries they've worked in.
+- Target role types they are best suited for (e.g., "Management Consulting Intern", "Strategy Analyst", "Software Engineer").
+- Location/City from their address or contact info.
 
-Return JSON:
+Return exact JSON:
 {
-  "skills": ["skill1", "skill2"],
+  "skills": ["skill1", "skill2", "business strategy"],
   "experienceLevel": "fresher",
-  "industries": ["tech"],
-  "roleTypes": ["frontend"],
+  "industries": ["consulting", "technology"],
+  "roleTypes": ["management consulting intern", "business analyst"],
   "location": "Bangalore, India"
 }`,
       resumeText,
@@ -75,7 +76,9 @@ function extractSkillsByKeywords(text: string): string[] {
     'data science', 'pandas', 'numpy', 'tensorflow', 'pytorch', 'graphql', 'rest api',
     'c++', 'c#', 'go', 'rust', 'php', 'laravel', 'ruby', 'swift', 'kotlin',
     'excel', 'google sheets', 'tableau', 'power bi', 'spss', 'sas', 'vba', 'stata',
-    'r studio', 'ggplot',
+    'r studio', 'ggplot', 'financial modeling', 'case studies', 'strategy', 'market research', 
+    'due diligence', 'management consulting', 'business strategy', 'financial analysis', 
+    'valuation', 'consulting'
   ];
 
   const lowerText = text.toLowerCase();

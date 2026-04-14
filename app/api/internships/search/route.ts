@@ -14,10 +14,10 @@ import { callAI } from '@/lib/rotating-ai';
 
 interface ResumeProfile {
   skills: string[];
-  target_roles: string[];
-  domain: string;
+  roles: string[];
+  industry: string;
   experience_level: string;
-  search_queries: string[];
+  keywords: string[];
 }
 
 /**
@@ -26,29 +26,33 @@ interface ResumeProfile {
  */
 async function aiExtractProfile(resumeText: string): Promise<ResumeProfile | null> {
   try {
-    const response = await callAI(
-      `You are a career advisor AI. Analyze the resume and extract a structured profile.
-Return ONLY valid JSON, no markdown, no explanation.`,
-      `RESUME:
+    const prompt = `You are an expert career analyst. Analyze the following resume and extract a comprehensive profile. This could be from ANY industry — consulting, finance, engineering, marketing, design, law, healthcare, data science, operations, HR, or any other field.
+
+Resume:
 ${resumeText.slice(0, 4000)}
 
-Return this exact JSON structure:
+Return a JSON object with exactly these fields:
 {
-  "skills": ["list", "of", "all", "technical", "and", "domain", "skills", "found"],
-  "target_roles": ["specific role titles this person should apply for, e.g. 'management consulting intern', 'data analyst', 'frontend developer'"],
-  "domain": "the primary career domain: one of 'consulting', 'finance', 'software_engineering', 'data_science', 'marketing', 'operations', 'healthcare', 'design', 'legal', 'hr', 'product_management', 'general'",
-  "experience_level": "one of: 'student', 'fresher', 'junior', 'mid', 'senior'",
-  "search_queries": ["5-6 specific job search queries to find matching internships/jobs, e.g. 'management consulting intern', 'strategy analyst internship', 'business analyst summer 2026'"]
+  "skills": ["skill1", "skill2", "skill3"],
+  "roles": ["role1", "role2"],
+  "experience_level": "entry",
+  "keywords": ["keyword1", "keyword2"],
+  "industry": "the primary industry"
 }
 
-RULES:
-- Extract ALL skills mentioned: technical (python, excel, sql), domain (financial modeling, case studies), soft skills (leadership, communication)
-- target_roles should be SPECIFIC and realistic for this person's background (not generic like 'software developer')
-- search_queries should be practical search terms for job boards - include "intern" or "internship" for students/freshers
-- If this is a consulting resume, search for consulting/strategy/analyst roles, NOT software engineering
-- If this is a finance resume, search for finance/banking/analyst roles
-- If this is a tech resume, search for developer/engineer/SWE roles
-- Be domain-aware: consulting people want McKinsey/BCG-type roles, not React developer jobs`,
+Rules:
+- Extract ALL relevant skills mentioned in the resume — technical skills, soft skills, tools, methodologies, frameworks, platforms, certifications
+- Roles should be job titles or functions relevant to the person's experience (e.g., "Business Analyst", "Marketing Intern", "Data Scientist", "Consultant", "Project Manager")
+- Keywords should be search-friendly terms that would find relevant job postings (e.g., "business development", "market research", "financial modeling", "UI/UX design", "supply chain")
+- Do NOT assume this is a software engineering resume. Read the resume carefully and extract what is ACTUALLY there
+- Include at least 5-10 skills and 2-5 roles
+- Include at least 3-5 search keywords
+
+Return ONLY valid JSON, no explanation.`;
+
+    const response = await callAI(
+      prompt,
+      ``,
       {
         model: 'gemini-1.5-flash', // Try 1.5 flash since 2.0 quota is maxed
         temperature: 0.1,
@@ -70,11 +74,11 @@ RULES:
     
     // Validate
     if (!parsed.skills || !Array.isArray(parsed.skills)) return null;
-    if (!parsed.search_queries || !Array.isArray(parsed.search_queries)) return null;
+    if (!parsed.keywords || !Array.isArray(parsed.keywords)) return null;
     
-    console.log(`[Search] AI Profile — Domain: ${parsed.domain}, Skills: ${parsed.skills.slice(0, 8).join(', ')}`);
-    console.log(`[Search] AI Profile — Target Roles: ${parsed.target_roles?.join(', ')}`);
-    console.log(`[Search] AI Profile — Search Queries: ${parsed.search_queries.join(', ')}`);
+    console.log(`[Search] AI Profile — Industry: ${parsed.industry}, Skills: ${(parsed.skills||[]).slice(0, 8).join(', ')}`);
+    console.log(`[Search] AI Profile — Roles: ${(parsed.roles||[]).join(', ')}`);
+    console.log(`[Search] AI Profile — Keywords: ${(parsed.keywords||[]).join(', ')}`);
     
     return parsed;
   } catch (err: any) {
@@ -121,10 +125,10 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
   
   return {
     skills,
-    target_roles: roles,
-    domain,
+    roles,
+    industry: domain,
     experience_level: 'student',
-    search_queries: roles.map(r => `${r} internship`).slice(0, 4)
+    keywords: roles.map(r => `${r} internship`).slice(0, 4)
   };
 }
 
@@ -132,58 +136,52 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
  * Score a job against the AI-extracted profile.
  */
 function scoreJob(job: any, profile: ResumeProfile): number {
-  const jobText = `${job.title || ''} ${job.description || ''} ${job.company || ''}`.toLowerCase();
-  const title = (job.title || '').toLowerCase();
-  
-  let score = 15; // base
+  let score = 0;
+  const jobTitle = (job.title || '').toLowerCase();
+  const jobDesc = (job.description || '').toLowerCase();
+  const jobText = `${jobTitle} ${jobDesc}`;
 
-  // ── Skill matching (0-40 pts) ──
-  if (profile.skills.length > 0) {
-    let matched = 0;
-    const normalizedSkills = profile.skills.map(s => s.toLowerCase());
-    for (const skill of normalizedSkills) {
-      if (jobText.includes(skill)) matched++;
-    }
-    const ratio = matched / Math.min(normalizedSkills.length, 15);
-    score += Math.round(ratio * 40);
-    if (matched >= 4) score += 5;
-    if (matched >= 7) score += 5;
+  // 50% — Skills match (any skills, not just tech)
+  const userSkills = profile.skills || [];
+  const normalizedSkills = userSkills.map(s => s.toLowerCase());
+  const skillsMatched = normalizedSkills.filter(skill => {
+    // Check for exact match or the skill word appearing in job text
+    const skillWords = skill.split(/\s+/);
+    return skillWords.every(word => jobText.includes(word));
+  });
+  const skillScore = userSkills.length > 0
+    ? (skillsMatched.length / normalizedSkills.length) * 50
+    : 0;
+  score += skillScore;
+
+  // 30% — Role/title match
+  const userRoles = profile.roles || [];
+  const normalizedRoles = userRoles.map(r => r.toLowerCase());
+  const rolesMatched = normalizedRoles.filter(role => {
+    const roleWords = role.split(/\s+/);
+    return roleWords.every(word => jobTitle.includes(word) || jobText.includes(word));
+  });
+  const roleScore = userRoles.length > 0
+    ? (rolesMatched.length / normalizedRoles.length) * 30
+    : 0;
+  score += roleScore;
+
+  // 20% — Experience level match
+  const expLevel = (profile.experience_level || '').toLowerCase();
+  if (expLevel && jobText.includes(expLevel)) {
+    score += 15;
+  }
+  if (jobTitle.includes('intern') || jobTitle.includes('entry') || jobTitle.includes('trainee')) {
+    score += 5;
+  } else {
+    score += 10;
   }
 
-  // ── Role title matching (0-25 pts) ──
-  for (const role of profile.target_roles || []) {
-    const lowerRole = role.toLowerCase();
-    // Check if key words from the target role appear in the title
-    const roleWords = lowerRole.split(/\s+/).filter(w => w.length > 3);
-    const titleMatches = roleWords.filter(w => title.includes(w)).length;
-    const textMatches = roleWords.filter(w => jobText.includes(w)).length;
-    
-    if (titleMatches >= 2) { score += 25; break; }
-    else if (titleMatches >= 1) { score += 15; break; }
-    else if (textMatches >= 2) { score += 10; break; }
-  }
+  // Senior penalties
+  const seniorKw = ['senior', 'sr.', 'lead', 'manager', 'director', 'vp', 'chief'];
+  if (seniorKw.some(k => jobTitle.includes(k))) score -= 25;
 
-  // ── Internship / entry-level bonus (0-10 pts) ──
-  if (profile.experience_level === 'student' || profile.experience_level === 'fresher') {
-    if (title.includes('intern') || title.includes('internship') || title.includes('trainee') || title.includes('apprentice')) {
-      score += 10;
-    } else if (title.includes('junior') || title.includes('entry') || title.includes('associate') || title.includes('analyst')) {
-      score += 5;
-    }
-  }
-
-  // ── Penalties for senior roles ──
-  const seniorKw = ['senior', 'sr.', 'staff', 'lead', 'manager', 'director', 'principal', 'head of', 'vp', 'chief', 'architect'];
-  if (seniorKw.some(k => title.includes(k))) score -= 25;
-
-  // High experience penalty
-  const expPattern = /(\d+)\+?\s*years?\s*(of\s*)?(experience|exp)/gi;
-  const expMatches = [...(job.description || '').toLowerCase().matchAll(expPattern)];
-  const maxExp = expMatches.reduce((mx: number, m: RegExpExecArray) => Math.max(mx, parseInt(m[1])), 0);
-  if (maxExp >= 5) score -= 20;
-  else if (maxExp >= 3) score -= 10;
-
-  return Math.max(0, Math.min(100, score));
+  return Math.max(0, Math.min(Math.round(score), 100));
 }
 
 function getMatchLabel(score: number): string {
@@ -229,14 +227,18 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    console.log(`[Search] Final profile — Domain: ${profile.domain}`);
-    console.log(`[Search] Final skills (${profile.skills.length}): ${profile.skills.slice(0, 10).join(', ')}`);
-    console.log(`[Search] Search queries: ${profile.search_queries.join(' | ')}`);
+    console.log(`[Search] Final profile — Industry: ${profile.industry}`);
+    console.log(`[Search] Final skills (${profile.skills.length}): ${(profile.skills||[]).slice(0, 10).join(', ')}`);
+    console.log(`[Search] Search queries: ${(profile.keywords||[]).join(' | ')}`);
 
     // ────────────────────────────────────────────
     // Step 2: Fetch jobs using AI-generated queries
     // ────────────────────────────────────────────
-    const searchQueries = profile.search_queries.slice(0, 6);
+    const searchQueries = [
+      ...(profile.skills || []).slice(0, 5),
+      ...(profile.keywords || []).slice(0, 5),
+      ...(profile.roles || []).slice(0, 2)
+    ];
     
     const allJobsMap = new Map<string, JobResult>();
     for (const q of searchQueries) {
@@ -274,8 +276,8 @@ export async function POST(req: NextRequest) {
       success: true,
       total: finalJobs.length,
       detected_skills: profile.skills,
-      detected_domains: [profile.domain],
-      target_roles: profile.target_roles,
+      detected_domains: [profile.industry],
+      target_roles: profile.roles,
       jobs: finalJobs,
       count: finalJobs.length
     });
