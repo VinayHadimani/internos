@@ -53,11 +53,35 @@ export default function InternshipsPage() {
     setError(null);
 
     try {
-      const text = await file.text();
+      let text = '';
+      
+      if (file.name.endsWith('.pdf')) {
+        // For PDFs, send to a server-side extraction endpoint
+        // Option A: Use pdf-parse on the server
+        const formData = new FormData();
+        formData.append('file', file);
+        const extractRes = await fetch('/api/extract-resume', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!extractRes.ok) {
+          setError('Failed to extract text from PDF. Please paste your resume as .txt instead.');
+          setLoading(false);
+          return;
+        }
+        const extractData = await extractRes.json();
+        text = extractData.text || '';
+      } else {
+        // For .txt, .doc, .docx — use file.text()
+        text = await file.text();
+      }
+      
       if (!text || text.length < 50) {
         setError('Could not read enough text from the file. Use .txt from the dashboard PDF flow, or paste resume text.');
+        setLoading(false);
         return;
       }
+      
       setResumeText(text);
       localStorage.setItem('resumeText', text);
 

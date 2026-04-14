@@ -162,6 +162,7 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
   // Detect domain — more comprehensive
   let domain = 'general';
   const domainChecks: [string[], string][] = [
+    [['embedded', 'arduino', 'raspberry', 'microcontroller', 'fpga', 'pcb', 'firmware', 'ocaml', 'verilog', 'vhdl', 'iot', 'rtos', 'stm32', 'esp32', 'hardware design', 'circuit', 'signal processing', 'robotics', 'control systems'], 'embedded_systems'],
     [['consulting', 'strategy', 'mckinsey', 'bain', 'bcg', 'deloitte', 'advisory', 'big four', 'case study'], 'consulting'],
     [['finance', 'banking', 'investment', 'valuation', 'equity', 'portfolio', 'derivatives', 'private equity', 'venture capital'], 'finance'],
     [['marketing', 'seo', 'social media', 'brand', 'content marketing', 'digital marketing', 'market research'], 'marketing'],
@@ -185,6 +186,7 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
   
   // Better role generation from domain
   const domainRoleMap: Record<string, string[]> = {
+    'embedded_systems': ['embedded systems engineer', 'firmware developer', 'iot developer', 'hardware engineer'],
     'consulting': ['consultant', 'business analyst', 'strategy analyst', 'management consultant'],
     'finance': ['financial analyst', 'investment analyst', 'risk analyst'],
     'marketing': ['marketing analyst', 'marketing coordinator', 'digital marketing specialist'],
@@ -337,36 +339,27 @@ export async function POST(req: NextRequest) {
     // ────────────────────────────────────────────
     // Step 2: Fetch jobs using AI-generated queries
     // ────────────────────────────────────────────
-    // Build SMART search queries — fewer, more targeted
+    // Build SMART search queries — FEWER, more targeted to avoid timeout
     const searchQueries: string[] = [];
 
-    // Priority 1: Industry-specific terms (most relevant)
+    // Priority 1: Industry-specific term (single most important query)
     if (profile.industry && profile.industry !== 'general') {
       searchQueries.push(profile.industry.replace('_', ' '));
     }
 
-    // Priority 2: Top roles (these are the most search-friendly)
+    // Priority 2: Top 2 roles ONLY
     if (profile.roles && profile.roles.length > 0) {
       searchQueries.push(...profile.roles.slice(0, 2));
     }
 
-    // Priority 3: Top 3 keywords (already search-friendly from AI/fallback)
+    // Priority 3: Top 2 keywords ONLY  
     if (profile.keywords && profile.keywords.length > 0) {
-      searchQueries.push(...profile.keywords.slice(0, 3));
+      searchQueries.push(...profile.keywords.slice(0, 2));
     }
 
-    // Priority 4: Top 2 most relevant skills ONLY (not all skills)
-    if (profile.skills && profile.skills.length > 0) {
-      // Use longer, more specific skills (short ones like "C" or "R" create noise)
-      const specificSkills = profile.skills
-        .filter(s => s.length > 3)
-        .sort((a, b) => b.length - a.length)  // Longer = more specific = better search term
-        .slice(0, 2);
-      searchQueries.push(...specificSkills);
-    }
-
-    // Deduplicate and limit to max 6 queries to avoid timeout
-    const uniqueQueries = [...new Set(searchQueries)].slice(0, 6);
+    // Deduplicate and limit to MAX 3 queries (down from 6)
+    // This reduces total time from 6×15s to 3×15s worst case
+    const uniqueQueries = [...new Set(searchQueries)].slice(0, 3);
     console.log(`[Search] Running ${uniqueQueries.length} targeted queries: ${uniqueQueries.join(' | ')}`);
 
     const allJobsMap = new Map<string, JobResult>();
@@ -399,11 +392,16 @@ export async function POST(req: NextRequest) {
     // Step 3.5: Filter by location relevance
     // ────────────────────────────────────────────
     const locationFiltered = scoredJobs.filter(job => {
+      // HARD FLOOR: No job below 5% match should ever be shown
+      if (job.matchScore < 5) return false;
+      
       const jobLoc = (job.location || '').toLowerCase();
       const userLoc = (userLocation || 'india').toLowerCase();
       
-      // Always keep remote jobs
-      if (jobLoc.includes('remote') || jobLoc.includes('anywhere') || jobLoc.includes('wfh')) return true;
+      // Always keep remote jobs IF they have at least 15% match
+      if (jobLoc.includes('remote') || jobLoc.includes('anywhere') || jobLoc.includes('wfh')) {
+        return job.matchScore >= 15;
+      }
       
       // Always keep jobs in user's preferred location
       if (jobLoc.includes(userLoc)) return true;
@@ -418,9 +416,8 @@ export async function POST(req: NextRequest) {
         jobLoc.includes('gurgaon') || jobLoc.includes('kolkata')
       )) return true;
       
-      // For non-remote international jobs: only keep if matchScore >= 40%
-      // This prevents random German jobs from appearing for Indian consulting students
-      return job.matchScore >= 40;
+      // For non-remote international jobs: only keep if matchScore >= 50%
+      return job.matchScore >= 50;
     });
 
     const finalJobs = locationFiltered

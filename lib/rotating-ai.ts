@@ -193,13 +193,18 @@ export async function callAI(
         console.log(`[Rotating-AI] Trying ${providerName} (Attempt ${attempt + 1})`);
         const result = await provider.call(key, systemMessage, userMessage, options);
         
+        console.log(`[Rotating-AI] ${providerName} returned ${result ? result.length : 0} chars`);
+        
         if (result && result.length > 0) {
+          console.log(`[Rotating-AI] SUCCESS from ${providerName}, first 200 chars: ${result.substring(0, 200)}`);
           return {
             success: true,
             content: result,
             provider: providerName,
             model: options.model
           };
+        } else {
+          console.warn(`[Rotating-AI] ${providerName} returned EMPTY result (no error thrown)`);
         }
       } catch (error: any) {
         const errMsg = error.message || String(error);

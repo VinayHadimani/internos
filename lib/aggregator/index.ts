@@ -363,7 +363,7 @@ async function parseRSSFeed(url: string): Promise<JobResult[]> {
   try {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'ScraperOS/1.0' },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(8000),
     })
     if (!res.ok) return []
 
@@ -500,10 +500,12 @@ export async function fetchRemotive(keywords: string[]): Promise<JobResult[]> {
   const source = 'Remotive'
   try {
     const search = keywords.join('+')
-    console.error(`[${source}] Fetching: ${keywords.join(', ')} | URL: https://remotive.com/api/remote-jobs?search=${search}`)
-    const res = await fetch(`https://remotive.com/api/remote-jobs?search=${search}`, {
+    console.error(`[${source}] Fetching: ${keywords.join(', ')}`)
+    
+    // Use the v2 Remotive API endpoint
+    const res = await fetch(`https://remotive.com/api/remote-jobs?search=${search}&limit=20`, {
       headers: BROWSER_HEADERS,
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(8000),
     })
     console.error(`[${source}] Response status: ${res.status}`)
     if (!res.ok) {
@@ -553,7 +555,7 @@ export async function fetchRemoteOK(keywords: string[]): Promise<JobResult[]> {
     console.error(`[${source}] Fetching: ${keywords.join(', ')} | URL: https://remoteok.com/api`)
     const res = await fetch('https://remoteok.com/api', {
       headers: BROWSER_HEADERS,
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(8000),
     })
     console.error(`[${source}] Response status: ${res.status}`)
     if (!res.ok) {
@@ -629,7 +631,7 @@ export async function fetchWeWorkRemotely(keywords: string[]): Promise<JobResult
         try {
           const res = await fetch(url, {
             headers: BROWSER_HEADERS,
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.timeout(8000),
           })
           if (!res.ok) return []
           const data = await res.json()
@@ -690,7 +692,7 @@ export async function fetchArbeitnow(keywords: string[]): Promise<JobResult[]> {
     console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} | URL: https://arbeitnow.com/api/job-board-api`)
     const res = await fetch('https://arbeitnow.com/api/job-board-api', {
       headers: BROWSER_HEADERS,
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(8000),
     })
     console.error(`[${source}] Response status: ${res.status}`)
     if (!res.ok) {
@@ -759,7 +761,7 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
     const url = `http://api.adzuna.com/v1/api/jobs/in/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}&where=${encodeURIComponent(where)}`
     console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} | Location: ${where}`)
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(15000) })
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
     console.error(`[${source}] Response status: ${res.status}`)
     if (!res.ok) {
       const body = await res.text().catch(() => '')
@@ -816,7 +818,7 @@ export async function fetchJSearch(keywords: string[]): Promise<JobResult[]> {
         'X-RapidAPI-Key': apiKey,
         'X-RapidAPI-Host': 'jsearch.p.rapidapi.com',
       },
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(8000),
     })
     console.error(`[${source}] Response status: ${res.status}`)
     if (!res.ok) {
