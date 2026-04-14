@@ -109,7 +109,7 @@ STRICT RULES:
       ? Math.min(99, Math.round((matchedKeywords.length / jobKeywords.length) * 100))
       : 85;
 
-    console.log(\`[Tailor API] ATS Score: \${atsScore}% (\${matchedKeywords.length}/\${jobKeywords.length} keywords matched)\`);
+    console.log(`[Tailor API] ATS Score: ${atsScore}% (${matchedKeywords.length}/${jobKeywords.length} keywords matched)`);
 
     return Response.json({
       success: true,
