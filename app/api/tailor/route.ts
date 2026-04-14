@@ -56,7 +56,8 @@ STRICT RULES:
     const response = await callAI(systemPrompt, userPrompt, {
       model: 'llama-3.3-70b-versatile',
       temperature: 0.0, // Force maximum determinism
-      max_tokens: 3000
+      max_tokens: 3000,
+      providerPriority: ['groq', 'openai', 'gemini']
     });
 
     if (!response.success || !response.content) {
