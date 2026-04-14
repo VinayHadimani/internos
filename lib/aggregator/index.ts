@@ -871,7 +871,7 @@ export async function fetchJSearch(keywords: string[]): Promise<JobResult[]> {
         'X-RapidAPI-Key': apiKey,
         'X-RapidAPI-Host': 'jsearch.p.rapidapi.com',
       },
-      signal: AbortSignal.timeout(7000),
+      signal: AbortSignal.timeout(12000),
     })
     console.error(`[${source}] Response status: ${res.status}`)
     if (!res.ok) {

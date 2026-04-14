@@ -244,105 +244,99 @@ function scoreJob(job: any, profile: ResumeProfile): number {
   const userRoles = (profile.roles || []).map(r => r.toLowerCase());
   const userKeywords = (profile.keywords || []).map(k => k.toLowerCase());
   
+  // Generic words that match EVERY job — must never count as "skill matches"
+  const NOISE_WORDS = new Set([
+    'data', 'analysis', 'research', 'management', 'communication',
+    'reporting', 'strategy', 'planning', 'development', 'operations',
+    'support', 'services', 'business', 'project', 'team', 'work',
+    'skills', 'experience', 'responsibilities', 'requirements',
+    'including', 'using', 'across', 'through', 'within',
+  ]);
+
   let score = 0;
-  let skillsMatched = 0;
-  let rolesMatched = 0;
-  
+  let realSkillHits = 0;
+  let roleHits = 0;
+
   // ─── SKILL MATCHING (0-55 points) ───
   for (const skill of userSkills) {
-    const skillWords = skill.split(/\s+/);
+    const words = skill.split(/\s+/);
     let matched = false;
-    
-    if (skillWords.length >= 2) {
+
+    if (words.length >= 2) {
+      // Multi-word skill: must appear as CONTIGUOUS PHRASE
       if (jobText.includes(skill)) {
         matched = true;
         score += 8;
-        if (jobTitle.includes(skill)) {
-          score += 7;
-        }
+        if (jobTitle.includes(skill)) score += 7;
       }
-    } else {
-      const wordBoundary = new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
-      if (wordBoundary.test(jobText)) {
+    } else if (words.length === 1 && !NOISE_WORDS.has(words[0])) {
+      // Single non-noise skill: use WORD BOUNDARY regex
+      // "java" must not match "javascript"
+      const escaped = words[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(`\\b${escaped}\\b`);
+      if (re.test(jobText)) {
         matched = true;
-        score += 6;
-        if (wordBoundary.test(jobTitle)) {
-          score += 5;
-        }
+        score += 5;
+        if (re.test(jobTitle)) score += 4;
       }
     }
-    
-    if (matched) skillsMatched++;
+    // Single-word noise skills ("data", "analysis") are COMPLETELY SKIPPED
+
+    if (matched) realSkillHits++;
   }
-  
+
   // ─── ROLE MATCHING (0-25 points) ───
   for (const role of userRoles) {
-    const roleWords = role.split(/\s+/);
-    
-    if (roleWords.length >= 2) {
-      if (jobTitle.includes(role)) {
-        score += 20;
-        rolesMatched++;
-      } else if (jobText.includes(role)) {
-        score += 10;
-        rolesMatched++;
-      }
-    } else {
-      const wordBoundary = new RegExp(`\\b${role.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
-      if (wordBoundary.test(jobTitle)) {
-        score += 15;
-        rolesMatched++;
-      } else if (wordBoundary.test(jobText)) {
-        score += 5;
-        rolesMatched++;
-      }
+    // Check role as phrase in TITLE first (strong signal)
+    if (role.length >= 2 && jobTitle.includes(role)) {
+      score += 20;
+      roleHits++;
+    } else if (role.length >= 2 && jobText.includes(role)) {
+      score += 8;
+      roleHits++;
     }
   }
-  
+
   // ─── KEYWORD MATCHING (0-10 points) ───
   for (const kw of userKeywords) {
-    if (kw.length >= 2 && jobText.includes(kw)) {
+    if (kw.length >= 3 && jobText.includes(kw)) {
       score += 3;
     }
   }
-  
-  // ─── EXPERIENCE BONUS (0-10 points, ONLY if something matched) ───
-  const hasMatch = skillsMatched > 0 || rolesMatched > 0;
-  if (hasMatch) {
-    const expLevel = (profile.experience_level || '').toLowerCase();
-    if (expLevel && jobText.includes(expLevel)) {
-      score += 5;
-    }
-    if (jobTitle.includes('intern') || jobTitle.includes('entry') || 
+
+  // ─── EXPERIENCE BONUS (0-10 points, ONLY if real matches exist) ───
+  if (realSkillHits > 0 || roleHits > 0) {
+    if (jobTitle.includes('intern') || jobTitle.includes('entry') ||
         jobTitle.includes('trainee') || jobTitle.includes('junior')) {
       score += 5;
     }
   }
-  
+  // NO FREE POINTS. If nothing matched, score = 0.
+
   // ─── SENIOR PENALTY ───
-  const seniorKw = ['senior', 'sr.', 'sr ', 'lead ', 'manager', 'director', 'vp', 'chief', 'staff', 'principal', 'architect'];
+  const seniorKw = ['senior', 'sr.', 'sr ', 'lead ', 'manager', 'director',
+                     'vp', 'chief', 'staff', 'principal', 'architect'];
   if (seniorKw.some(k => jobTitle.includes(k))) score -= 20;
-  
+
   // ─── INDUSTRY MISMATCH PENALTY ───
   const industry = (profile.industry || '').replace('_', ' ');
   if (industry && industry !== 'general') {
-    const techRoles = ['software engineer', 'fullstack developer', 'frontend developer', 
-                       'backend developer', 'devops engineer', 'site reliability'];
-    const nonTechIndustries = ['consulting', 'finance', 'healthcare', 'legal', 'education'];
-    
-    if (nonTechIndustries.includes(industry) && techRoles.some(r => jobTitle.includes(r))) {
+    const nonTech = ['consulting', 'finance', 'healthcare', 'legal', 'education'];
+    const techRoles = ['software engineer', 'frontend developer', 'backend developer',
+                       'fullstack developer', 'devops engineer'];
+    if (nonTech.includes(industry) && techRoles.some(r => jobTitle.includes(r))) {
       score -= 15;
     }
   }
-  
+
   return Math.max(0, Math.min(Math.round(score), 100));
 }
 
 function getMatchLabel(score: number): string {
-  if (score >= 60) return 'Excellent Match';
-  if (score >= 40) return 'Strong Match';
+  if (score >= 50) return 'Excellent Match';
+  if (score >= 35) return 'Strong Match';
   if (score >= 20) return 'Good Match';
-  if (score >= 10) return 'Partial Match';
+  if (score >= 8) return 'Partial Match';
   return 'Low Match';
 }
 
