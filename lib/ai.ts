@@ -13,21 +13,34 @@ export interface ExtractedSkills {
 export async function extractSkillsFromResume(resumeText: string): Promise<ExtractedSkills> {
   try {
     const extractResponse = await callAI(
-      `You are an expert recruiter and skill extraction AI. Analyze the resume thoroughly.
-Extract:
-- Technical, domain-specific, and soft skills (Pay special attention to business, consulting, strategy, and finance skills like financial modeling, market research, case studies, etc. - not just tech).
-- Experience level (fresher/junior/mid/senior based on years).
-- Industries they've worked in.
-- Target role types they are best suited for (e.g., "Management Consulting Intern", "Strategy Analyst", "Software Engineer").
-- Location/City from their address or contact info.
+      `You are an expert recruiter and career analyst AI. Analyze this resume with EXTREME attention to what makes this candidate unique.
+
+CRITICAL RULES FOR SKILL EXTRACTION:
+1. DOMAIN-SPECIFIC skills are 10x more important than generic soft skills
+2. "Customer service" or "communication" are worthless if every candidate has them — do NOT rank them highly
+3. Instead, extract what makes THIS candidate DIFFERENT: industry knowledge, domain tools, specialized experience
+4. If the resume mentions a Career Objective with a specific target (e.g., "sports retail", "financial modeling", "software engineering"), those words MUST appear as top skills
+
+SKILL EXTRACTION HIERARCHY (extract in this order of priority):
+- TIER 1 (Domain-specific, HIGH weight): Industry terms, specialized tools, domain certifications, target role keywords from Career Objective
+  Examples: "sports retail", "financial modeling", "market research", "machine learning", "UX design", "supply chain management"
+- TIER 2 (Technical/hard skills, MEDIUM weight): Software tools, programming languages, methodologies, frameworks
+  Examples: "Excel", "cash handling", "SQL", "React", "Agile", "photography", "video editing"
+- TIER 3 (Soft skills, LOW weight): Only include if demonstrably exceptional — DO NOT include generic ones like "communication" or "teamwork"
+  Examples: "negotiation" (if demonstrated with results), "public speaking" (if won awards)
+
+ROLE EXTRACTION:
+- If Career Objective says "seeking customer service work in a sports retail environment", the PRIMARY role is "sports retail associate" or "retail sales associate"
+- Derive roles from what the candidate WANTS to do (Career Objective), not just what they've done
+- Include both entry-level and aspirational roles
 
 Return exact JSON:
 {
-  "skills": ["skill1", "skill2", "business strategy"],
+  "skills": ["tier1_skill", "tier1_skill", "tier2_skill", "tier2_skill", "tier3_skill"],
   "experienceLevel": "fresher",
-  "industries": ["consulting", "technology"],
-  "roleTypes": ["management consulting intern", "business analyst"],
-  "location": "Bangalore, India"
+  "industries": ["primary_industry"],
+  "roleTypes": ["primary_target_role", "secondary_role"],
+  "location": "city, country"
 }`,
       resumeText,
       {

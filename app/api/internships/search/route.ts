@@ -26,37 +26,46 @@ interface ResumeProfile {
  */
 async function aiExtractProfile(resumeText: string): Promise<ResumeProfile | null> {
   try {
-    const prompt = `You are an expert career analyst. Analyze the resume the user provides and extract a comprehensive profile. This could be from ANY industry.
+    const prompt = `You are an expert career analyst. Analyze this resume with EXTREME care.
 
-Return a JSON object with exactly these fields:
+CRITICAL INSTRUCTION: This could be from ANY industry — sports, retail, consulting, finance, engineering, healthcare, hospitality, education, creative arts, or anything else. Do NOT default to tech/software.
+
+STEP 1: Find the Career Objective section. This is the MOST IMPORTANT signal for what jobs this person wants. Extract the exact domain/industry keywords from it.
+
+STEP 2: Extract skills using this PRIORITY ORDER:
+- TIER 1 (Domain-specific): Words from the Career Objective target (e.g., "sports retail", "customer service", "financial modeling")
+- TIER 2 (Technical/hard): Tools, software, certifications mentioned (e.g., "cash handling", "Excel", "SAP", "photography")
+- TIER 3 (Soft skills): ONLY include if uniquely demonstrated. NEVER include generic ones like "communication", "teamwork", "leadership" — they inflate scores for every job equally
+
+Resume (first 4000 chars):
+\${resumeText.slice(0, 4000)}
+
+Return JSON with exactly these fields:
 {
-  "skills": ["skill1", "skill2", "skill3"],
-  "roles": ["role1", "role2"],
+  "skills": ["domain_skill_1", "domain_skill_2", "technical_skill_1", "specific_soft_skill"],
+  "roles": ["target_role_1", "target_role_2"],
   "experience_level": "entry",
-  "keywords": ["keyword1", "keyword2"],
-  "industry": "the primary industry"
+  "keywords": ["search_query_1", "search_query_2", "search_query_3"],
+  "industry": "primary_industry"
 }
 
-Rules:
-- Extract ALL relevant skills mentioned in the resume — technical skills, tools, methodologies, frameworks, platforms, certifications
-- EXCLUDE generic soft skills that appear in every job: communication, teamwork, leadership, problem-solving, time management, organizational skills, attention to detail, interpersonal skills, adaptability, quick learner, hard worker, self-motivated
-- ONLY include SPECIFIC and DIFFERENTIATING skills: technical tools, domain knowledge, frameworks, methodologies, certifications
-- Roles should be job titles or functions relevant to the person's experience (e.g., "Business Analyst", "Marketing Intern", "Data Scientist", "Consultant", "Project Manager")
-- Keywords should be search-friendly terms that would find relevant job postings (e.g., "business development", "market research", "financial modeling", "UI/UX design", "supply chain")
-- Do NOT assume this is a software engineering resume. Read the resume carefully and extract what is ACTUALLY there
-- Include at least 5-10 skills and 2-5 roles
-- Include at least 3-5 search keywords
+RULES:
+- "skills" (5-12 items): Domain + technical first. The Career Objective domain keywords MUST be first.
+- "roles" (2-5 items): Job titles the person is TARGETING (from Career Objective), not just what they've done
+- "keywords" (3-8 items): Search-friendly phrases that would find relevant job postings. Include the Career Objective domain phrase. Example: if seeking "sports retail", include "sports retail", "retail associate", "retail sales"
+- "industry": Single word — the PRIMARY target industry from the Career Objective
+- If the person is a student seeking part-time work, set experience_level to "student"
 
 Return ONLY valid JSON, no explanation.`;
 
     const response = await callAI(
-      prompt,  // system prompt with instructions
-      resumeText.slice(0, 4000),  // Put resume in USER message, not system
+      prompt,
+      ``,
       {
-        model: 'llama-3.3-70b-versatile',  // Use Groq model (most reliable free tier)
+        model: 'gemini-1.5-flash',
         temperature: 0.1,
         max_tokens: 800,
-        providerPriority: ['groq', 'gemini', 'openai']  // Try Groq FIRST — it's your most reliable provider
+        providerPriority: ['gemini', 'groq', 'openai']
       }
     );
 
@@ -66,12 +75,10 @@ Return ONLY valid JSON, no explanation.`;
     }
 
     let raw = response.content;
-    // Clean markdown wrapping if present
     raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
     
     const parsed = JSON.parse(raw) as ResumeProfile;
     
-    // Validate
     if (!parsed.skills || !Array.isArray(parsed.skills)) return null;
     if (!parsed.keywords || !Array.isArray(parsed.keywords)) return null;
     
@@ -235,108 +242,113 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
 /**
  * Score a job against the AI-extracted profile.
  */
+// Generic noise words that match every job description — ZERO scoring value
+const NOISE_WORDS = new Set([
+  'data', 'analysis', 'research', 'management', 'communication',
+  'teamwork', 'leadership', 'problem', 'solving', 'organizational',
+  'interpersonal', 'verbal', 'written', 'detail', 'oriented',
+  'time', 'project', 'work', 'ability', 'skill', 'experience',
+  'responsibilities', 'requirements', 'qualifications', 'preferred',
+  'strong', 'excellent', 'proficient', 'knowledge', 'understanding',
+  'development', 'operations', 'support', 'service', 'customer',
+  'professional', 'environment', 'computer', 'office', 'microsoft',
+  'independent', 'collaborative', 'fast', 'paced', 'proactive',
+  'reliable', 'flexible', 'positive', 'attitude', 'approach',
+]);
+
 function scoreJob(job: any, profile: ResumeProfile): number {
+  let score = 0;
   const jobTitle = (job.title || '').toLowerCase();
   const jobDesc = (job.description || '').toLowerCase();
   const jobText = `${jobTitle} ${jobDesc}`;
-  
-  const userSkills = (profile.skills || []).map(s => s.toLowerCase());
-  const userRoles = (profile.roles || []).map(r => r.toLowerCase());
-  const userKeywords = (profile.keywords || []).map(k => k.toLowerCase());
-  
-  // Generic words that match EVERY job — must never count as "skill matches"
-  const NOISE_WORDS = new Set([
-    'data', 'analysis', 'research', 'management', 'communication',
-    'reporting', 'strategy', 'planning', 'development', 'operations',
-    'support', 'services', 'business', 'project', 'team', 'work',
-    'skills', 'experience', 'responsibilities', 'requirements',
-    'including', 'using', 'across', 'through', 'within',
-  ]);
 
-  let score = 0;
-  let realSkillHits = 0;
-  let roleHits = 0;
+  // ── CAREER OBJECTIVE DOMAIN BONUS (up to 30 points) ──
+  // The industry field and first few keywords are the STRONGEST signal
+  const industry = (profile.industry || '').toLowerCase();
+  const careerObjectiveKw = [
+    industry,
+    ...(profile.keywords || []).slice(0, 3).map(k => k.toLowerCase()),
+  ].filter(k => k.length > 2);
 
-  // ─── SKILL MATCHING (0-55 points) ───
+  for (const kw of careerObjectiveKw) {
+    // Multi-word phrase match — exact phrase in job text
+    if (kw.includes(' ')) {
+      if (jobText.includes(kw)) score += 15;
+    } else {
+      // Single word — check it's a real domain word, not noise
+      if (!NOISE_WORDS.has(kw) && jobText.includes(kw)) score += 8;
+    }
+  }
+
+  // ── 50% — Skills match (phrase-level, noise-filtered) ──
+  const userSkills = profile.skills || [];
+  let skillsMatched = 0;
+  let skillsTotal = 0;
+
   for (const skill of userSkills) {
-    const words = skill.split(/\s+/);
-    let matched = false;
+    const s = skill.toLowerCase();
+    // Skip single-word noise skills (they match everything equally)
+    if (s.split(/\s+/).length === 1 && NOISE_WORDS.has(s)) continue;
+    skillsTotal++;
 
-    if (words.length >= 2) {
-      // Multi-word skill: must appear as CONTIGUOUS PHRASE
-      if (jobText.includes(skill)) {
-        matched = true;
-        score += 8;
-        if (jobTitle.includes(skill)) score += 7;
-      }
-    } else if (words.length === 1 && !NOISE_WORDS.has(words[0])) {
-      // Single non-noise skill: use WORD BOUNDARY regex
-      // "java" must not match "javascript"
-      const escaped = words[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const re = new RegExp(`\\b${escaped}\\b`);
-      if (re.test(jobText)) {
-        matched = true;
-        score += 5;
-        if (re.test(jobTitle)) score += 4;
-      }
+    // Phrase match: ALL words of the skill must appear in job text
+    const words = s.split(/\s+/);
+    if (words.every(w => jobText.includes(w))) {
+      skillsMatched++;
     }
-    // Single-word noise skills ("data", "analysis") are COMPLETELY SKIPPED
-
-    if (matched) realSkillHits++;
   }
 
-  // ─── ROLE MATCHING (0-25 points) ───
+  if (skillsTotal > 0) {
+    // Weight: first 3 skills (usually domain-specific from Career Objective) get 2x weight
+    let weightedMatch = 0;
+    let weightedTotal = 0;
+    for (let i = 0; i < userSkills.length; i++) {
+      const s = userSkills[i].toLowerCase();
+      if (s.split(/\s+/).length === 1 && NOISE_WORDS.has(s)) continue;
+      const words = s.split(/\s+/);
+      const matched = words.every(w => jobText.includes(w));
+      const weight = i < 3 ? 2 : 1; // First 3 skills = domain priority
+      weightedTotal += weight;
+      if (matched) weightedMatch += weight;
+    }
+    score += (weightedMatch / Math.max(weightedTotal, 1)) * 50;
+  }
+
+  // ── 20% — Role/title match (phrase-level) ──
+  const userRoles = profile.roles || [];
+  let rolesMatched = 0;
   for (const role of userRoles) {
-    // Check role as phrase in TITLE first (strong signal)
-    if (role.length >= 2 && jobTitle.includes(role)) {
-      score += 20;
-      roleHits++;
-    } else if (role.length >= 2 && jobText.includes(role)) {
-      score += 8;
-      roleHits++;
+    const r = role.toLowerCase();
+    const words = r.split(/\s+/);
+    if (words.every(w => jobTitle.includes(w))) {
+      rolesMatched++;
+    } else if (words.every(w => jobText.includes(w))) {
+      rolesMatched += 0.5; // Partial for description-only match
     }
   }
-
-  // ─── KEYWORD MATCHING (0-10 points) ───
-  for (const kw of userKeywords) {
-    if (kw.length >= 3 && jobText.includes(kw)) {
-      score += 3;
-    }
+  if (userRoles.length > 0) {
+    score += (rolesMatched / userRoles.length) * 20;
   }
 
-  // ─── EXPERIENCE BONUS (0-10 points, ONLY if real matches exist) ───
-  if (realSkillHits > 0 || roleHits > 0) {
-    if (jobTitle.includes('intern') || jobTitle.includes('entry') ||
-        jobTitle.includes('trainee') || jobTitle.includes('junior')) {
+  // ── Bonus: Student/Entry/Intern title match ──
+  const expLevel = (profile.experience_level || '').toLowerCase();
+  if (expLevel === 'student' || expLevel === 'fresher' || expLevel === 'entry') {
+    if (jobTitle.includes('intern') || jobTitle.includes('entry') || jobTitle.includes('junior') || jobTitle.includes('trainee') || jobTitle.includes('associate')) {
       score += 5;
     }
   }
-  // NO FREE POINTS. If nothing matched, score = 0.
 
-  // ─── SENIOR PENALTY ───
-  const seniorKw = ['senior', 'sr.', 'sr ', 'lead ', 'manager', 'director',
-                     'vp', 'chief', 'staff', 'principal', 'architect'];
-  if (seniorKw.some(k => jobTitle.includes(k))) score -= 20;
-
-  // ─── INDUSTRY MISMATCH PENALTY ───
-  const industry = (profile.industry || '').replace('_', ' ');
-  if (industry && industry !== 'general') {
-    const nonTech = ['consulting', 'finance', 'healthcare', 'legal', 'education'];
-    const techRoles = ['software engineer', 'frontend developer', 'backend developer',
-                       'fullstack developer', 'devops engineer'];
-    if (nonTech.includes(industry) && techRoles.some(r => jobTitle.includes(r))) {
-      score -= 15;
-    }
-  }
+  // ── Penalty: Senior titles ──
+  const seniorKw = ['senior', 'sr.', 'sr ', 'lead', 'manager', 'director', 'vp', 'chief', 'principal', 'head'];
+  if (seniorKw.some(k => jobTitle.includes(k))) score -= 15;
 
   return Math.max(0, Math.min(Math.round(score), 100));
 }
 
 function getMatchLabel(score: number): string {
-  if (score >= 50) return 'Excellent Match';
-  if (score >= 35) return 'Strong Match';
-  if (score >= 20) return 'Good Match';
-  if (score >= 8) return 'Partial Match';
+  if (score >= 70) return 'Excellent Match';
+  if (score >= 50) return 'Good Match';
+  if (score >= 30) return 'Moderate Match';
   return 'Low Match';
 }
 
@@ -395,99 +407,66 @@ export async function POST(req: NextRequest) {
     console.log(`[Search] Final roles (${profile.roles.length}): ${(profile.roles||[]).join(', ')}`);
 
     // ────────────────────────────────────────────
-    // STEP 2: Build targeted queries from AI profile
+    // Step 2: Fetch jobs using AI-generated queries
+    // DETERMINISTIC: always run ALL queries, always return same results
     // ────────────────────────────────────────────
-    const searchQueries: string[] = [];
-
-    // Priority 1: Industry
-    if (profile.industry && profile.industry !== 'general') {
-      searchQueries.push(profile.industry.replace('_', ' '));
-    }
-
-    // Priority 2: Top 2 roles
-    if (profile.roles && profile.roles.length > 0) {
-      searchQueries.push(...profile.roles.slice(0, 2));
-    }
-
-    // Priority 3: Top 3 keywords
-    if (profile.keywords && profile.keywords.length > 0) {
-      searchQueries.push(...profile.keywords.slice(0, 3));
-    }
-
-    // Deduplicate and limit to 4
-    const uniqueQueries = [...new Set(searchQueries)].slice(0, 4);
-    console.log(`[Search] Running ${uniqueQueries.length} additional queries: ${uniqueQueries.join(' | ')}`);
-
-    // ────────────────────────────────────────────
-    // STEP 3: Fetch additional jobs for remaining queries (ALL IN PARALLEL)
-    // ────────────────────────────────────────────
-    const additionalPromises = uniqueQueries
-      .filter(q => q.toLowerCase() !== initialQuery.toLowerCase())
-      .map(q => aggregateJobs(q, userLocation));
+    const searchQueries = [
+      ...(profile.keywords || []).slice(0, 5),  // Keywords first (more targeted)
+      ...(profile.skills || []).slice(0, 5),
+      ...(profile.roles || []).slice(0, 2)
+    ];
     
-    const additionalResults = await Promise.all(additionalPromises);
-
-    // ────────────────────────────────────────────
-    // STEP 4: Combine, deduplicate, score, filter
-    // ────────────────────────────────────────────
     const allJobsMap = new Map<string, JobResult>();
 
-    // Add initial jobs
+    // Add initial jobs fetched concurrently in Step 1
     for (const job of initialJobs) {
       const key = `${job.title}-${job.company}`.toLowerCase().replace(/\s+/g, '');
       if (!allJobsMap.has(key)) allJobsMap.set(key, job);
     }
 
-    // Add additional jobs
-    for (const batch of additionalResults) {
-      for (const job of batch) {
-        const key = `${job.title}-${job.company}`.toLowerCase().replace(/\s+/g, '');
-        if (!allJobsMap.has(key)) allJobsMap.set(key, job);
+    for (const q of searchQueries) {
+      try {
+        const batch = await aggregateJobs(q, userLocation);
+        for (const job of batch) {
+          const key = `${job.title}-${job.company}`.toLowerCase().replace(/\s+/g, '');
+          if (!allJobsMap.has(key)) {
+            allJobsMap.set(key, job);
+          }
+        }
+      } catch (e) {
+        console.error(`aggregateJobs failed for "${q}":`, e);
       }
     }
 
     const rawJobs = Array.from(allJobsMap.values());
     console.log(`[Search] Total unique jobs fetched: ${rawJobs.length}`);
 
-    // Score every job
+    // ────────────────────────────────────────────
+    // Step 3: Score, rank, and return ALL results
+    // ────────────────────────────────────────────
     const scoredJobs = rawJobs.map(job => {
       const matchScore = scoreJob(job, profile!);
       return { ...job, matchScore, matchLabel: getMatchLabel(matchScore) };
     });
 
-    // Location filter with minimum score floor
-    const locationFiltered = scoredJobs.filter(job => {
-      if (job.matchScore < 3) return false;
-      
-      const jobLoc = (job.location || '').toLowerCase();
-      const userLoc = (userLocation || 'india').toLowerCase();
-      
-      if (jobLoc.includes('remote') || jobLoc.includes('anywhere') || jobLoc.includes('wfh')) {
-        return job.matchScore >= 8;
-      }
-      if (jobLoc.includes(userLoc)) return true;
-      if (userLoc.includes('india') && (
-        jobLoc.includes('india') || jobLoc.includes('bangalore') || jobLoc.includes('bengaluru') ||
-        jobLoc.includes('mumbai') || jobLoc.includes('delhi') || jobLoc.includes('pune') ||
-        jobLoc.includes('chennai') || jobLoc.includes('hyderabad') || jobLoc.includes('noida') ||
-        jobLoc.includes('gurgaon') || jobLoc.includes('kolkata')
-      )) return true;
-      return job.matchScore >= 50;
+    // DETERMINISTIC sort: by score desc, then title alpha for stable ordering
+    const finalJobs = scoredJobs.sort((a, b) => {
+      if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+      return (a.title || '').localeCompare(b.title || '');
     });
 
-    const finalJobs = locationFiltered
-      .sort((a, b) => b.matchScore - a.matchScore)
-      .slice(0, 50);
-
-    console.log(`[Search] Returning ${finalJobs.length} jobs (top: ${finalJobs[0]?.matchScore || 0}%)`);
+    console.log(`[Search] Returning ALL ${finalJobs.length} jobs (top: ${finalJobs[0]?.matchScore || 0}%, bottom: ${finalJobs[finalJobs.length - 1]?.matchScore || 0}%)`);
 
     return NextResponse.json({
       success: true,
-      total: finalJobs.length,
+      total: finalJobs.length,           // Total count for pagination
+      page: 1,                           // Current page
+      pageSize: 25,                      // Items per page
+      totalPages: Math.ceil(finalJobs.length / 25),
       detected_skills: profile.skills,
       detected_domains: [profile.industry],
       target_roles: profile.roles,
-      jobs: finalJobs,
+      jobs: finalJobs,                   // ALL jobs — client handles pagination
       count: finalJobs.length
     });
 
