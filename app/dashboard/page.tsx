@@ -27,7 +27,7 @@ export default function DashboardPage() {
   }, []);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    // Clear ALL previous resume data to prevent cross-contamination (Fix 9)
+    // Clear ALL previous resume data to prevent cross-contamination (Fix #4 & #9)
     localStorage.removeItem('resumeText');
     localStorage.removeItem('userSkills');
     localStorage.removeItem('userExperience');
@@ -74,9 +74,9 @@ export default function DashboardPage() {
       console.log('=== SKILLS EXTRACTED ===', extracted);
       
       localStorage.setItem('userSkills', JSON.stringify(extracted.skills || []));
-      localStorage.setItem('userExperience', extracted.experienceLevel || 'student');
-      localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
-      localStorage.setItem('userLocation', extracted.location || '');
+      localStorage.setItem('userExperience', extracted.experience_level || 'student');
+      localStorage.setItem('userRoles', JSON.stringify(extracted.roles || []));
+      localStorage.setItem('userLocation', extracted.location || 'remote');
       localStorage.setItem('detectedCountry', extracted.detected_country || 'remote');
       localStorage.setItem('resumeText', text);
       localStorage.setItem('lastUserId', user?.id || 'anonymous');

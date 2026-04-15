@@ -310,7 +310,8 @@ export async function POST(req: NextRequest) {
         keywords: [
           ...clientRoles.slice(0, 2).map((r: string) => `${r} internship`),
           ...clientSkills.slice(0, 3).map((s: string) => `${s} intern`)
-        ]
+        ],
+        detected_country: body.detectedCountry || 'remote'
       };
     } else {
       // Start AI extraction in background
@@ -332,18 +333,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Use domain-specific queries for better results
+    // Fix #9 — Industry-specific queries
+    const DOMAIN_QUERIES: Record<string, string[]> = {
+      'retail': ['retail assistant', 'sales associate', 'cashier', 'shop assistant', 'customer service assistant', 'retail casual'],
+      'sport': ['sports retail', 'coach assistant', 'recreation officer', 'sport steward', 'sports store'],
+      'business': ['business intern', 'admin assistant', 'data entry', 'junior analyst'],
+      'software': ['software intern', 'junior developer', 'frontend intern', 'backend intern'],
+      'finance': ['accounting intern', 'finance assistant', 'junior bookkeeper'],
+      'hospitality': ['waiter', 'barista', 'cafe assistant', 'restaurant staff', 'hospitality casual'],
+      'trades': ['apprentice', 'trades assistant', 'labourer', 'construction assistant'],
+      'creative': ['content creator', 'social media assistant', 'graphic design intern', 'photography assistant']
+    };
+
     const industry = (profile.industry || '').toLowerCase();
-    const domainQueries = DOMAIN_SEARCH_QUERIES[industry] || [];
+    const domainQueries = DOMAIN_QUERIES[industry] || [];
 
     const searchQueriesArr = [
       // Domain-specific queries first (most relevant)
-      ...domainQueries.slice(0, 3),
+      ...domainQueries.slice(0, 4),
       // Then AI-extracted keywords and roles
       ...(profile.keywords || []).slice(0, 3),
       ...(profile.roles || []).slice(0, 2),
-      // Top skills as search terms
-      ...(profile.skills || []).filter(s => s.split(' ').length > 1 || s.length > 5).slice(0, 3),
     ];
 
     // Deduplicate queries (case-insensitive)
@@ -400,7 +410,11 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    const finalJobs = scoredJobs; // matchJobListings already sorts them
+    // Fix #10 — Strict filtering: Only return jobs with at least 15% match
+    const MIN_MATCH_SCORE = 15;
+    const finalJobs = scoredJobs
+      .filter(j => (j.matchScore || 0) >= MIN_MATCH_SCORE)
+      .slice(0, 50); // Hard limit for response size
 
     console.log(`[Search] Returning ALL ${finalJobs.length} jobs (top: ${finalJobs[0]?.matchScore || 0}%, bottom: ${finalJobs[finalJobs.length - 1]?.matchScore || 0}%)`);
 

@@ -97,34 +97,31 @@ STRICT RULES:
     );
 
     console.log(`[Tailor API] Success via ${successProvider}! Final output length: ${cleanContent.length}`);
-    const evalSystemPrompt = `You are an ATS (Applicant Tracking System) evaluator. Score this tailored resume against the job description from 0-100.
-Criteria: 
-- clear contact info (10)
-- professional summary (10)
-- relevant skills section (20)
-- quantified work experience (20)
-- education section (10)
-- clean formatting/no graphics (10)
-- keyword density for target role (10)
-- appropriate length (10)
+    const evalSystemPrompt = `You are a professional ATS (Applicant Tracking System) evaluator. Score how well the candidate's tailored resume matches the job description on a scale of 0-100.
 
-Keep match score realistic: 
-- 85%+ for clear perfect overlap.
-- 60-80% for good overlap but missing some preferred/senior items.
-- <60% if the candidate is high-school/student level and the job is professional.
+Criteria for High Score (80-100):
+- Strong overlap in domain-specific technical or soft skills.
+- Education level matches (e.g., student/grad for internships).
+- Experience level matches the job's seniority.
+- Clear alignment in industry/domain.
 
-Return ONLY a JSON object: 
+Criteria for Low Score (0-30):
+- Significant mismatch in seniority (professional applying for high-school job or vice-versa).
+- Complete lack of prerequisite hard skills.
+- Geographic mismatch if the job isn't remote.
+
+Return ONLY JSON:
 {
   "score": number, 
-  "feedback": "Summary of compatibility",
-  "matchedKeywords": ["..."],
-  "missingKeywords": ["..."]
+  "feedback": "...",
+  "matchedKeywords": [],
+  "missingKeywords": []
 }`;
 
     const evalUserPrompt = `TAILORED RESUME:\n${cleanContent}\n\nJOB DESCRIPTION:\n${cleanJob}`;
     
     const evalResponse = await callAI(evalSystemPrompt, evalUserPrompt, {
-      model: 'llama-3.3-70b-versatile',
+      model: 'gemini-1.5-flash',
       temperature: 0.1,
       max_tokens: 500
     });
@@ -146,12 +143,14 @@ Return ONLY a JSON object:
     }
 
     // Fallback if AI evaluation fails
+    // Fix #16 — Removed hardcoded range fallback
     if (atsScore === 0) {
+      console.warn('[Tailor API] AI evaluation failed, calculating dynamic keyword match...');
       const jobWords = new Set(cleanJob.toLowerCase().split(/\W+/).filter(w => w.length > 3));
       const resumeWords = new Set(cleanContent.toLowerCase().split(/\W+/));
       matchedKeywords = [...jobWords].filter(w => resumeWords.has(w)).slice(0, 10);
       missingKeywords = [...jobWords].filter(w => !resumeWords.has(w)).slice(0, 5);
-      atsScore = Math.min(85, Math.max(45, (matchedKeywords.length / Math.max(1, jobWords.size)) * 100));
+      atsScore = Math.round((matchedKeywords.length / Math.max(1, jobWords.size)) * 100);
     }
 
     console.log(`[Tailor API] AI ATS Score: ${atsScore}`);

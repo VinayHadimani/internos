@@ -130,9 +130,10 @@ function InternshipsContent() {
 
       const extracted = await extractSkillsFromResume(text);
       localStorage.setItem('userSkills', JSON.stringify(extracted.skills || []));
-      localStorage.setItem('userExperience', extracted.experienceLevel || 'fresher');
-      localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
+      localStorage.setItem('userExperience', extracted.experience_level || 'student');
+      localStorage.setItem('userRoles', JSON.stringify(extracted.roles || []));
       localStorage.setItem('userLocation', extracted.location || 'remote');
+      localStorage.setItem('detectedCountry', extracted.detected_country || 'remote');
 
       await searchJobs(text, extracted.skills || []);
     } catch (err) {
@@ -148,9 +149,9 @@ function InternshipsContent() {
     setError(null);
 
     try {
-      const userLocation = localStorage.getItem('userLocation') || '';
+      const userLocation = localStorage.getItem('userLocation') || 'remote';
       const userSkills = directSkills || JSON.parse(localStorage.getItem('userSkills') || '[]');
-      const userExperience = localStorage.getItem('userExperience') || 'fresher';
+      const userExperience = localStorage.getItem('userExperience') || 'student';
       const userRoles = JSON.parse(localStorage.getItem('userRoles') || '[]');
       
       // Cache Buster to ensure we focus only on the latest resume
@@ -402,24 +403,36 @@ function InternshipsContent() {
                             <span className="text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">📍 Location Match</span>
                           )}
                           {(() => {
-                            const userLoc = (localStorage.getItem('userLocation') || '').toLowerCase();
+                            const userLoc = (localStorage.getItem('userLocation') || 'remote').toLowerCase();
                             const jobLoc = (job.location || '').toLowerCase();
                             const userParts = userLoc.split(',').map(s => s.trim());
                             const userCity = userParts[0];
                             const userCountry = userParts[userParts.length - 1];
-                            
+
+                            const getFlagEmoji = (loc: string) => {
+                              const l = loc.toLowerCase();
+                              if (l.includes('australia')) return '🇦🇺';
+                              if (l.includes('india')) return '🇮🇳';
+                              if (l.includes('united states') || l.includes('usa')) return '🇺🇸';
+                              if (l.includes('united kingdom') || l.includes('uk')) return '🇬🇧';
+                              if (l.includes('germany')) return '🇩🇪';
+                              if (l.includes('canada')) return '🇨🇦';
+                              if (l.includes('remote')) return '🌐';
+                              return '📍';
+                            };
+
                             const isRemote = jobLoc.includes('remote');
-                            const sameCity = userCity && jobLoc.includes(userCity);
-                            const sameCountry = userCountry && jobLoc.includes(userCountry);
+                            const sameCity = userCity && jobLoc.includes(userCity.toLowerCase());
+                            const sameCountry = userCountry && jobLoc.includes(userCountry.toLowerCase());
 
                             if (isRemote) {
-                              return <span className="text-xs font-medium px-2 py-1 bg-green-500/10 text-green-400 rounded-lg border border-green-500/20">🏠 Remote</span>;
+                              return <span className="text-xs font-medium px-2 py-1 bg-green-500/10 text-green-400 rounded-lg border border-green-500/20">🌐 Remote Match</span>;
                             } else if (sameCity) {
-                              return <span className="text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">📍 {userCity}</span>;
+                              return <span className="text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">{getFlagEmoji(jobLoc)} {userCity} Match</span>;
                             } else if (sameCountry) {
-                              return <span className="text-xs font-medium px-2 py-1 bg-orange-500/10 text-orange-400 rounded-lg border border-orange-500/20">📍 {userCountry}</span>;
+                              return <span className="text-xs font-medium px-2 py-1 bg-orange-500/10 text-orange-400 rounded-lg border border-orange-500/20">{getFlagEmoji(jobLoc)} {userCountry} Match</span>;
                             } else {
-                              return <span className="text-xs font-medium px-2 py-1 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20">🌍 International</span>;
+                              return <span className="text-xs font-medium px-2 py-1 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20">{getFlagEmoji(jobLoc)} International</span>;
                             }
                           })()}
                         </div>

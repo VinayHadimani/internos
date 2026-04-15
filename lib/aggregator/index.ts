@@ -211,38 +211,21 @@ const LOCATION_ALIASES: Record<string, string[]> = {
   'gurgaon': ['gurgaon', 'gurugram', 'delhi ncr', 'ncr', 'delhi'],
   'bangalore': ['bangalore', 'bengaluru', 'karnataka'],
   'mumbai': ['mumbai', 'bombay', 'maharashtra', 'navi mumbai', 'thane'],
-  'pune': ['pune', 'maharashtra'],
-  'hyderabad': ['hyderabad', 'telangana', 'secunderabad'],
-  'chennai': ['chennai', 'tamil nadu'],
-  'kolkata': ['kolkata', 'calcutta', 'west bengal'],
-  'delhi': ['delhi', 'new delhi', 'delhi ncr', 'ncr'],
   'noida': ['noida', 'uttar pradesh', 'delhi ncr', 'ncr'],
   // Australia
-  'melbourne': ['melbourne', 'victoria', 'vic', 'park hill', '3045'],
+  'melbourne': ['melbourne', 'victoria', 'vic', 'park hill', '3045', 'vic 3045'],
   'sydney': ['sydney', 'nsw', 'new south wales'],
   'brisbane': ['brisbane', 'queensland', 'qld'],
   'perth': ['perth', 'western australia', 'wa'],
   'adelaide': ['adelaide', 'south australia', 'sa'],
-  'canberra': ['canberra', 'act', 'australian capital territory'],
-  'gold coast': ['gold coast', 'surfers paradise'],
-  'australia': ['australia', 'aus'],
   // US
   'new york': ['new york', 'nyc', 'manhattan'],
   'san francisco': ['san francisco', 'sf', 'bay area'],
-  'los angeles': ['los angeles', 'la', 'socal'],
-  'chicago': ['chicago', 'illinois'],
-  'austin': ['austin', 'texas', 'tx'],
-  'boston': ['boston', 'massachusetts'],
-  'united states': ['united states', 'usa', 'us'],
-  // Germany
-  'berlin': ['berlin'],
-  'munich': ['munich', 'münchen'],
-  'frankfurt': ['frankfurt', 'frankfurt am main'],
-  'hamburg': ['hamburg'],
-  'germany': ['germany', 'deutschland'],
   // UK
   'london': ['london'],
-  'united kingdom': ['united kingdom', 'uk', 'england'],
+  'united kingdom': ['united kingdom', 'uk'],
+  // Germany
+  'germany': ['germany', 'deutschland', 'berlin', 'munich', 'hamburg'],
   // Generic
   'remote': ['remote', 'work from home', 'wfh', 'anywhere', 'work from anywhere'],
 }
@@ -299,15 +282,15 @@ export function calculateLocationMatch(jobLocation: string, preferredLocation: s
 
   // Same country bonus — works for ANY country, not just India
   const COUNTRY_ALIASES: Record<string, string[]> = {
-    'india': ['india', 'bangalore', 'mumbai', 'delhi', 'gurgaon', 'pune', 'hyderabad', 'chennai', 'kolkata', 'noida'],
-    'australia': ['australia', 'melbourne', 'sydney', 'brisbane', 'perth', 'adelaide', 'canberra', 'gold coast', 'vic', 'nsw', 'qld', 'wa', 'sa'],
-    'united states': ['united states', 'usa', 'new york', 'san francisco', 'los angeles', 'chicago', 'austin', 'boston', 'texas', 'california'],
-    'germany': ['germany', 'berlin', 'munich', 'frankfurt', 'hamburg'],
-    'united kingdom': ['united kingdom', 'uk', 'london', 'england'],
+    'india': ['india', 'bangalore', 'mumbai', 'delhi', 'gurgaon', 'pune', 'hyderabad', 'chennai', 'kolkata', 'noida', '+91'],
+    'australia': ['australia', 'melbourne', 'sydney', 'brisbane', 'perth', 'adelaide', 'canberra', 'gold coast', 'vic', 'nsw', 'qld', 'wa', 'sa', '+61', '3045'],
+    'united states': ['united states', 'usa', 'new york', 'san francisco', 'los angeles', 'chicago', 'austin', 'boston', 'texas', 'california', '+1'],
+    'germany': ['germany', 'berlin', 'munich', 'frankfurt', 'hamburg', '+49'],
+    'united kingdom': ['united kingdom', 'uk', 'london', 'england', '+44'],
   }
-  for (const [, cities] of Object.entries(COUNTRY_ALIASES)) {
-    const jobInCountry = cities.some(c => jobNorm.includes(c))
-    const prefInCountry = cities.some(c => prefNorm.includes(c))
+  for (const [, signals] of Object.entries(COUNTRY_ALIASES)) {
+    const jobInCountry = signals.some(s => jobNorm.includes(s.toLowerCase()))
+    const prefInCountry = signals.some(s => prefNorm.includes(s.toLowerCase()))
     if (jobInCountry && prefInCountry) return 0.7
   }
 
@@ -371,10 +354,10 @@ async function runFetchersInParallel(
     fetchRemoteOK(keywords),
     fetchAdzuna(keywords, location),
     fetchJSearch(keywords, location),
-    // Only fetch from Internshala if user is in India or location is unclear
-    (!location || location.toLowerCase().includes('india')) ? fetchInternshala(keywords) : Promise.resolve([]),
+    // Fix #14 — Gating: Only fetch from Internshala if user is in India
+    (location.toLowerCase().includes('india')) ? fetchInternshala(keywords) : Promise.resolve([]),
     fetchWeWorkRemotely(keywords),
-    // Only fetch from Arbeitnow if user is in Germany/Europe or location is remote
+    // Fix #14 — Gating: Only fetch from Arbeitnow if user is in Germany/Europe or location is remote
     (location.toLowerCase().includes('germany') || location.toLowerCase().includes('europe') || location.toLowerCase() === 'remote') ? fetchArbeitnow(keywords) : Promise.resolve([]),
   ])
 

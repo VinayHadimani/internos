@@ -4,83 +4,71 @@ import { callAI } from '@/lib/rotating-ai';
 
 export interface ExtractedSkills {
   skills: string[];
-  experienceLevel: 'high_school' | 'student' | 'fresh_graduate' | 'junior' | 'mid' | 'senior';
-  industries: string[];
-  roleTypes: string[];
+  roles: string[];
+  keywords: string[];
   location: string;
+  industry: string;
+  experience_level: string;
   detected_country: string;
 }
 
 export async function extractSkillsFromResume(resumeText: string): Promise<ExtractedSkills> {
   try {
-    const extractResponse = await callAI(
-      `You are an expert recruiter and skill extraction AI. Analyze the resume thoroughly.
+    const prompt = `You are an expert recruiter and skill extraction AI. Analyze the resume thoroughly.
 Extract:
-- Technical, domain-specific, and soft skills (not just tech — include retail, hospitality, sports, trades, creative, admin skills).
-- Experience level (fresher/junior/mid/senior based on years of experience or education status).
-- Industries they've worked in or are targeting.
-- Target role types they are best suited for.
-- Location AND country — see CRITICAL location detection rules below.
+- Technical, domain-specific, and soft skills (not just tech - sports, retail, service, etc.).
+- Target roles the candidate is seeking or qualified for.
+- 5-8 search keywords that would find relevant entry-level jobs/internship.
+- Location (City/State) AND Detect Country based on:
+  * Phone prefixes (+61 AU, +91 IN, +1 US, +44 UK, +49 DE).
+  * Postcode patterns (3xxx/2xxx AU, 5-6 digits IN/US, etc.).
+  * School names and terms (Secondary College, Year 11/12 = AU).
+- Industry/Domain (Retail, Sport, Software, Finance, etc.).
+- Experience level: "high_school", "student", "recent_grad", or "junior".
 
-CRITICAL LOCATION DETECTION RULES:
-You MUST detect the candidate's country. Look for these signals:
-1. PHONE NUMBERS: +61 or 04xx/045xx/04xx xxx xxx = AUSTRALIA. +91 = India. +1 = USA/Canada. +44 = UK. +49 = Germany.
-2. POSTCODES: 3000-3999 = Victoria/Melbourne Australia. 2000-2999 = Sydney. 4000-4999 = Brisbane. 5000-5999 = Adelaide. 6000-6999 = Perth. 7000 = Hobart. 0800 = Darwin. 2600-2900 = Canberra. 6-digit = India. 5-digit = USA/Germany.
-3. SCHOOL SYSTEMS: "Secondary College", "Year 11", "Year 12", "VCE", "HSC", "VET studies", "ATAR" = AUSTRALIA. "High School" + "Year 10/11/12" = Australia or UK.
-4. TERMINOLOGY: "casual", "part-time", "fortnight", "HECS", "Centrelink", "QEAC" = Australian job market.
-5. CURRENCY: "AUD", "$" with Australian context = Australia.
-
-If Australian signals are found, set location to the specific Australian city (e.g., "Melbourne, Australia", "Sydney, Australia").
-If Indian signals are found, set location to the specific Indian city (e.g., "Bangalore, India").
-If American signals are found, set location to the specific US city (e.g., "New York, USA").
-If NO location signals are found, set location to "remote".
-NEVER default to India. NEVER guess — if unsure, use "remote".
-
-Return exact JSON:
+Return ONLY JSON:
 {
-  "skills": ["skill1", "skill2", "skill3"],
-  "experienceLevel": "fresher",
-  "industries": ["retail", "sports"],
-  "roleTypes": ["retail assistant", "customer service"],
-  "location": "Melbourne, Australia"
-}`,
-      resumeText,
-      {
-        model: 'llama-3.3-70b-versatile',
-        temperature: 0.1,
-        max_tokens: 500,
-        response_format: { type: 'json_object' }
-      }
-    );
+  "skills": [],
+  "roles": [],
+  "keywords": [],
+  "location": "City, State",
+  "detected_country": "australia/india/us/uk/germany/canada",
+  "industry": "...",
+  "experience_level": "..."
+}`;
 
-    if (!extractResponse.success) {
-      throw new Error(extractResponse.error || 'AI Extraction failed');
+    const response = await callAI(prompt, resumeText, {
+      model: 'gemini-1.5-flash',
+      temperature: 0.1
+    });
+
+    if (response.success && response.content) {
+       const cleaned = response.content.replace(/```json|```/g, '').trim();
+       const parsed = JSON.parse(cleaned);
+       return {
+         skills: parsed.skills || [],
+         roles: parsed.roles || [],
+         keywords: parsed.keywords || [],
+         location: parsed.location || 'remote',
+         industry: parsed.industry || 'General',
+         experience_level: parsed.experience_level || 'student',
+         detected_country: parsed.detected_country || 'remote'
+       };
     }
-
-    let raw = extractResponse.content || '{}';
-    raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
-    
-    const result = JSON.parse(raw) as ExtractedSkills;
-    
-    return {
-      skills: result.skills?.length > 0 ? result.skills : extractSkillsByKeywords(resumeText),
-      experienceLevel: result.experienceLevel || 'student',
-      industries: result.industries || [],
-      roleTypes: result.roleTypes || [],
-      location: result.location || 'remote',
-      detected_country: result.detected_country || 'remote'
-    };
-  } catch (error) {
-    console.error("Failed to extract skills:", error);
-    return {
-      skills: extractSkillsByKeywords(resumeText),
-      experienceLevel: 'student',
-      industries: [],
-      roleTypes: [],
-      location: 'remote',
-      detected_country: 'remote'
-    };
+  } catch (e) {
+    console.error("AI Skill extraction failed:", e);
   }
+  
+  // High-School / Student sensitive fallback
+  return { 
+    skills: ["Communication", "Teamwork"], 
+    roles: ["Intern"], 
+    keywords: ["internship"], 
+    location: "remote", 
+    industry: "General", 
+    experience_level: "student",
+    detected_country: "remote" 
+  };
 }
 
 // Fallback keyword extraction
