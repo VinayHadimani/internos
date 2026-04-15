@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -25,7 +25,7 @@ interface Job {
 
 const PAGE_SIZE = 25;
 
-export default function InternshipsPage() {
+function InternshipsContent() {
   const { isAuthenticated, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -453,5 +453,17 @@ export default function InternshipsPage() {
         )}
       </main>
     </div>
+  );
+}
+
+export default function InternshipsPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+         <span className="text-xl text-[#777]">Loading page...</span>
+      </div>
+    }>
+      <InternshipsContent />
+    </Suspense>
   );
 }
