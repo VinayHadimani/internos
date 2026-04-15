@@ -298,84 +298,72 @@ export async function POST(req: NextRequest) {
 
     let profile: ResumeProfile | null = null;
 
-    // Fast Path: Only skip AI if we have SUFFICIENT skills and roles
-    if (clientSkills.length >= 3 && clientRoles.length >= 1) {
-      console.log('[Search] Using client-provided profile');
-      profile = {
-        skills: clientSkills,
-        roles: clientRoles,
-        industry: 'general',
-        experience_level: clientExperience,
-        keywords: [
-          ...clientRoles.slice(0, 2).map((r: string) => `${r} internship`),
-          ...clientSkills.slice(0, 3).map((s: string) => `${s} intern`)
-        ],
-        detected_country: body.detectedCountry || 'remote'
-      };
-    } else {
-      // Start AI extraction in background
-      profile = await aiExtractProfile(resumeText);
-      
-      // CRITICAL FIX: Merge dashboard skills with AI roles/experience
-      // Do not let AI ignore the perfectly detected dashboard skills
-      if (profile && clientSkills.length > 0) {
-        profile.skills = [...new Set([...clientSkills, ...profile.skills])];
-      }
-      
-      if (!profile) {
-        console.log('[Search] AI unavailable, using keyword fallback');
-        profile = fallbackExtractProfile(
-          resumeText, 
-          Array.isArray(clientSkills) ? clientSkills.map(String) : [],
-          Array.isArray(clientRoles) ? clientRoles.map(String) : []
-        );
-      }
+    // AI profile extraction — REQUIRED for industry detection and personalization
+    profile = await aiExtractProfile(resumeText);
+    
+    // CRITICAL: Merge dashboard skills with AI-detected ones
+    if (profile && clientSkills.length > 0) {
+      profile.skills = [...new Set([...clientSkills, ...profile.skills])];
+    }
+    
+    if (!profile) {
+      console.log('[Search] AI unavailable, using keyword fallback');
+      profile = fallbackExtractProfile(
+        resumeText, 
+        Array.isArray(clientSkills) ? clientSkills.map(String) : [],
+        Array.isArray(clientRoles) ? clientRoles.map(String) : []
+      );
     }
 
-    // Fix #8 — Build SMART search queries that remote job APIs can actually use
-    const searchQueriesArr: string[] = [];
-    const industryName = (profile.industry || '').toLowerCase();
+    // Fix Blocker 2 — Build SMART search queries that remote job APIs can actually use
+    const searchQueries: string[] = [];
+    const industry = (profile.industry || '').toLowerCase();
     const skills = profile.skills || [];
     const roles = profile.roles || [];
 
-    // Query 1: Primary role-based search (highest priority)
+    // 1. Use AI-generated roles/keywords if available (best quality)
     if (roles.length > 0) {
-      searchQueriesArr.push(roles[0]); // e.g., "retail sales assistant"
+      roles.slice(0, 3).forEach(r => searchQueries.push(r));
     }
-    if (roles.length > 1) {
-      searchQueriesArr.push(roles[1]); // e.g., "customer service representative"
-    }
-
-    // Query 2: Top skill + industry combined
-    if (skills.length > 0) {
-      const topSkill = skills[0];
-      if (industryName && industryName !== 'general') {
-        searchQueriesArr.push(`${topSkill} ${industryName}`); // e.g., "customer service retail"
-      } else {
-        searchQueriesArr.push(topSkill); // e.g., "react"
-      }
+    const aiKeywords = profile.keywords || [];
+    if (aiKeywords.length > 0) {
+      aiKeywords.slice(0, 3).forEach(k => searchQueries.push(k));
     }
 
-    // Query 3: Second + third skill
-    if (skills.length > 1) {
-      searchQueriesArr.push(skills.slice(1, 3).join(' ')); // e.g., "cash handling pos"
+    // 2. Build domain-specific queries from industry + top skills
+    if (searchQueries.length < 3) {
+      // Industry-based broad searches
+      if (industry === 'retail') searchQueries.push('retail associate', 'customer service', 'store associate');
+      else if (industry === 'sports') searchQueries.push('sports retail', 'fitness', 'recreation');
+      else if (industry === 'hospitality') searchQueries.push('hospitality', 'front desk', 'customer service');
+      else if (industry === 'healthcare') searchQueries.push('healthcare assistant', 'patient care');
+      else if (industry === 'education') searchQueries.push('teaching assistant', 'tutor');
+      else if (industry === 'finance') searchQueries.push('finance intern', 'accounting assistant');
+      else if (industry === 'marketing') searchQueries.push('marketing intern', 'social media coordinator');
+      else if (industry === 'data_science') searchQueries.push('data analyst intern', 'data science');
+      else if (industry === 'software_engineering') searchQueries.push('software engineer intern', 'frontend developer');
+      else if (industry === 'consulting') searchQueries.push('consulting intern', 'business analyst');
+      else if (industry === 'law') searchQueries.push('legal intern', 'paralegal');
+      else if (industry === 'design') searchQueries.push('design intern', 'graphic design');
+      else if (industry === 'hr') searchQueries.push('human resources intern', 'recruiting coordinator');
+      else searchQueries.push('internship', 'entry level');
     }
 
-    // Query 4: Just "internship" with NO location filter logic at aggregator level handled later
-    searchQueriesArr.push('internship');
-
-    // Query 5: Industry-specific broad search
-    if (industryName && industryName !== 'general' && industryName !== 'software_engineering') {
-      searchQueriesArr.push(`${industryName} intern`); // e.g., "retail intern", "sports intern"
+    // 3. Only use hard skills as search terms (skip soft skills)
+    const softSkillPatterns = /^(communication|teamwork|leadership|organisation|organization|numeracy|problem.?solving|time.?management|interpersonal|adaptability|critical.?thinking|attention.?to.?detail|presentation|negotiation)$/i;
+    const hardSkills = skills.filter(s => !softSkillPatterns.test(s));
+    if (hardSkills.length > 0) {
+      searchQueries.push(hardSkills.slice(0, 2).join(' '));
     }
 
-    // Query 6: Student/entry-level if detected
-    if (profile.experience_level === 'student' || profile.experience_level === 'fresher' || profile.experience_level === 'entry') {
-      searchQueriesArr.push('entry level remote');
+    // 4. Always add a broad "internship" query for coverage
+    if (!searchQueries.includes('internship')) {
+      searchQueries.push('internship');
     }
 
     // Deduplicate and limit to prevent API abuse
-    const uniqueQueries = [...new Set(searchQueriesArr.map(q => q.toLowerCase().trim()))].filter(q => q.length > 2).slice(0, 6);
+    const uniqueQueries = [...new Set(searchQueries)].filter(q => q.length > 2).slice(0, 6);
+    console.log(`[Search] Smart queries: ${uniqueQueries.join(' | ')}`);
 
     console.log(`[Search] Starting fetch for: ${uniqueQueries.join(', ')}`);
     

@@ -119,6 +119,24 @@ export function matchJobListings(studentProfile: StudentProfile, listings: JobLi
     else if (skillMatchCount === 1) skillOverlapScore = 10;
     else skillOverlapScore = 0;
 
+    // ── HARD SKILL BONUS (Blocker 3) ──
+    // Give extra weight to domain-specific skills. Soft skills match everything and add no signal.
+    const softSkillPatterns = /^(communication|teamwork|leadership|organisation|organization|numeracy|problem.?solving|time.?management|interpersonal|adaptability|critical.?thinking|attention.?to.?detail|presentation|negotiation|customer service)$/i;
+    const hardSkills = allStudentSkills.filter(s => !softSkillPatterns.test(s.toLowerCase().trim()));
+
+    if (hardSkills.length > 0) {
+      // If user HAS hard skills, penalize jobs that don't contain ANY of them in title or description
+      const hasHardMatch = hardSkills.some(hs => {
+        const lower = hs.toLowerCase().trim();
+        return listing.title.toLowerCase().includes(lower) || listing.description.toLowerCase().includes(lower);
+      });
+      if (!hasHardMatch) {
+        skillOverlapScore -= 20; // Significant penalty for no hard skill match
+      } else {
+        skillOverlapScore += 5; // Small bonus for hard skill match
+      }
+    }
+
     // Seniority Fit Scoring
     let inferredRoleType: MatchedListing["role_type"] = "junior"; // Default to junior if nothing specific
     if (["intern", "internship", "trainee", "co-op", "fresher", "entry level", "apprentice", "student developer"].some(keyword => titleLower.includes(keyword))) {
