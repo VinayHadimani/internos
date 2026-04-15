@@ -105,16 +105,31 @@ export function sanitizeJobPostingForTailor(jobText: string): string {
 /**
  * Full silent guard on resume-like output (tailored resume, optional extracted PDF).
  */
-export function applyResumeQualityGuard(resume: string, now: Date = new Date()): string {
+export function applyResumeQualityGuard(resume: string, isResume: boolean = false, now: Date = new Date()): string {
   let t = resume.normalize('NFC');
   t = t.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-  t = removeJunkLines(t);
-  t = removeJunkParagraphs(t);
-  t = t.replace(LONG_BLOB, ' ');
+  
+  if (!isResume) {
+    t = removeJunkLines(t);
+    t = removeJunkParagraphs(t);
+    t = t.replace(LONG_BLOB, ' ');
+    t = t.replace(SSN_LIKE, '');
+  } else {
+    // For resumes, only strip markdown, placeholders, and TODOs
+    // Keep lines/paragraphs as they might contain legitimate data
+    // Keep potential phone numbers (SSN_LIKE)
+  }
+  
   t = t.replace(OPENAI_SK, '');
   t = t.replace(AWS_KEY, '');
-  t = t.replace(SSN_LIKE, '');
-  t = t.replace(PLACEHOLDER, '');
+  
+  if (!isResume) {
+    t = t.replace(PLACEHOLDER, '');
+  } else {
+    // Keep brackets in resumes unless they match specific placeholder patterns
+    t = t.replace(/\[(your\s+name|insert\s+[^[\]]+|email|phone|address|company|title)\]/gi, '');
+  }
+  
   t = t.replace(TODO_MARKER, '');
   t = t.replace(LUXURY, '');
   t = stripMarkdown(t);

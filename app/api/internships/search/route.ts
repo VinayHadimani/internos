@@ -262,92 +262,73 @@ function scoreJob(job: any, profile: ResumeProfile, userLocation: string): numbe
   const cleanedJobTitle = titleWords.join(' ');
   const cleanedJobDesc = descWords.join(' ');
 
-  // ── Bonus: Location match (+8 City, +5 State, +4 Remote) ──
+  // ── Bonus: Location match (+10 City, +5 State, +4 Remote) ──
   const jobLocation = (job.location || '').toLowerCase();
   if (userLocation && jobLocation) {
     const userParts = userLocation.split(',').map(s => s.trim().toLowerCase());
     const userCity = userParts[0];
-    const userSubRegion = userParts[1];
-    const isRemote = jobLocation.includes('remote');
+    const userCountry = userParts[userParts.length - 1];
     
+    const isRemote = jobLocation.includes('remote');
     if (userCity && jobLocation.includes(userCity)) {
-       score += 8;
-    } else if (userSubRegion && jobLocation.includes(userSubRegion)) {
+       score += 10;
+    } else if (userCountry && jobLocation.includes(userCountry)) {
        score += 5;
     } else if (isRemote) {
        score += 4;
     }
   }
 
-  // ── Skills match (phrase-level, filtered) ──
+  // ── Skills match (Frequency-Weighted) ──
   const userSkills = profile.skills || [];
-  
-  // Only remove STOP_WORDS from user skills (keep "python", "react", etc.)
   const validSkills = userSkills.map(s => {
     return s.toLowerCase().split(/\s+/).filter(w => !STOP_WORDS.has(w)).join(' ');
-  }).filter(s => s.length > 1);
+  }).filter(s => s.length > 2);
 
   if (validSkills.length > 0) {
-    let weightedMatch = 0;
-    
+    let matchTotal = 0;
     for (const skill of validSkills) {
       if (!skill) continue;
       
-      let phraseScore = 0;
+      let skillCount = 0;
+      // Count frequency in title (3x weight)
+      const titleMatches = (cleanedJobTitle.match(new RegExp(skill, 'gi')) || []).length;
+      skillCount += titleMatches * 3;
       
-      // Found in job title
-      if (cleanedJobTitle.includes(skill)) {
-        phraseScore = 3; // 3.0x match vs desc
-      } else {
-        // Industry / title keyword bonus implementation
-        // Partial phrase matching across Requirements section vs General Desc
-        const requirementsIdx = cleanedJobDesc.indexOf('require');
-        if (requirementsIdx !== -1 && cleanedJobDesc.substring(requirementsIdx).includes(skill)) {
-           phraseScore = 1.5; // Found inside requirements block
-        } else if (cleanedJobDesc.includes(skill)) {
-           phraseScore = 1.0; // Basic desc match
-        }
+      // Count frequency in description (1x weight)
+      // Boost if in "requirements" section
+      const requirementsIdx = jobDesc.indexOf('require');
+      const targetSearchArea = requirementsIdx !== -1 ? jobDesc.substring(requirementsIdx) : jobDesc;
+      const descMatches = (targetSearchArea.match(new RegExp(skill, 'gi')) || []).length;
+      skillCount += Math.min(5, descMatches); // Cap desc matches to avoid fluff spamming
+
+      if (skillCount > 0) {
+        matchTotal += Math.min(10, skillCount); // Cap per-skill contribution
       }
-      
-      // Industry Keyword boost
-      if (phraseScore > 0 && profile.industry && (skill.includes(profile.industry.toLowerCase()) || skill.includes('intern'))) {
-        phraseScore += 1;
-      }
-      
-      weightedMatch += phraseScore;
     }
-    
-    // Score = (sum of weighted matches) / (total user skills) × 100, capped at 99%
-    score += Math.min(80, (weightedMatch / validSkills.length) * 100); 
+    // Base score from skills: 0-60 points
+    score += Math.min(60, (matchTotal / (validSkills.length * 0.5)) * 10);
   }
 
-  // ── Role/title match (phrase-level) ──
+  // ── Role/Title match (20 points) ──
   const userRoles = profile.roles || [];
-  let rolesMatched = 0;
+  let roleMatchScore = 0;
   for (const role of userRoles) {
     const r = role.toLowerCase().split(/\s+/).filter(w => !STOP_WORDS.has(w)).join(' ');
-    if (!r) continue;
-    
     if (cleanedJobTitle.includes(r)) {
-      rolesMatched++;
+      roleMatchScore += 10;
     } else if (cleanedJobDesc.includes(r)) {
-      rolesMatched += 0.5;
+      roleMatchScore += 5;
     }
   }
-  if (userRoles.length > 0) {
-    score += (rolesMatched / userRoles.length) * 20;
-  }
+  score += Math.min(20, roleMatchScore);
 
-  // ── Bonus: Student/Entry/Intern title match ──
-  if (jobTitle.includes('intern') || jobTitle.includes('internship') || (job.title_tags && job.title_tags.includes('internship'))) {
-    score += 10;
-  } else if (jobTitle.includes('student') || jobTitle.includes('entry level') || jobTitle.includes('entry') || jobTitle.includes('junior') || jobTitle.includes('trainee') || jobTitle.includes('graduate')) {
-    score += 5;
-  }
+  // ── High Intent Modifiers ──
+  if (jobTitle.includes('intern') || jobTitle.includes('internship')) score += 10;
+  if (jobTitle.includes('student') || jobTitle.includes('entry') || jobTitle.includes('junior')) score += 5;
   
-  // ── Penalty: Senior titles ──
-  const seniorKw = ['senior', 'sr.', 'sr ', 'lead', 'manager', 'director', 'vp', 'chief', 'principal', 'head', 'staff'];
-  if (seniorKw.some(k => jobTitle.includes(k))) score -= 5;
+  const seniorKw = ['senior', 'sr.', 'sr ', 'lead', 'manager', 'director', 'vp', 'executive', 'chief', 'principal', 'staff'];
+  if (seniorKw.some(k => jobTitle.includes(k))) score -= 15;
 
   return Math.max(0, Math.min(Math.round(score), 99));
 }
@@ -367,6 +348,7 @@ export async function POST(req: NextRequest) {
       location: bodyLocation = '', 
       skills: clientSkills = [], 
       preferredRoles: clientRoles = [],
+      experience: clientExperience = 'fresher'
     } = body;
     
     const resumeText: string = body.resumeText || '';
@@ -374,92 +356,64 @@ export async function POST(req: NextRequest) {
 
     console.log('=== INTERNOS SEARCH ===');
 
-    // ────────────────────────────────────────────
-    // STEP 1: Run AI extraction AND first batch of jobs IN PARALLEL
-    // This saves 3-5 seconds by not waiting for AI before fetching
-    // ────────────────────────────────────────────
-    
-    // Start AI extraction in background
-    const aiPromise = (async () => {
-      if (resumeText && resumeText.length > 50) {
-        return await aiExtractProfile(resumeText);
+    let profile: ResumeProfile | null = null;
+
+    // Fast Path: If client already parsed the resume, skip AI call
+    if (clientSkills.length > 0 && clientRoles.length > 0) {
+      console.log('[Search] Using client-provided profile, skipping AI extraction');
+      profile = {
+        skills: clientSkills,
+        roles: clientRoles,
+        industry: 'general',
+        experience_level: clientExperience,
+        keywords: [
+          ...clientRoles.slice(0, 2).map((r: string) => `${r} internship`),
+          ...clientSkills.slice(0, 2).map((s: string) => `${s} intern`)
+        ]
+      };
+    } else {
+      // Start AI extraction in background
+      profile = await aiExtractProfile(resumeText);
+      if (!profile) {
+        console.log('[Search] AI unavailable, using keyword fallback');
+        profile = fallbackExtractProfile(
+          resumeText, 
+          Array.isArray(clientSkills) ? clientSkills.map(String) : [],
+          Array.isArray(clientRoles) ? clientRoles.map(String) : []
+        );
       }
-      return null;
-    })();
-
-    // Also start fetching jobs with a basic query in parallel
-    // Use client skills/roles if available for a better initial query
-    const initialQuery = (Array.isArray(clientSkills) && clientSkills.length > 0)
-      ? String(clientSkills[0])
-      : query;
-    const initialJobsPromise = aggregateJobs(initialQuery, userLocation);
-
-    // Wait for BOTH to complete
-    const [aiProfile, initialJobs] = await Promise.all([aiPromise, initialJobsPromise]);
-
-    let profile: ResumeProfile | null = aiProfile;
-
-    // If AI failed, use fallback
-    if (!profile) {
-      console.log('[Search] AI unavailable, using keyword fallback');
-      profile = fallbackExtractProfile(
-        resumeText, 
-        Array.isArray(clientSkills) ? clientSkills.map(String) : [],
-        Array.isArray(clientRoles) ? clientRoles.map(String) : []
-      );
     }
 
-    console.log(`[Search] Final profile — Industry: ${profile.industry}`);
-    console.log(`[Search] Final skills (${profile.skills.length}): ${(profile.skills||[]).slice(0, 10).join(', ')}`);
-    console.log(`[Search] Final roles (${profile.roles.length}): ${(profile.roles||[]).join(', ')}`);
+    console.log(`[Search] Profile — Industry: ${profile.industry}, Skills: ${profile.skills.length}`);
 
-    // ────────────────────────────────────────────
-    // Step 2: Fetch jobs using AI-generated queries
-    // DETERMINISTIC: always run ALL queries, always return same results
-    // ────────────────────────────────────────────
-    const rawQueries = [
-      ...(profile.keywords || []),  // Keywords first (most targeted, e.g. AI internship, Machine Learning)
-      ...(profile.roles || []),
-      ...(profile.skills || [])
-    ];
-    
-    // Prioritize keywords over raw skills, remove duplicates, limit to 8
-    const searchQueries = [...new Set(rawQueries)].filter(q => q && q.trim().length > 0).slice(0, 8);
+    // Capped Queries to prevent Vercel 10s timeout
+    const searchQueries = [...new Set([
+      ...(profile.keywords || []),
+      ...(profile.roles || [])
+    ])].filter(q => q && q.trim().length > 0).slice(0, 5);
     
     const allJobsMap = new Map<string, JobResult>();
 
-    // Add initial jobs fetched concurrently in Step 1
-    for (const job of initialJobs) {
-      const key = `${job.title}-${job.company}`.toLowerCase().replace(/\s+/g, '');
-      if (!allJobsMap.has(key)) allJobsMap.set(key, job);
-    }
-
+    // Sequential batching with timeout check
     for (const q of searchQueries) {
       try {
         const batch = await aggregateJobs(q, userLocation);
         for (const job of batch) {
           const key = `${job.title}-${job.company}`.toLowerCase().replace(/\s+/g, '');
-          if (!allJobsMap.has(key)) {
-            allJobsMap.set(key, job);
-          }
+          if (!allJobsMap.has(key)) allJobsMap.set(key, job);
         }
+        if (allJobsMap.size >= 100) break; // Hard limit for speed
       } catch (e) {
-        console.error(`aggregateJobs failed for "${q}":`, e);
+        console.error(`aggregateJobs failed for "${q}"`);
       }
     }
 
     const rawJobs = Array.from(allJobsMap.values());
-    console.log(`[Search] Total unique jobs fetched: ${rawJobs.length}`);
-
-    // ────────────────────────────────────────────
-    // Step 3: Score, rank, and return ALL results
-    // ────────────────────────────────────────────
     const scoredJobs = rawJobs.map(job => {
       const matchScore = scoreJob(job, profile!, userLocation);
       return { ...job, matchScore, matchLabel: getMatchLabel(matchScore) };
     });
 
-    // DETERMINISTIC sort: by score desc, then title alpha for stable ordering
     const finalJobs = scoredJobs.sort((a, b) => {
       if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
       return (a.title || '').localeCompare(b.title || '');

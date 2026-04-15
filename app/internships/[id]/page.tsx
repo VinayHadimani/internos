@@ -22,7 +22,7 @@ interface InternshipDetail {
 }
 
 export default function InternshipDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { isAuthenticated, signOut } = useAuth();
+  const { user, isAuthenticated, signOut } = useAuth();
   const [id, setId] = useState<string>('');
   const [internship, setInternship] = useState<InternshipDetail & { needsTranslation?: boolean; originalDescription?: string; originalTitle?: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,15 +31,20 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
   const [resumeText, setResumeText] = useState<string | null>(null);
   const [isTailoring, setIsTailoring] = useState(false);
   const [tailoredResume, setTailoredResume] = useState<string | null>(null);
-  const [tailoringMatchScore, setTailoringMatchScore] = useState<number>(85);
+  const [tailoringMatchScore, setTailoringMatchScore] = useState<number>(0);
   const [pdfExporting, setPdfExporting] = useState(false);
 
   useEffect(() => {
     const savedResume = localStorage.getItem('resumeText');
-    if (savedResume) {
-      setResumeText(savedResume);
+    const lastUserId = localStorage.getItem('lastUserId');
+    
+    // Security: only load resume if it belongs to current user
+    if (isAuthenticated && user && lastUserId && lastUserId !== user.id) {
+       setResumeText(null);
+    } else if (savedResume) {
+       setResumeText(savedResume);
     }
-  }, []);
+  }, [isAuthenticated, user]);
 
   async function handleTailorResume() {
     if (!resumeText || !internship) return;
@@ -63,7 +68,7 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
       if (data.success && data.tailoredResume) {
         console.log('SET tailoredResume (Inline)');
         setTailoredResume(data.tailoredResume);
-        setTailoringMatchScore(data.atsScore || 85);
+        setTailoringMatchScore(data.atsScore || 0);
       } else {
         setError(data.error || 'Tailoring failed');
       }

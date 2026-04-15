@@ -16,31 +16,24 @@ export async function extractSkillsFromResume(resumeText: string): Promise<Extra
       `You are an expert recruiter and career analyst AI. Analyze this resume with EXTREME attention to what makes this candidate unique.
 
 CRITICAL RULES FOR SKILL EXTRACTION:
-1. DOMAIN-SPECIFIC skills are 10x more important than generic soft skills
-2. "Customer service" or "communication" are worthless if every candidate has them — do NOT rank them highly
-3. Instead, extract what makes THIS candidate DIFFERENT: industry knowledge, domain tools, specialized experience
-4. If the resume mentions a Career Objective with a specific target (e.g., "sports retail", "financial modeling", "software engineering"), those words MUST appear as top skills
+1. Extract skills that are ACTUALLY present on the resume. Do NOT favor any specific industry (like tech or finance) over others.
+2. DOMAIN-SPECIFIC skills are 10x more important than generic soft skills.
+3. If the candidate is in Retail, Hospitality, Healthcare, Trades, Creative Arts, Sport, or Law, extract the specific terminology and tools for that domain.
+4. If the resume mentions a Career Objective or target role, those keywords MUST be prioritized as top skills.
+5. Derive target roles from what the candidate WANTS to do (Objective), not just past experience.
 
-SKILL EXTRACTION HIERARCHY (extract in this order of priority):
-- TIER 1 (Domain-specific, HIGH weight): Industry terms, specialized tools, domain certifications, target role keywords from Career Objective
-  Examples: "sports retail", "financial modeling", "market research", "machine learning", "UX design", "supply chain management"
-- TIER 2 (Technical/hard skills, MEDIUM weight): Software tools, programming languages, methodologies, frameworks
-  Examples: "Excel", "cash handling", "SQL", "React", "Agile", "photography", "video editing"
-- TIER 3 (Soft skills, LOW weight): Only include if demonstrably exceptional — DO NOT include generic ones like "communication" or "teamwork"
-  Examples: "negotiation" (if demonstrated with results), "public speaking" (if won awards)
-
-ROLE EXTRACTION:
-- If Career Objective says "seeking customer service work in a sports retail environment", the PRIMARY role is "sports retail associate" or "retail sales associate"
-- Derive roles from what the candidate WANTS to do (Career Objective), not just what they've done
-- Include both entry-level and aspirational roles
+SKILL EXTRACTION HIERARCHY:
+- TIER 1 (Domain-specific): Industry terms, specialized tools (e.g., "point of sale", "patient care", "CAD software", "litigation research"), domain certifications, target role keywords.
+- TIER 2 (Technical/Hard skills): Specific software, measurable capabilities, methodologies.
+- TIER 3 (Soft skills): Only include if exceptional and backed by evidence. Avoid generic terms like "communication" or "teamwork" unless they are the primary focus of the role.
 
 Return exact JSON:
 {
-  "skills": ["tier1_skill", "tier1_skill", "tier2_skill", "tier2_skill", "tier3_skill"],
-  "experienceLevel": "fresher",
-  "industries": ["primary_industry"],
-  "roleTypes": ["primary_target_role", "secondary_role"],
-  "location": "city, country"
+  "skills": ["skill1", "skill2", "..."],
+  "experienceLevel": "fresher" | "junior" | "mid" | "senior",
+  "industries": ["industry1", "industry2"],
+  "roleTypes": ["role1", "role2"],
+  "location": "City, Country"
 }`,
       resumeText,
       {
@@ -83,31 +76,24 @@ Return exact JSON:
 function extractSkillsByKeywords(text: string): string[] {
   const lowerText = text.toLowerCase();
   
-  // Categorized skill lists — not just tech
   const skillCategories = {
-    // Tech
     tech: ['javascript', 'typescript', 'python', 'java', 'react', 'angular', 'vue', 'node',
       'mongodb', 'sql', 'postgresql', 'mysql', 'aws', 'docker', 'kubernetes', 'git',
       'html', 'css', 'tailwind', 'bootstrap', 'figma', 'redux', 'nextjs', 'django',
       'flask', 'spring', 'android', 'ios', 'flutter', 'machine learning',
       'data science', 'pandas', 'numpy', 'tensorflow', 'pytorch', 'graphql', 'c++', 'c#', 'go'],
-    // Data & Analytics
     analytics: ['excel', 'google sheets', 'tableau', 'power bi', 'spss', 'sas', 'vba', 'stata',
-      'r studio', 'ggplot', 'data analysis', 'data visualization', 'statistical analysis', 'regression'],
-    // Business & Consulting
-    business: ['financial modeling', 'case studies', 'strategy', 'market research',
-      'due diligence', 'management consulting', 'business strategy', 'financial analysis',
-      'valuation', 'consulting', 'business development', 'competitive analysis',
-      'stakeholder management', 'presentation skills', 'client engagement'],
-    // Finance
-    finance: ['investment banking', 'equity research', 'portfolio management', 'risk management',
-      'compliance', 'audit', 'accounting', 'financial planning', 'budgeting'],
-    // Marketing
-    marketing: ['seo', 'sem', 'social media marketing', 'content marketing', 'digital marketing',
-      'google analytics', 'brand management', 'market segmentation'],
-    // Tools & Methods
-    tools: ['agile', 'scrum', 'jira', 'sap', 'salesforce', 'erp', 'lean', 'six sigma',
-      'project management', 'powerpoint', 'word', 'excel'],
+      'r studio', 'data analysis', 'data visualization', 'statistical analysis'],
+    business: ['strategy', 'market research', 'business development', 'stakeholder management', 'presentation skills', 'client engagement'],
+    finance: ['investment banking', 'equity research', 'risk management', 'accounting', 'financial planning', 'budgeting'],
+    marketing: ['seo', 'sem', 'social media marketing', 'content marketing', 'digital marketing', 'google analytics'],
+    retail_hospitality: ['customer service', 'cash handling', 'pos', 'retail', 'merchandising', 'inventory', 'food service', 'hospitality', 'barista', 'waitstaff'],
+    healthcare: ['patient care', 'cpr', 'medical records', 'phlebotomy', 'clinical', 'nursing'],
+    creative: ['graphic design', 'illustration', 'photography', 'video editing', 'adobe photoshop', 'ui ux', 'copywriting'],
+    legal: ['legal research', 'paralegal', 'contract drafting', 'compliance', 'litigation'],
+    trades: ['electrical', 'plumbing', 'carpentry', 'welding', 'hvac', 'blueprint reading', 'osha'],
+    sports_fitness: ['coaching', 'fitness training', 'sports management', 'athletic training', 'first aid', 'officiating'],
+    education: ['lesson planning', 'classroom management', 'tutoring', 'curriculum development', 'grading']
   };
   
   const found: string[] = [];

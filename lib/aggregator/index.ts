@@ -483,6 +483,13 @@ const INTERN_SHALA_PROFILES: Record<string, string> = {
   'data analysis': 'business-analytics',
   'statistical': 'data-science',
   'regression': 'data-science',
+  'retail': 'retail',
+  'customer service': 'customer-service',
+  'hospitality': 'hospitality',
+  'sports': 'sports',
+  'fitness': 'sports',
+  'education': 'education',
+  'teaching': 'education'
 }
 
 export async function fetchInternshala(keywords: string[]): Promise<JobResult[]> {
@@ -660,6 +667,8 @@ export async function fetchWeWorkRemotely(keywords: string[]): Promise<JobResult
       'remote-sales-jobs',
       'remote-design-jobs',
       'remote-devops-jobs',
+      'remote-product-jobs',
+      'remote-marketing-jobs'
     ]
 
     console.error(`[${source}] Fetching ${categories.length} categories for: ${keywords.join(', ')}`)
@@ -768,12 +777,15 @@ export async function fetchArbeitnow(keywords: string[]): Promise<JobResult[]> {
       })
     })
     console.error(`[${source}] Results after keyword filter: ${filtered.length}`)
-    if (filtered.length === 0) {
-      console.error(`[${source}] No matches for keywords: ${keywords.join(', ')}. Returning empty (no random fallback).`)
+    
+    // Fallback: if no keyword matches, return the 10 most recent jobs as a wide net
+    const jobsToReturn = filtered.length > 0 ? filtered : jobs.slice(0, 10);
+    
+    if (jobsToReturn.length === 0) {
       return []
     }
 
-    return filtered.map((job: Record<string, unknown>) => {
+    return jobsToReturn.map((job: Record<string, unknown>) => {
       const rawSalary = String(job.salary || 'Not specified')
       const rawDescription = String(job.description || '')
       return {

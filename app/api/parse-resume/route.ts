@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const guardedText = applyResumeQualityGuard(trimmedText);
+    const guardedText = applyResumeQualityGuard(trimmedText, true);
 
     console.log('[Parse Resume] Success — text length:', guardedText.length);
 

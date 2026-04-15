@@ -125,7 +125,8 @@ async function geminiCall(apiKey: string, system: string, user: string, options:
         }],
         generationConfig: { 
           temperature: options.temperature ?? 0.2, 
-          maxOutputTokens: options.max_tokens || 2500 
+          maxOutputTokens: options.max_tokens || 2500,
+          responseMimeType: options.response_format?.type === 'json_object' ? 'application/json' : 'text/plain'
         }
       })
     }
@@ -133,7 +134,17 @@ async function geminiCall(apiKey: string, system: string, user: string, options:
   
   const data = await response.json();
   if (data.error) throw new Error(data.error.message || 'Gemini Error');
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  
+  let text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  
+  // Clean markdown if present
+  if (text.includes('```json')) {
+    text = text.split('```json')[1].split('```')[0].trim();
+  } else if (text.includes('```')) {
+    text = text.split('```')[1].split('```')[0].trim();
+  }
+
+  return text;
 }
 
 async function openaiCall(apiKey: string, system: string, user: string, options: AICallOptions): Promise<string> {

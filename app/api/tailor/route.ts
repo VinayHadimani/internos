@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       }, { status: 400 });
     }
 
-    const safeResume = applyResumeQualityGuard(String(inputResume));
+    const safeResume = applyResumeQualityGuard(String(inputResume), true);
     const resumeForModel = safeResume.length >= 20 ? safeResume : String(inputResume);
 
     let cleanJob = sanitizeJobPostingForTailor(String(jobDescription));
@@ -92,7 +92,8 @@ STRICT RULES:
         .replace(/```/g, '')
         .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
         .replace(/\n{3,}/g, '\n\n')
-        .trim()
+        .trim(),
+      true
     );
 
     console.log(`[Tailor API] Success via ${successProvider}! Final output length: ${cleanContent.length}`);

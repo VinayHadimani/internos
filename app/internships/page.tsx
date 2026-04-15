@@ -26,10 +26,12 @@ interface Job {
 const PAGE_SIZE = 25;
 
 function InternshipsContent() {
-  const { isAuthenticated, signOut } = useAuth();
+  const { user, isAuthenticated, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const urlResume = searchParams.get('resume');
+  const urlSkills = searchParams.get('skills');
   const searchIdRef = useRef(0);
   const [resumeText, setResumeText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -55,14 +57,16 @@ function InternshipsContent() {
   }, []);
 
   useEffect(() => {
-    const urlResume = searchParams.get('resume');
-    const urlSkills = searchParams.get('skills');
+    // Security: Check if data belongs to current user
+    const lastUserId = localStorage.getItem('lastUserId');
     
-    if (urlSkills) {
-      try {
-        const parsed = JSON.parse(urlSkills);
-        localStorage.setItem('userSkills', JSON.stringify(parsed));
-      } catch (e) {}
+    if (isAuthenticated && user && lastUserId && lastUserId !== user.id) {
+       console.warn('[Internships] Clearing stale user data from another account');
+       localStorage.removeItem('resumeText');
+       localStorage.removeItem('userSkills');
+       localStorage.removeItem('userLocation');
+       setResumeText(null);
+       return;
     }
 
     const savedResume = localStorage.getItem('resumeText') || urlResume;
@@ -73,7 +77,7 @@ function InternshipsContent() {
       const skillsToUse = urlSkills ? JSON.parse(urlSkills) : undefined;
       searchJobs(savedResume, skillsToUse);
     }
-  }, [pathname, searchParams]);
+  }, [pathname, searchParams, user, isAuthenticated]);
 
   function handleJobClick(job: Job) {
     sessionStorage.setItem('selectedJob', JSON.stringify(job));
@@ -359,18 +363,27 @@ function InternshipsContent() {
                           {job.locationMatch && (
                             <span className="text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">📍 Location Match</span>
                           )}
-                          {((job.location || '').toLowerCase().includes('india') || 
-                            (job.location || '').toLowerCase().includes('remote') || 
-                            (job.location || '').toLowerCase().includes('bangalore') || 
-                            (job.location || '').toLowerCase().includes('mumbai') || 
-                            (job.location || '').toLowerCase().includes('delhi') || 
-                            (job.location || '').toLowerCase().includes('pune') || 
-                            (job.location || '').toLowerCase().includes('chennai') || 
-                            (job.location || '').toLowerCase().includes('hyderabad')) ? (
-                            <span className="text-xs font-medium px-2 py-1 bg-orange-500/10 text-orange-400 rounded-lg border border-orange-500/20">🇮🇳 India</span>
-                          ) : (
-                            <span className="text-xs font-medium px-2 py-1 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20">🌍 International</span>
-                          )}
+                          {(() => {
+                            const userLoc = (localStorage.getItem('userLocation') || '').toLowerCase();
+                            const jobLoc = (job.location || '').toLowerCase();
+                            const userParts = userLoc.split(',').map(s => s.trim());
+                            const userCity = userParts[0];
+                            const userCountry = userParts[userParts.length - 1];
+                            
+                            const isRemote = jobLoc.includes('remote');
+                            const sameCity = userCity && jobLoc.includes(userCity);
+                            const sameCountry = userCountry && jobLoc.includes(userCountry);
+
+                            if (isRemote) {
+                              return <span className="text-xs font-medium px-2 py-1 bg-green-500/10 text-green-400 rounded-lg border border-green-500/20">🏠 Remote</span>;
+                            } else if (sameCity) {
+                              return <span className="text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">📍 {userCity}</span>;
+                            } else if (sameCountry) {
+                              return <span className="text-xs font-medium px-2 py-1 bg-orange-500/10 text-orange-400 rounded-lg border border-orange-500/20">📍 {userCountry}</span>;
+                            } else {
+                              return <span className="text-xs font-medium px-2 py-1 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20">🌍 International</span>;
+                            }
+                          })()}
                         </div>
                       </div>
 

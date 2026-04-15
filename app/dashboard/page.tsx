@@ -54,7 +54,6 @@ export default function DashboardPage() {
       localStorage.removeItem('userLocation');
       
       setResumeText(text);
-      localStorage.setItem('resumeText', text);
       
       const extracted = await extractSkillsFromResume(text);
       
@@ -65,6 +64,8 @@ export default function DashboardPage() {
       localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
       localStorage.setItem('userLocation', extracted.location || 'India');
       localStorage.setItem('resumeText', text);
+      localStorage.setItem('lastUserId', user?.id || 'anonymous');
+      localStorage.setItem('resumeTimestamp', String(Date.now()));
       
       // Verify saved:
       console.log('=== SAVED TO STORAGE ===');
