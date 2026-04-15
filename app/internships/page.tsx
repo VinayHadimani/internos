@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Upload, ExternalLink, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { extractSkillsFromResume } from '@/lib/ai';
@@ -29,6 +29,7 @@ export default function InternshipsPage() {
   const { isAuthenticated, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const searchIdRef = useRef(0);
   const [resumeText, setResumeText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -54,13 +55,25 @@ export default function InternshipsPage() {
   }, []);
 
   useEffect(() => {
-    const savedResume = localStorage.getItem('resumeText');
+    const urlResume = searchParams.get('resume');
+    const urlSkills = searchParams.get('skills');
+    
+    if (urlSkills) {
+      try {
+        const parsed = JSON.parse(urlSkills);
+        localStorage.setItem('userSkills', JSON.stringify(parsed));
+      } catch (e) {}
+    }
+
+    const savedResume = localStorage.getItem('resumeText') || urlResume;
     if (savedResume) {
       setResumeText(savedResume);
       setAllJobs([]);
-      searchJobs(savedResume);
+      
+      const skillsToUse = urlSkills ? JSON.parse(urlSkills) : undefined;
+      searchJobs(savedResume, skillsToUse);
     }
-  }, [pathname]);
+  }, [pathname, searchParams]);
 
   function handleJobClick(job: Job) {
     sessionStorage.setItem('selectedJob', JSON.stringify(job));
@@ -106,7 +119,7 @@ export default function InternshipsPage() {
       localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
       localStorage.setItem('userLocation', extracted.location || 'India');
 
-      await searchJobs(text);
+      await searchJobs(text, extracted.skills || []);
     } catch (err) {
       setError('Failed to read resume file: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -114,14 +127,14 @@ export default function InternshipsPage() {
     }
   }
 
-  async function searchJobs(text: string) {
+  async function searchJobs(text: string, directSkills?: string[]) {
     const currentSearchId = ++searchIdRef.current;
     setLoading(true);
     setError(null);
 
     try {
       const userLocation = localStorage.getItem('userLocation') || '';
-      const userSkills = JSON.parse(localStorage.getItem('userSkills') || '[]');
+      const userSkills = directSkills || JSON.parse(localStorage.getItem('userSkills') || '[]');
       const userExperience = localStorage.getItem('userExperience') || 'fresher';
       const userRoles = JSON.parse(localStorage.getItem('userRoles') || '[]');
 

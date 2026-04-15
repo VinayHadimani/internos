@@ -46,6 +46,13 @@ export default function DashboardPage() {
         throw new Error('Could not extract enough text from the resume. Please ensure it is a valid document.');
       }
       
+      // Clear ghost data
+      localStorage.removeItem('resumeText');
+      localStorage.removeItem('userSkills');
+      localStorage.removeItem('userExperience');
+      localStorage.removeItem('userRoles');
+      localStorage.removeItem('userLocation');
+      
       setResumeText(text);
       localStorage.setItem('resumeText', text);
       
@@ -156,7 +163,7 @@ export default function DashboardPage() {
                   />
                 </label>
 
-                <Link href="/internships">
+                <Link href={`/internships?skills=${encodeURIComponent(localStorage.getItem('userSkills') || '[]')}&resume=${encodeURIComponent(resumeText.slice(0, 1500))}&ts=${Date.now()}`}>
                   <span className="inline-flex items-center gap-2 bg-[#3B82F6] hover:bg-[#2563EB] text-white font-medium py-2 px-4 rounded-lg transition-colors text-sm cursor-pointer">
                     Find Internships
                     <ArrowRight className="h-4 w-4" />

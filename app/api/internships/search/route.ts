@@ -242,98 +242,96 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
 /**
  * Score a job against the AI-extracted profile.
  */
-// Generic noise words that match every job description — ZERO scoring value
-const NOISE_WORDS = new Set([
-  'data', 'analysis', 'research', 'management', 'communication',
-  'teamwork', 'leadership', 'problem', 'solving', 'organizational',
-  'interpersonal', 'verbal', 'written', 'detail', 'oriented',
-  'time', 'project', 'work', 'ability', 'skill', 'experience',
-  'responsibilities', 'requirements', 'qualifications', 'preferred',
-  'strong', 'excellent', 'proficient', 'knowledge', 'understanding',
-  'development', 'operations', 'support', 'service', 'customer',
-  'professional', 'environment', 'computer', 'office', 'microsoft',
-  'independent', 'collaborative', 'fast', 'paced', 'proactive',
-  'reliable', 'flexible', 'positive', 'attitude', 'approach',
+const STOP_WORDS = new Set([
+  'the', 'a', 'an', 'and', 'or', 'in', 'of', 'for', 'with', 'to', 'at', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'this', 'that', 'these', 'those', 'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'because', 'as', 'until', 'while', 'about', 'between', 'through', 'during', 'before', 'after', 'above', 'below', 'from', 'up', 'down', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'any', 'nor'
+]);
+
+const SOFT_NOISE_WORDS = new Set([
+  'experience', 'work', 'working', 'team', 'teams', 'role', 'roles', 'position', 'opportunity', 'join', 'looking', 'seeking', 'hire', 'hiring', 'company', 'organization', 'environment', 'culture', 'values', 'benefits', 'including', 'ability', 'strong', 'excellent', 'good', 'great', 'preferred', 'required', 'requirements', 'qualifications', 'responsibilities', 'duties', 'tasks', 'must', 'year', 'years', 'month', 'months', 'time', 'full', 'part', 'based', 'related', 'relevant', 'etc', 'e.g', 'i.e', 'via', 'per', 'plus', 'well', 'also', 'new', 'make', 'ensure', 'help', 'support', 'develop', 'development', 'using', 'across', 'within', 'along', 'multiple', 'knowledge', 'understanding', 'skills', 'skill'
 ]);
 
 function scoreJob(job: any, profile: ResumeProfile, userLocation: string): number {
   let score = 0;
   const jobTitle = (job.title || '').toLowerCase();
   const jobDesc = (job.description || '').toLowerCase();
-  const jobText = `${jobTitle} ${jobDesc}`;
+  
+  // Clean job descriptions from BOTH stop words and soft noise words
+  const titleWords = jobTitle.split(/[\s,;.!]+/).filter((w: string) => !STOP_WORDS.has(w) && !SOFT_NOISE_WORDS.has(w));
+  const descWords = jobDesc.split(/[\s,;.!]+/).filter((w: string) => !STOP_WORDS.has(w) && !SOFT_NOISE_WORDS.has(w));
+  
+  const cleanedJobTitle = titleWords.join(' ');
+  const cleanedJobDesc = descWords.join(' ');
 
-  // ── Bonus: Location match (+15 points) ──
+  // ── Bonus: Location match (+8 City, +5 State, +4 Remote) ──
   const jobLocation = (job.location || '').toLowerCase();
   if (userLocation && jobLocation) {
-    const city = userLocation.split(',')[0].trim().toLowerCase();
-    if (city && jobLocation.includes(city)) {
-       score += 15;
+    const userParts = userLocation.split(',').map(s => s.trim().toLowerCase());
+    const userCity = userParts[0];
+    const userSubRegion = userParts[1];
+    const isRemote = jobLocation.includes('remote');
+    
+    if (userCity && jobLocation.includes(userCity)) {
+       score += 8;
+    } else if (userSubRegion && jobLocation.includes(userSubRegion)) {
+       score += 5;
+    } else if (isRemote) {
+       score += 4;
     }
   }
 
-  // ── CAREER OBJECTIVE DOMAIN BONUS (up to 30 points) ──
-  // The industry field and first few keywords are the STRONGEST signal
-  const industry = (profile.industry || '').toLowerCase();
-  const careerObjectiveKw = [
-    industry,
-    ...(profile.keywords || []).slice(0, 3).map(k => k.toLowerCase()),
-  ].filter(k => k.length > 2);
-
-  for (const kw of careerObjectiveKw) {
-    // Multi-word phrase match — exact phrase in job text
-    if (kw.includes(' ')) {
-      if (jobText.includes(kw)) score += 15;
-    } else {
-      // Single word — check it's a real domain word, not noise
-      if (!NOISE_WORDS.has(kw) && jobText.includes(kw)) score += 8;
-    }
-  }
-
-  // ── 50% — Skills match (phrase-level, noise-filtered) ──
+  // ── Skills match (phrase-level, filtered) ──
   const userSkills = profile.skills || [];
-  let skillsMatched = 0;
-  let skillsTotal = 0;
+  
+  // Only remove STOP_WORDS from user skills (keep "python", "react", etc.)
+  const validSkills = userSkills.map(s => {
+    return s.toLowerCase().split(/\s+/).filter(w => !STOP_WORDS.has(w)).join(' ');
+  }).filter(s => s.length > 1);
 
-  for (const skill of userSkills) {
-    const s = skill.toLowerCase();
-    // Skip single-word noise skills (they match everything equally)
-    if (s.split(/\s+/).length === 1 && NOISE_WORDS.has(s)) continue;
-    skillsTotal++;
-
-    // Phrase match: ALL words of the skill must appear in job text
-    const words = s.split(/\s+/);
-    if (words.every(w => jobText.includes(w))) {
-      skillsMatched++;
-    }
-  }
-
-  if (skillsTotal > 0) {
-    // Weight: first 3 skills (usually domain-specific from Career Objective) get 2x weight
+  if (validSkills.length > 0) {
     let weightedMatch = 0;
-    let weightedTotal = 0;
-    for (let i = 0; i < userSkills.length; i++) {
-      const s = userSkills[i].toLowerCase();
-      if (s.split(/\s+/).length === 1 && NOISE_WORDS.has(s)) continue;
-      const words = s.split(/\s+/);
-      const matched = words.every(w => jobText.includes(w));
-      const weight = i < 3 ? 2 : 1; // First 3 skills = domain priority
-      weightedTotal += weight;
-      if (matched) weightedMatch += weight;
+    
+    for (const skill of validSkills) {
+      if (!skill) continue;
+      
+      let phraseScore = 0;
+      
+      // Found in job title
+      if (cleanedJobTitle.includes(skill)) {
+        phraseScore = 3; // 3.0x match vs desc
+      } else {
+        // Industry / title keyword bonus implementation
+        // Partial phrase matching across Requirements section vs General Desc
+        const requirementsIdx = cleanedJobDesc.indexOf('require');
+        if (requirementsIdx !== -1 && cleanedJobDesc.substring(requirementsIdx).includes(skill)) {
+           phraseScore = 1.5; // Found inside requirements block
+        } else if (cleanedJobDesc.includes(skill)) {
+           phraseScore = 1.0; // Basic desc match
+        }
+      }
+      
+      // Industry Keyword boost
+      if (phraseScore > 0 && profile.industry && (skill.includes(profile.industry.toLowerCase()) || skill.includes('intern'))) {
+        phraseScore += 1;
+      }
+      
+      weightedMatch += phraseScore;
     }
-    // Allow partial match to yield higher scores: matching 50% of listed skills gives max points
-    score += Math.min(50, (weightedMatch / Math.max(weightedTotal * 0.5, 1)) * 50);
+    
+    // Score = (sum of weighted matches) / (total user skills) × 100, capped at 99%
+    score += Math.min(80, (weightedMatch / validSkills.length) * 100); 
   }
 
-  // ── 20% — Role/title match (phrase-level) ──
+  // ── Role/title match (phrase-level) ──
   const userRoles = profile.roles || [];
   let rolesMatched = 0;
   for (const role of userRoles) {
-    const r = role.toLowerCase();
-    const words = r.split(/\s+/);
-    if (words.every(w => jobTitle.includes(w))) {
+    const r = role.toLowerCase().split(/\s+/).filter(w => !STOP_WORDS.has(w)).join(' ');
+    if (!r) continue;
+    
+    if (cleanedJobTitle.includes(r)) {
       rolesMatched++;
-    } else if (words.every(w => jobText.includes(w))) {
-      rolesMatched += 0.5; // Partial for description-only match
+    } else if (cleanedJobDesc.includes(r)) {
+      rolesMatched += 0.5;
     }
   }
   if (userRoles.length > 0) {
@@ -341,20 +339,17 @@ function scoreJob(job: any, profile: ResumeProfile, userLocation: string): numbe
   }
 
   // ── Bonus: Student/Entry/Intern title match ──
-  const expLevel = (profile.experience_level || '').toLowerCase();
-  if (expLevel === 'student' || expLevel === 'fresher' || expLevel === 'entry') {
-    if (jobTitle.includes('intern') || jobTitle.includes('internship')) {
-      score += 10;
-    } else if (jobTitle.includes('entry') || jobTitle.includes('junior') || jobTitle.includes('trainee') || jobTitle.includes('associate')) {
-      score += 5;
-    }
+  if (jobTitle.includes('intern') || jobTitle.includes('internship') || (job.title_tags && job.title_tags.includes('internship'))) {
+    score += 10;
+  } else if (jobTitle.includes('student') || jobTitle.includes('entry level') || jobTitle.includes('entry') || jobTitle.includes('junior') || jobTitle.includes('trainee') || jobTitle.includes('graduate')) {
+    score += 5;
   }
-
+  
   // ── Penalty: Senior titles ──
-  const seniorKw = ['senior', 'sr.', 'sr ', 'lead', 'manager', 'director', 'vp', 'chief', 'principal', 'head'];
-  if (seniorKw.some(k => jobTitle.includes(k))) score -= 15;
+  const seniorKw = ['senior', 'sr.', 'sr ', 'lead', 'manager', 'director', 'vp', 'chief', 'principal', 'head', 'staff'];
+  if (seniorKw.some(k => jobTitle.includes(k))) score -= 5;
 
-  return Math.max(0, Math.min(Math.round(score), 100));
+  return Math.max(0, Math.min(Math.round(score), 99));
 }
 
 function getMatchLabel(score: number): string {
