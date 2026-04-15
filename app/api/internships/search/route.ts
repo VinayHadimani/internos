@@ -323,20 +323,24 @@ export async function POST(req: NextRequest) {
     }
 
     // Smart Query Building (Fix #4)
+    const DOMAIN_QUERIES: Record<string, string[]> = {
+      retail: ['retail assistant', 'customer service assistant', 'shop assistant', 'sales assistant', 'store associate', 'retail casual', 'part time retail'],
+      sports: ['sports retail assistant', 'sports store casual', 'recreation assistant', 'community sports officer'],
+      hospitality: ['waiter', 'barista', 'cafe assistant', 'restaurant staff', 'hospitality casual'],
+    };
+
     const industryLower = (profile.industry || '').toLowerCase();
-    const isRetailOrSports = industryLower.includes('retail') || industryLower.includes('sport') || industryLower.includes('customer');
-    
     let searchQueries: string[] = [];
     
-    if (isRetailOrSports) {
-      // Domain-based query strategy: Use broad, common roles instead of AI-generated titles
+    // Check if industry matches any domain queries
+    const matchedDomain = Object.keys(DOMAIN_QUERIES).find(d => industryLower.includes(d));
+
+    if (matchedDomain) {
+      console.log(`[Search] Using hardcoded queries for domain: ${matchedDomain}`);
+      // Merge top 3 skills with 3 domain queries
       searchQueries = [
-        "retail assistant",
-        "sales associate",
-        "customer service casual",
-        "shop assistant",
-        "part-time retail",
-        "sports shop associate"
+        ...DOMAIN_QUERIES[matchedDomain].slice(0, 3),
+        ...profile.skills.slice(0, 3).map(s => `${s} role`)
       ];
     } else {
       searchQueries = [...new Set([
@@ -350,7 +354,7 @@ export async function POST(req: NextRequest) {
 
     // Sequential batching with timeout check
     // Fix #2: Use detected country if available
-    const searchLocation = profile.detected_country || userLocation;
+    const searchLocation = profile.detected_country || userLocation || 'remote';
     
     for (const q of searchQueries) {
       try {

@@ -59,7 +59,7 @@ async function scrapePage(url: string): Promise<Internship[]> {
 
       // Location
       const location = card.find('.location_link, .locations, .location_name').first().text().trim()
-        || 'India';
+        || 'remote';
 
       // Stipend
       const stipend = card.find('.stipend, .salary').first().text().trim()

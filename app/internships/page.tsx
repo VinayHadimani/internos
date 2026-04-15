@@ -121,7 +121,7 @@ function InternshipsContent() {
       localStorage.setItem('userSkills', JSON.stringify(extracted.skills || []));
       localStorage.setItem('userExperience', extracted.experienceLevel || 'fresher');
       localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
-      localStorage.setItem('userLocation', extracted.location || 'India');
+      localStorage.setItem('userLocation', extracted.location || 'remote');
 
       await searchJobs(text, extracted.skills || []);
     } catch (err) {

@@ -20,10 +20,10 @@ CRITICAL RULES FOR EXTRACTION:
 1. Extract skills that are ACTUALLY present. Do NOT favor any specific industry (like tech/finance). 
 2. DOMAIN-SPECIFIC skills are 10x more important than generic soft skills.
 3. If the candidate is in Retail, Hospitality, Healthcare, Trades, Creative Arts, Sport, or Law, extract the specific terminology and tools for that domain.
-4. You MUST detect the candidate's country/location with 100% accuracy.
-   - Signals for AUSTRALIA: Phone starts with +61 or 04xx/045xx. Postcodes like 3xxx, 2xxx. Terms: "Secondary College", "Year 11/12", "VET", "ATAR", "Casual", "Part-time".
-   - Signals for INDIA: Phone starts with +91. 6-digit postcodes.
-   - Signals for USA: Phone starts with +1. 5-digit zip codes.
+4. You MUST detect the candidate's country and city from the resume.
+   - SIGNALS FOR AUSTRALIA: (1) Phone numbers starting with 04 or +61. (2) Postcodes 3000-3999 (VIC), 2000-2999 (NSW), 4000-4999 (QLD), 6000-6999 (WA), 5000-5999 (SA). (3) School names containing 'Secondary College', 'High School', 'VCE', 'HSC', 'ATAR', 'VET studies'. (4) Terms: 'casual/part-time', 'fortnight', 'HECS'. If Victorian signals found, set city to 'Melbourne'.
+   - SIGNALS FOR INDIA: Phone starts with +91. 6-digit postcodes.
+   - SIGNALS FOR USA: Phone starts with +1. 5-digit zip codes.
    - If unsure, set detected_country to "remote". NEVER default to India or USA.
 5. You MUST identify the experience_level: 'high_school' (no degree, currently in school), 'student' (college/university), 'fresh_graduate' (0-1 yrs), 'junior' (1-3 yrs), 'mid' (3-7 yrs), 'senior' (7+ yrs).
 
@@ -59,7 +59,7 @@ Return exact JSON:
       experienceLevel: result.experienceLevel || 'student',
       industries: result.industries || [],
       roleTypes: result.roleTypes || [],
-      location: result.location || '',
+      location: result.location || 'remote',
       detected_country: result.detected_country || 'remote'
     };
   } catch (error) {
@@ -69,7 +69,7 @@ Return exact JSON:
       experienceLevel: 'student',
       industries: [],
       roleTypes: [],
-      location: '',
+      location: 'remote',
       detected_country: 'remote'
     };
   }

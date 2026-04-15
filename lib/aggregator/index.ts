@@ -337,7 +337,7 @@ async function runFetchersInParallel(
     fetchJSearch(keywords, location),
     isIndia ? fetchInternshala(keywords) : Promise.resolve([]),
     fetchWeWorkRemotely(keywords),
-    (isEU || !location) ? fetchArbeitnow(keywords) : Promise.resolve([]),
+    (isEU || !location || location.toLowerCase() === 'remote') ? fetchArbeitnow(keywords) : Promise.resolve([]),
   ])
 
   const extract = (result: PromiseSettledResult<JobResult[]>, name: string): JobResult[] => {
@@ -387,7 +387,7 @@ async function parseRSSFeed(url: string): Promise<JobResult[]> {
 
       // Extract location from description
       const locationMatch = description.match(/(?:location|based in|in)\s*:?\s*([A-Za-z\s,]+)/i)
-      const location = locationMatch ? locationMatch[1].trim().split(',')[0].trim() : 'India'
+      const location = locationMatch ? locationMatch[1].trim().split(',')[0].trim() : 'remote'
 
       // Extract stipend/salary (₹ patterns)
       const salaryMatch = description.match(/₹[\d,]+(?:\s*-\s*₹[\d,]+)?(?:\s*\/\s*month)?/i)
@@ -396,7 +396,7 @@ async function parseRSSFeed(url: string): Promise<JobResult[]> {
       items.push({
         title,
         company,
-        location: location || 'India',
+        location: location || 'remote',
         salary,
         salaryObj: normalizeSalary(salary),
         url: link,
@@ -829,10 +829,11 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
     
     // Map country names to Adzuna codes if needed, or just use 'in' for India as legacy
     // but default to 'in' only if specifically India. Otherwise use global search.
-    const countryCode = (where.toLowerCase().includes('india')) ? 'in' : 
-                        (where.toLowerCase().includes('australia') || where.toLowerCase().includes('au')) ? 'au' :
-                        (where.toLowerCase().includes('usa') || where.toLowerCase().includes('us')) ? 'us' :
-                        (where.toLowerCase().includes('uk') || where.toLowerCase().includes('gb')) ? 'gb' : 'us';
+    const countryCode = (where.toLowerCase().includes('australia') || where.toLowerCase().includes('au')) ? 'au' :
+                        (where.toLowerCase().includes('india') || where.toLowerCase().includes('in')) ? 'in' : 
+                        (where.toLowerCase().includes('germany') || where.toLowerCase().includes('de')) ? 'de' :
+                        (where.toLowerCase().includes('uk') || where.toLowerCase().includes('gb') || where.toLowerCase().includes('united kingdom')) ? 'gb' :
+                        (where.toLowerCase().includes('usa') || where.toLowerCase().includes('us') || where.toLowerCase().includes('united states')) ? 'us' : 'us';
 
     const url = `http://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}&where=${encodeURIComponent(where)}`
     console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} | Location: ${where} | Country: ${countryCode}`)

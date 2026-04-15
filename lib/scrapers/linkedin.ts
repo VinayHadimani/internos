@@ -84,7 +84,7 @@ async function scrapeViaJSearch(query: string = 'internship india', pages: numbe
       for (const job of data.data) {
         const title = job.job_title || '';
         const company = job.employer_name || 'Company';
-        const location = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || 'India';
+        const location = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || 'remote';
         const description = job.job_description || '';
         const applyUrl = job.job_apply_link || job.job_google_link || '';
         const skills = extractSkills(title, description);

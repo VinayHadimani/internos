@@ -47,13 +47,16 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
     // Join pages and sanitize
     const rawText = text.join('\n');
     
-    // Clean common resume template artifacts (Fix #2)
+    // Clean template instructions and artifacts (Fix #2)
     const cleanText = rawText
-      .replace(/\((?:Tip|Note|Advice|Suggestion|Hint):.*?\)/gi, '')    // Remove (Tip: ...)
-      .replace(/\[(?:Tip|Note|Advice|Suggestion|Hint):.*?\]/gi, '')    // Remove [Tip: ...]
+      .replace(/\((?:Tip|Note|Advice|Suggestion|Hint):.*?\)\s*/gi, '') // Remove (Tip: ...)
+      .replace(/\[(?:Tip|Note|Advice|Suggestion|Hint):.*?\]\s*/gi, '') // Remove [Tip: ...]
       .replace(/^(?:Tip|Note|Advice|Suggestion|Hint|Task|Advice|Advice):.*$/gim, '') // Remove instruction lines
+      .replace(/click here to.*$/gi, '')
+      .replace(/replace this with.*$/gi, '')
+      .replace(/your name here.*$/gi, '')
       .replace(/^Page\s+\d+$/gim, '')                                 // Remove Page Number markers
-      .replace(/\[your name here\]|example@example\.com|\[city, country\]|\[mobile number\]|\[email address\]/gi, '') // Remove placeholders
+      .replace(/example@example\.com|\[city, country\]|\[mobile number\]|\[email address\]/gi, '') // Remove placeholders
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')                // Strip control characters
       .replace(/\s+/g, ' ')                                           // Collapse whitespace
       .trim();
@@ -70,10 +73,13 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
  */
 export async function parseResumeText(text: string): Promise<string> {
   return text
-    .replace(/\((?:Tip|Note|Advice|Suggestion|Hint):.*?\)/gi, '')
-    .replace(/\[(?:Tip|Note|Advice|Suggestion|Hint):.*?\]/gi, '')
-    .replace(/^(?:Tip|Note|Advice|Suggestion|Hint|Task|Advice):.*$/gim, '')
-    .replace(/\[your name here\]|example@example\.com|\[city, country\]|\[mobile number\]|\[email address\]/gi, '')
+    .replace(/\((?:Tip|Note|Advice|Suggestion|Hint):.*?\)\s*/gi, '')
+    .replace(/\[(?:Tip|Note|Advice|Suggestion|Hint):.*?\]\s*/gi, '')
+    .replace(/^(?:Tip|Note|Advice|Suggestion|Hint|Task|Advice|Advice):.*$/gim, '')
+    .replace(/click here to.*$/gi, '')
+    .replace(/replace this with.*$/gi, '')
+    .replace(/your name here.*$/gi, '')
+    .replace(/example@example\.com|\[city, country\]|\[mobile number\]|\[email address\]/gi, '')
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
