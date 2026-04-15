@@ -207,6 +207,7 @@ function sanitizeDescription(raw: string): string {
  * Maps canonical names to their known variations.
  */
 const LOCATION_ALIASES: Record<string, string[]> = {
+  // India
   'gurgaon': ['gurgaon', 'gurugram', 'delhi ncr', 'ncr', 'delhi'],
   'bangalore': ['bangalore', 'bengaluru', 'karnataka'],
   'mumbai': ['mumbai', 'bombay', 'maharashtra', 'navi mumbai', 'thane'],
@@ -216,8 +217,34 @@ const LOCATION_ALIASES: Record<string, string[]> = {
   'kolkata': ['kolkata', 'calcutta', 'west bengal'],
   'delhi': ['delhi', 'new delhi', 'delhi ncr', 'ncr'],
   'noida': ['noida', 'uttar pradesh', 'delhi ncr', 'ncr'],
+  // Australia
+  'melbourne': ['melbourne', 'victoria', 'vic', 'park hill', '3045'],
+  'sydney': ['sydney', 'nsw', 'new south wales'],
+  'brisbane': ['brisbane', 'queensland', 'qld'],
+  'perth': ['perth', 'western australia', 'wa'],
+  'adelaide': ['adelaide', 'south australia', 'sa'],
+  'canberra': ['canberra', 'act', 'australian capital territory'],
+  'gold coast': ['gold coast', 'surfers paradise'],
+  'australia': ['australia', 'aus'],
+  // US
+  'new york': ['new york', 'nyc', 'manhattan'],
+  'san francisco': ['san francisco', 'sf', 'bay area'],
+  'los angeles': ['los angeles', 'la', 'socal'],
+  'chicago': ['chicago', 'illinois'],
+  'austin': ['austin', 'texas', 'tx'],
+  'boston': ['boston', 'massachusetts'],
+  'united states': ['united states', 'usa', 'us'],
+  // Germany
+  'berlin': ['berlin'],
+  'munich': ['munich', 'münchen'],
+  'frankfurt': ['frankfurt', 'frankfurt am main'],
+  'hamburg': ['hamburg'],
+  'germany': ['germany', 'deutschland'],
+  // UK
+  'london': ['london'],
+  'united kingdom': ['united kingdom', 'uk', 'england'],
+  // Generic
   'remote': ['remote', 'work from home', 'wfh', 'anywhere', 'work from anywhere'],
-  'india': ['india'],
 }
 
 /**
@@ -270,10 +297,19 @@ export function calculateLocationMatch(jobLocation: string, preferredLocation: s
   if (isJobRemote && !isPrefRemote) return 0.3 // Remote at bottom when user wants city
   if (!isJobRemote && isPrefRemote) return 0.2 // Non-remote when user wants remote
 
-  // Same country (India)
-  const isJobIndia = jobNorm.includes('india') || ['bangalore', 'mumbai', 'delhi', 'gurgaon', 'pune', 'hyderabad', 'chennai', 'kolkata', 'noida'].includes(jobNorm)
-  const isPrefIndia = prefNorm.includes('india') || ['bangalore', 'mumbai', 'delhi', 'gurgaon', 'pune', 'hyderabad', 'chennai', 'kolkata', 'noida'].includes(prefNorm)
-  if (isJobIndia && isPrefIndia) return 0.7
+  // Same country bonus — works for ANY country, not just India
+  const COUNTRY_ALIASES: Record<string, string[]> = {
+    'india': ['india', 'bangalore', 'mumbai', 'delhi', 'gurgaon', 'pune', 'hyderabad', 'chennai', 'kolkata', 'noida'],
+    'australia': ['australia', 'melbourne', 'sydney', 'brisbane', 'perth', 'adelaide', 'canberra', 'gold coast', 'vic', 'nsw', 'qld', 'wa', 'sa'],
+    'united states': ['united states', 'usa', 'new york', 'san francisco', 'los angeles', 'chicago', 'austin', 'boston', 'texas', 'california'],
+    'germany': ['germany', 'berlin', 'munich', 'frankfurt', 'hamburg'],
+    'united kingdom': ['united kingdom', 'uk', 'london', 'england'],
+  }
+  for (const [, cities] of Object.entries(COUNTRY_ALIASES)) {
+    const jobInCountry = cities.some(c => jobNorm.includes(c))
+    const prefInCountry = cities.some(c => prefNorm.includes(c))
+    if (jobInCountry && prefInCountry) return 0.7
+  }
 
   return 0
 }
@@ -335,9 +371,11 @@ async function runFetchersInParallel(
     fetchRemoteOK(keywords),
     fetchAdzuna(keywords, location),
     fetchJSearch(keywords, location),
-    isIndia ? fetchInternshala(keywords) : Promise.resolve([]),
+    // Only fetch from Internshala if user is in India or location is unclear
+    (!location || location.toLowerCase().includes('india')) ? fetchInternshala(keywords) : Promise.resolve([]),
     fetchWeWorkRemotely(keywords),
-    (isEU || !location || location.toLowerCase() === 'remote') ? fetchArbeitnow(keywords) : Promise.resolve([]),
+    // Only fetch from Arbeitnow if user is in Germany/Europe or location is remote
+    (location.toLowerCase().includes('germany') || location.toLowerCase().includes('europe') || location.toLowerCase() === 'remote') ? fetchArbeitnow(keywords) : Promise.resolve([]),
   ])
 
   const extract = (result: PromiseSettledResult<JobResult[]>, name: string): JobResult[] => {
@@ -561,8 +599,11 @@ export async function fetchRemotive(keywords: string[]): Promise<JobResult[]> {
       console.error(`[${source}] Empty response keys: ${Object.keys(data).join(', ')}`)
       console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 500)}`)
     }
-    return realJobs.map((job: Record<string, unknown>) => {
-      const rawSalary = String(job.salary || '')
+    const currencySymbol = countryCode === 'in' ? '₹' : countryCode === 'au' ? 'A$' : countryCode === 'gb' ? '£' : countryCode === 'de' ? '€' : '$';
+    return results.map((job: Record<string, unknown>) => {
+      const rawSalary = job.salary_min && job.salary_max
+        ? `${currencySymbol}${Number(job.salary_min).toLocaleString()} - ${currencySymbol}${Number(job.salary_max).toLocaleString()}`
+        : String(job.salary || '')
       const rawDescription = String(job.description || '')
       return {
         title: String(job.title || ''),
@@ -814,6 +855,42 @@ export async function fetchArbeitnow(keywords: string[]): Promise<JobResult[]> {
 
 // ─── Tier 2: Authenticated API Fetchers ──────────────────────
 
+// Helper for Adzuna country codes
+function getAdzunaCountryCode(location: string): string {
+  const lower = location.toLowerCase();
+  if (lower.includes('australia') || lower.includes('melbourne') || lower.includes('sydney') || 
+      lower.includes('brisbane') || lower.includes('perth') || lower.includes('adelaide') ||
+      lower.includes('canberra') || lower.includes('gold coast') || lower.includes('victoria') ||
+      lower.includes('new south wales') || lower.includes('queensland') || lower.includes('wa') ||
+      lower.includes('sa') || lower.includes('tas') || lower.includes('nt') || lower.includes('act')) {
+    return 'au';
+  }
+  if (lower.includes('india') || lower.includes('bangalore') || lower.includes('mumbai') || 
+      lower.includes('delhi') || lower.includes('gurgaon') || lower.includes('pune') || 
+      lower.includes('hyderabad') || lower.includes('chennai') || lower.includes('noida') ||
+      lower.includes('kolkata')) {
+    return 'in';
+  }
+  if (lower.includes('united states') || lower.includes(' usa') || lower.includes('new york') || 
+      lower.includes('san francisco') || lower.includes('chicago') || lower.includes('texas') ||
+      lower.includes('california') || lower.includes('remote, us')) {
+    return 'us';
+  }
+  if (lower.includes('germany') || lower.includes('berlin') || lower.includes('munich') || 
+      lower.includes('frankfurt') || lower.includes('hamburg')) {
+    return 'de';
+  }
+  if (lower.includes('united kingdom') || lower.includes('london') || lower.includes('uk') || 
+      lower.includes('manchester') || lower.includes('birmingham')) {
+    return 'gb';
+  }
+  if (lower.includes('canada') || lower.includes('toronto') || lower.includes('vancouver') || 
+      lower.includes('montreal')) {
+    return 'ca';
+  }
+  return 'us'; // Default fallback for unknown or 'remote'
+}
+
 export async function fetchAdzuna(keywords: string[], location: string): Promise<JobResult[]> {
   const source = 'Adzuna'
   try {
@@ -825,18 +902,9 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
     }
 
     const what = keywords.join(' ')
-    const where = location || ''
-    
-    // Map country names to Adzuna codes if needed, or just use 'in' for India as legacy
-    // but default to 'in' only if specifically India. Otherwise use global search.
-    const countryCode = (where.toLowerCase().includes('australia') || where.toLowerCase().includes('au')) ? 'au' :
-                        (where.toLowerCase().includes('india') || where.toLowerCase().includes('in')) ? 'in' : 
-                        (where.toLowerCase().includes('germany') || where.toLowerCase().includes('de')) ? 'de' :
-                        (where.toLowerCase().includes('uk') || where.toLowerCase().includes('gb') || where.toLowerCase().includes('united kingdom')) ? 'gb' :
-                        (where.toLowerCase().includes('usa') || where.toLowerCase().includes('us') || where.toLowerCase().includes('united states')) ? 'us' : 'us';
-
-    const url = `http://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}&where=${encodeURIComponent(where)}`
-    console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} | Location: ${where} | Country: ${countryCode}`)
+    const countryCode = getAdzunaCountryCode(location)
+    const url = `http://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}${where ? `&where=${encodeURIComponent(where)}` : ''}`
+    console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} ${where ? `| Location: ${where}` : ''} | Country: ${countryCode}`)
 
     const res = await fetch(url, { signal: AbortSignal.timeout(7000) })
     console.error(`[${source}] Response status: ${res.status}`)
@@ -852,9 +920,10 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
       console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 500)}`)
     }
 
+    const currencySymbol = countryCode === 'in' ? '₹' : countryCode === 'au' ? 'A$' : countryCode === 'gb' ? '£' : countryCode === 'de' ? '€' : '$';
     return results.map((job: Record<string, unknown>) => {
       const rawSalary = job.salary_min && job.salary_max
-        ? `₹${Number(job.salary_min).toLocaleString()} - ₹${Number(job.salary_max).toLocaleString()}`
+        ? `${currencySymbol}${Number(job.salary_min).toLocaleString()} - ${currencySymbol}${Number(job.salary_max).toLocaleString()}`
         : String(job.salary || '')
       const rawDescription = String(job.description || job.adref || '')
       return {
@@ -880,15 +949,15 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
 export async function fetchJSearch(keywords: string[], location?: string): Promise<JobResult[]> {
   const source = 'JSearch'
   try {
-    const apiKey = process.env.JSEARCH_API_KEY
-    if (!apiKey) {
-      console.error(`[${source}] Skipping: no API key configured`)
+    const rapidApiKey = process.env.RAPID_API_KEY
+    if (!rapidApiKey) {
+      console.error(`[${source}] Skipping: no RapidAPI key configured`)
       return []
     }
 
     const query = keywords.join(' ')
-    const locationQuery = location ? ` in ${location}` : ''
-    const fullQuery = `${query}${locationQuery}`
+    const locationParam = location && location !== 'remote' ? ` ${location}` : '';
+    const fullQuery = `${query}${locationParam}`
     
     // For students, prioritize internships and part-time (Fix #3)
     const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(fullQuery)}&page=1&num_pages=1&employment_types=INTERNSHIP,PARTTIME`

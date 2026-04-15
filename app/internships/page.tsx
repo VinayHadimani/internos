@@ -33,6 +33,7 @@ function InternshipsContent() {
   const urlResume = searchParams.get('resume');
   const urlSkills = searchParams.get('skills');
   const searchIdRef = useRef(0);
+  const hasCleanedUpRef = useRef(false);
   const [resumeText, setResumeText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [allJobs, setAllJobs] = useState<Job[]>([]);
@@ -85,6 +86,16 @@ function InternshipsContent() {
   }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    // Clear ALL previous resume data to prevent cross-contamination (Fix 9)
+    localStorage.removeItem('resumeText');
+    localStorage.removeItem('userSkills');
+    localStorage.removeItem('userExperience');
+    localStorage.removeItem('userRoles');
+    localStorage.removeItem('userLocation');
+    localStorage.removeItem('detectedCountry');
+    localStorage.removeItem('resumeTimestamp');
+    sessionStorage.removeItem('selectedJob');
+
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -179,20 +190,24 @@ function InternshipsContent() {
         const detectedSkills = userSkills.length >= 3 ? userSkills : (data.detected_skills || []);
         setSkills(detectedSkills);
 
-        // DATA PURGE: Remove resume and skills from localStorage after display
-        // to keep results on point and ensure AI focuses only on latest. (Fix #6)
-        console.log('[Internships] Purging resume data after successful display');
-        localStorage.removeItem('resumeText');
-        localStorage.removeItem('userSkills');
-        localStorage.removeItem('userExperience');
-        localStorage.removeItem('userRoles');
-        localStorage.removeItem('userLocation');
-        localStorage.removeItem('detectedCountry');
-        localStorage.removeItem('resumeVersion');
-        localStorage.removeItem('resumeTimestamp');
-        
-        // Purge server-side database record as well
-        fetch('/api/resume/cleanup', { method: 'DELETE' }).catch(err => console.error('[Internships] Database cleanup failed:', err));
+        // Clean up resume data after results are displayed (Fix 8)
+        if (!hasCleanedUpRef.current) {
+          hasCleanedUpRef.current = true;
+          // Purge server-side database record as well
+          fetch('/api/resume/cleanup', { method: 'DELETE' }).catch(err => console.error('[Internships] Database cleanup failed:', err));
+          
+          setTimeout(() => {
+            localStorage.removeItem('resumeText');
+            localStorage.removeItem('userSkills');
+            localStorage.removeItem('userExperience');
+            localStorage.removeItem('userRoles');
+            localStorage.removeItem('userLocation');
+            localStorage.removeItem('detectedCountry');
+            localStorage.removeItem('resumeVersion');
+            localStorage.removeItem('resumeTimestamp');
+            console.log('[Internships] Resume data cleaned up after display');
+          }, 2000); // 2 second delay to ensure results are rendered first
+        }
       } else {
         setError(data.error || 'Failed to search jobs');
       }

@@ -14,27 +14,35 @@ export interface ExtractedSkills {
 export async function extractSkillsFromResume(resumeText: string): Promise<ExtractedSkills> {
   try {
     const extractResponse = await callAI(
-      `You are an expert recruiter and career analyst AI. Analyze this resume with EXTREME attention to what makes this candidate unique.
+      `You are an expert recruiter and skill extraction AI. Analyze the resume thoroughly.
+Extract:
+- Technical, domain-specific, and soft skills (not just tech — include retail, hospitality, sports, trades, creative, admin skills).
+- Experience level (fresher/junior/mid/senior based on years of experience or education status).
+- Industries they've worked in or are targeting.
+- Target role types they are best suited for.
+- Location AND country — see CRITICAL location detection rules below.
 
-CRITICAL RULES FOR EXTRACTION:
-1. Extract skills that are ACTUALLY present. Do NOT favor any specific industry (like tech/finance). 
-2. DOMAIN-SPECIFIC skills are 10x more important than generic soft skills.
-3. If the candidate is in Retail, Hospitality, Healthcare, Trades, Creative Arts, Sport, or Law, extract the specific terminology and tools for that domain.
-4. You MUST detect the candidate's country and city from the resume.
-   - SIGNALS FOR AUSTRALIA: (1) Phone numbers starting with 04 or +61. (2) Postcodes 3000-3999 (VIC), 2000-2999 (NSW), 4000-4999 (QLD), 6000-6999 (WA), 5000-5999 (SA). (3) School names containing 'Secondary College', 'High School', 'VCE', 'HSC', 'ATAR', 'VET studies'. (4) Terms: 'casual/part-time', 'fortnight', 'HECS'. If Victorian signals found, set city to 'Melbourne'.
-   - SIGNALS FOR INDIA: Phone starts with +91. 6-digit postcodes.
-   - SIGNALS FOR USA: Phone starts with +1. 5-digit zip codes.
-   - If unsure, set detected_country to "remote". NEVER default to India or USA.
-5. You MUST identify the experience_level: 'high_school' (no degree, currently in school), 'student' (college/university), 'fresh_graduate' (0-1 yrs), 'junior' (1-3 yrs), 'mid' (3-7 yrs), 'senior' (7+ yrs).
+CRITICAL LOCATION DETECTION RULES:
+You MUST detect the candidate's country. Look for these signals:
+1. PHONE NUMBERS: +61 or 04xx/045xx/04xx xxx xxx = AUSTRALIA. +91 = India. +1 = USA/Canada. +44 = UK. +49 = Germany.
+2. POSTCODES: 3000-3999 = Victoria/Melbourne Australia. 2000-2999 = Sydney. 4000-4999 = Brisbane. 5000-5999 = Adelaide. 6000-6999 = Perth. 7000 = Hobart. 0800 = Darwin. 2600-2900 = Canberra. 6-digit = India. 5-digit = USA/Germany.
+3. SCHOOL SYSTEMS: "Secondary College", "Year 11", "Year 12", "VCE", "HSC", "VET studies", "ATAR" = AUSTRALIA. "High School" + "Year 10/11/12" = Australia or UK.
+4. TERMINOLOGY: "casual", "part-time", "fortnight", "HECS", "Centrelink", "QEAC" = Australian job market.
+5. CURRENCY: "AUD", "$" with Australian context = Australia.
+
+If Australian signals are found, set location to the specific Australian city (e.g., "Melbourne, Australia", "Sydney, Australia").
+If Indian signals are found, set location to the specific Indian city (e.g., "Bangalore, India").
+If American signals are found, set location to the specific US city (e.g., "New York, USA").
+If NO location signals are found, set location to "remote".
+NEVER default to India. NEVER guess — if unsure, use "remote".
 
 Return exact JSON:
 {
-  "skills": ["skill1", "skill2", "..."],
-  "experienceLevel": "high_school" | "student" | "fresh_graduate" | "junior" | "mid" | "senior",
-  "industries": ["industry1", "..."],
-  "roleTypes": ["role1", "..."],
-  "location": "City",
-  "detected_country": "Country Name"
+  "skills": ["skill1", "skill2", "skill3"],
+  "experienceLevel": "fresher",
+  "industries": ["retail", "sports"],
+  "roleTypes": ["retail assistant", "customer service"],
+  "location": "Melbourne, Australia"
 }`,
       resumeText,
       {

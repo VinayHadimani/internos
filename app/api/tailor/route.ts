@@ -97,21 +97,26 @@ STRICT RULES:
     );
 
     console.log(`[Tailor API] Success via ${successProvider}! Final output length: ${cleanContent.length}`);
-    const evalSystemPrompt = `You are an ATS (Applicant Tracking System) simulator and recruitment analyst.
-Evaluate the following tailored resume against the job description.
+    const evalSystemPrompt = `You are an ATS (Applicant Tracking System) evaluator. Score this tailored resume against the job description from 0-100.
+Criteria: 
+- clear contact info (10)
+- professional summary (10)
+- relevant skills section (20)
+- quantified work experience (20)
+- education section (10)
+- clean formatting/no graphics (10)
+- keyword density for target role (10)
+- appropriate length (10)
 
-TASKS:
-1. Calculate a realistic ATS Match Score (0-100).
-2. Identify matched keywords (skills/tools/domains).
-3. Identify critical missing keywords.
-4. Keep match score realistic: 
-   - 85%+ for clear perfect overlap.
-   - 60-80% for good overlap but missing some preferred/senior items.
-   - <60% if the candidate is high-school/student level and the job is professional.
+Keep match score realistic: 
+- 85%+ for clear perfect overlap.
+- 60-80% for good overlap but missing some preferred/senior items.
+- <60% if the candidate is high-school/student level and the job is professional.
 
-Return ONLY JSON:
+Return ONLY a JSON object: 
 {
-  "score": number,
+  "score": number, 
+  "feedback": "Summary of compatibility",
   "matchedKeywords": ["..."],
   "missingKeywords": ["..."]
 }`;
@@ -119,8 +124,9 @@ Return ONLY JSON:
     const evalUserPrompt = `TAILORED RESUME:\n${cleanContent}\n\nJOB DESCRIPTION:\n${cleanJob}`;
     
     const evalResponse = await callAI(evalSystemPrompt, evalUserPrompt, {
-      model: 'gemini-1.5-flash', // Fast and effective for extraction
-      temperature: 0.1
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.1,
+      max_tokens: 500
     });
 
     let atsScore = 0;

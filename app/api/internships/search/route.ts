@@ -269,6 +269,16 @@ function getMatchLabel(score: number): string {
   return 'Low Match';
 }
 
+// Domain-specific search queries for better job matching
+const DOMAIN_SEARCH_QUERIES: Record<string, string[]> = {
+  retail: ['retail assistant', 'customer service assistant', 'shop assistant', 'sales assistant', 'store associate', 'retail casual', 'part time retail', 'cashier'],
+  sports: ['sports retail assistant', 'sports store', 'recreation assistant', 'community sports officer', 'leisure assistant', 'gym assistant', 'lifeguard'],
+  hospitality: ['waiter', 'barista', 'cafe assistant', 'restaurant staff', 'hospitality casual', 'kitchen hand', 'food service'],
+  trades: ['apprentice', 'trades assistant', 'labourer', 'construction assistant', 'warehouse assistant'],
+  admin: ['office assistant', 'receptionist', 'admin assistant', 'data entry clerk', ' clerical assistant'],
+  creative: ['content creator', 'social media assistant', 'graphic design intern', 'photography assistant', 'video editor'],
+};
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -282,7 +292,7 @@ export async function POST(req: NextRequest) {
     } = body;
     
     const resumeText: string = body.resumeText || '';
-    const userLocation = bodyLocation || '';
+    const userLocation = bodyLocation || 'remote';
 
     console.log('=== INTERNOS SEARCH ===');
     console.log(`[Search] Location: ${userLocation || 'Any'}`);
@@ -322,33 +332,30 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Smart Query Building (Fix #4)
-    const DOMAIN_QUERIES: Record<string, string[]> = {
-      retail: ['retail assistant', 'customer service assistant', 'shop assistant', 'sales assistant', 'store associate', 'retail casual', 'part time retail'],
-      sports: ['sports retail assistant', 'sports store casual', 'recreation assistant', 'community sports officer'],
-      hospitality: ['waiter', 'barista', 'cafe assistant', 'restaurant staff', 'hospitality casual'],
-    };
+    // Use domain-specific queries for better results
+    const industry = (profile.industry || '').toLowerCase();
+    const domainQueries = DOMAIN_SEARCH_QUERIES[industry] || [];
 
-    const industryLower = (profile.industry || '').toLowerCase();
-    let searchQueries: string[] = [];
-    
-    // Check if industry matches any domain queries
-    const matchedDomain = Object.keys(DOMAIN_QUERIES).find(d => industryLower.includes(d));
+    const searchQueriesArr = [
+      // Domain-specific queries first (most relevant)
+      ...domainQueries.slice(0, 3),
+      // Then AI-extracted keywords and roles
+      ...(profile.keywords || []).slice(0, 3),
+      ...(profile.roles || []).slice(0, 2),
+      // Top skills as search terms
+      ...(profile.skills || []).filter(s => s.split(' ').length > 1 || s.length > 5).slice(0, 3),
+    ];
 
-    if (matchedDomain) {
-      console.log(`[Search] Using hardcoded queries for domain: ${matchedDomain}`);
-      // Merge top 3 skills with 3 domain queries
-      searchQueries = [
-        ...DOMAIN_QUERIES[matchedDomain].slice(0, 3),
-        ...profile.skills.slice(0, 3).map(s => `${s} role`)
-      ];
-    } else {
-      searchQueries = [...new Set([
-        ...(profile.keywords || []),
-        ...(profile.roles || []),
-        ...(profile.skills.slice(0, 2).map(s => `${s} intern`))
-      ])].filter(q => q && q.trim().length > 0).slice(0, 6);
-    }
+    // Deduplicate queries (case-insensitive)
+    const seen = new Set<string>();
+    const uniqueQueries = searchQueriesArr.filter(q => {
+      const key = q.toLowerCase().trim();
+      if (seen.has(key) || key.length < 3) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 6);
+
+    console.log(`[Search] Starting fetch for: ${uniqueQueries.join(', ')}`);
     
     const allJobsMap = new Map<string, JobResult>();
 
@@ -356,7 +363,7 @@ export async function POST(req: NextRequest) {
     // Fix #2: Use detected country if available
     const searchLocation = profile.detected_country || userLocation || 'remote';
     
-    for (const q of searchQueries) {
+    for (const q of uniqueQueries) {
       try {
         const batch = await aggregateJobs(q, searchLocation);
         for (const job of batch) {

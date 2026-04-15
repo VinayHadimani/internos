@@ -48,18 +48,20 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
     const rawText = text.join('\n');
     
     // Clean template instructions and artifacts (Fix #2)
-    const cleanText = rawText
-      .replace(/\((?:Tip|Note|Advice|Suggestion|Hint):.*?\)\s*/gi, '') // Remove (Tip: ...)
-      .replace(/\[(?:Tip|Note|Advice|Suggestion|Hint):.*?\]\s*/gi, '') // Remove [Tip: ...]
-      .replace(/^(?:Tip|Note|Advice|Suggestion|Hint|Task|Advice|Advice):.*$/gim, '') // Remove instruction lines
-      .replace(/click here to.*$/gi, '')
-      .replace(/replace this with.*$/gi, '')
-      .replace(/your name here.*$/gi, '')
-      .replace(/^Page\s+\d+$/gim, '')                                 // Remove Page Number markers
-      .replace(/example@example\.com|\[city, country\]|\[mobile number\]|\[email address\]/gi, '') // Remove placeholders
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')                // Strip control characters
-      .replace(/\s+/g, ' ')                                           // Collapse whitespace
+    let cleanText = rawText
+      .replace(/\s+/g, ' ')
       .trim();
+
+    // Remove template "Tip:" paragraphs and instructional text
+    cleanText = cleanText.replace(/\(Tip:.*?\)/gs, ' ');
+    cleanText = cleanText.replace(/\(Note:.*?\)/gs, ' ');
+    cleanText = cleanText.replace(/\(Advice:.*?\)/gs, ' ');
+    cleanText = cleanText.replace(/\(Suggestion:.*?\)/gs, ' ');
+    cleanText = cleanText.replace(/^[A-Z][a-z]+:.*(?:click here|replace this|your name here|fill in|example).*$/gim, ' ');
+    // Clean up any double spaces created by removal
+    cleanText = cleanText.replace(/\s+/g, ' ').trim();
+
+    return cleanText;
       
     return cleanText;
   } catch (error) {
@@ -72,17 +74,17 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
  * Fallback for plain text files.
  */
 export async function parseResumeText(text: string): Promise<string> {
-  return text
-    .replace(/\((?:Tip|Note|Advice|Suggestion|Hint):.*?\)\s*/gi, '')
-    .replace(/\[(?:Tip|Note|Advice|Suggestion|Hint):.*?\]\s*/gi, '')
-    .replace(/^(?:Tip|Note|Advice|Suggestion|Hint|Task|Advice|Advice):.*$/gim, '')
-    .replace(/click here to.*$/gi, '')
-    .replace(/replace this with.*$/gi, '')
-    .replace(/your name here.*$/gi, '')
-    .replace(/example@example\.com|\[city, country\]|\[mobile number\]|\[email address\]/gi, '')
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-    .replace(/\s+/g, ' ')
+  let cleaned = text
+    .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
     .trim();
+  // Remove template "Tip:" paragraphs and instructional text
+  cleaned = cleaned.replace(/\(Tip:.*?\)/gs, ' ');
+  cleaned = cleaned.replace(/\(Note:.*?\)/gs, ' ');
+  cleaned = cleaned.replace(/\(Advice:.*?\)/gs, ' ');
+  cleaned = cleaned.replace(/\(Suggestion:.*?\)/gs, ' ');
+  cleaned = cleaned.replace(/^[A-Z][a-z]+:.*(?:click here|replace this|your name here|fill in|example).*$/gim, ' ');
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  return cleaned;
 }
 
 export async function parseStudentProfile(resumeText: string): Promise<StudentProfile> {

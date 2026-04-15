@@ -27,6 +27,17 @@ export default function DashboardPage() {
   }, []);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    // Clear ALL previous resume data to prevent cross-contamination (Fix 9)
+    localStorage.removeItem('resumeText');
+    localStorage.removeItem('userSkills');
+    localStorage.removeItem('userExperience');
+    localStorage.removeItem('userRoles');
+    localStorage.removeItem('userLocation');
+    localStorage.removeItem('detectedCountry');
+    localStorage.removeItem('resumeVersion');
+    localStorage.removeItem('resumeTimestamp');
+    sessionStorage.removeItem('selectedJob');
+
     const file = e.target.files?.[0];
     if (!file) return;
 
