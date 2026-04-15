@@ -212,7 +212,7 @@ const LOCATION_ALIASES: Record<string, string[]> = {
   'bangalore': ['bangalore', 'bengaluru', 'karnataka'],
   'mumbai': ['mumbai', 'bombay', 'maharashtra', 'navi mumbai', 'thane'],
   'noida': ['noida', 'uttar pradesh', 'delhi ncr', 'ncr'],
-  // Australia
+  // Australia (Fix #10)
   'melbourne': ['melbourne', 'victoria', 'vic', 'park hill', '3045', 'vic 3045'],
   'sydney': ['sydney', 'nsw', 'new south wales'],
   'brisbane': ['brisbane', 'queensland', 'qld'],
@@ -220,14 +220,13 @@ const LOCATION_ALIASES: Record<string, string[]> = {
   'adelaide': ['adelaide', 'south australia', 'sa'],
   // US
   'new york': ['new york', 'nyc', 'manhattan'],
-  'san francisco': ['san francisco', 'sf', 'bay area'],
+  'san francisco': ['san francisco', 'sf', 'bay area', 'california'],
   // UK
-  'london': ['london'],
-  'united kingdom': ['united kingdom', 'uk'],
+  'london': ['london', 'united kingdom', 'uk', 'england'],
   // Germany
-  'germany': ['germany', 'deutschland', 'berlin', 'munich', 'hamburg'],
-  // Generic
-  'remote': ['remote', 'work from home', 'wfh', 'anywhere', 'work from anywhere'],
+  'germany': ['germany', 'deutschland', 'berlin', 'munich', 'hamburg', 'frankfurt'],
+  // Generic Remote (Fix #10 - expanded)
+  'remote': ['remote', 'work from home', 'wfh', 'anywhere', 'work from anywhere', 'virtual', 'telecommute'],
 }
 
 /**
@@ -277,8 +276,8 @@ export function calculateLocationMatch(jobLocation: string, preferredLocation: s
   const isPrefRemote = ['remote', 'work from home', 'wfh', 'anywhere'].some((r) => prefNorm.includes(r))
 
   if (isJobRemote && isPrefRemote) return 1.0
-  if (isJobRemote && !isPrefRemote) return 0.3 // Remote at bottom when user wants city
-  if (!isJobRemote && isPrefRemote) return 0.2 // Non-remote when user wants remote
+  if (isJobRemote && !isPrefRemote) return 0.5 // Remote is a decent fallback for city seekers
+  if (!isJobRemote && isPrefRemote) return 0.2 // Non-remote is poor for remote seekers
 
   // Same country bonus — works for ANY country, not just India
   const COUNTRY_ALIASES: Record<string, string[]> = {
@@ -901,7 +900,7 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
       console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 500)}`)
     }
 
-    const currencySymbol = countryCode === 'in' ? '₹' : countryCode === 'au' ? 'A$' : countryCode === 'gb' ? '£' : countryCode === 'de' ? '€' : '$';
+    const currencySymbol = countryCode === 'in' ? '₹' : countryCode === 'au' ? 'A$' : countryCode === 'gb' ? '£' : countryCode === 'de' ? '€' : countryCode === 'ca' ? 'C$' : '$';
     return results.map((job: Record<string, unknown>) => {
       const rawSalary = job.salary_min && job.salary_max
         ? `${currencySymbol}${Number(job.salary_min).toLocaleString()} - ${currencySymbol}${Number(job.salary_max).toLocaleString()}`

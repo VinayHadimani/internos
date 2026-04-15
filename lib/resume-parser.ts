@@ -47,19 +47,27 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
     // Join pages and sanitize
     const rawText = text.join('\n');
     
-    // Clean template instructions and artifacts (Fix #2)
+    // Clean template instructions and artifacts (Fix #2, #4)
     let cleanText = rawText
       .replace(/\s+/g, ' ')
       .trim();
 
-    // Remove template "Tip:" paragraphs and instructional text (Fix #1)
-    cleanText = cleanText.replace(/\(Tip:[\s\S]*?\)/g, ' ');
-    cleanText = cleanText.replace(/\(Note:[\s\S]*?\)/g, ' ');
-    cleanText = cleanText.replace(/\(Advice:[\s\S]*?\)/g, ' ');
-    cleanText = cleanText.replace(/\(Suggestion:[\s\S]*?\)/g, ' ');
-    cleanText = cleanText.replace(/\(Example:[\s\S]*?\)/g, ' ');
+    // REMOVE TEMPLATE POISONING: Strip signals that come from resume templates
+    cleanText = cleanText.replace(/\bTip\s*:\s*[^.!?]*[.!?]/gi, ' ');
+    cleanText = cleanText.replace(/\bHint\s*:\s*[^.!?]*[.!?]/gi, ' ');
+    cleanText = cleanText.replace(/\bNote\s*:\s*[^.!?]*[.!?]/gi, ' ');
+    cleanText = cleanText.replace(/\bAdvice\s*:\s*[^.!?]*[.!?]/gi, ' ');
+    cleanText = cleanText.replace(/\bSuggestion\s*:\s*[^.!?]*[.!?]/gi, ' ');
+    cleanText = cleanText.replace(/\bExample\s*:\s*[^.!?]*[.!?]/gi, ' ');
     cleanText = cleanText.replace(/\[Optional\]/gi, ' ');
+    
+    // Remove common template filler phrases
+    cleanText = cleanText.replace(/use action verbs to describe your experience/gi, ' ');
+    cleanText = cleanText.replace(/include your gpa if/gi, ' ');
+    cleanText = cleanText.replace(/tailor this section to match the job/gi, ' ');
+    cleanText = cleanText.replace(/customize this resume template/gi, ' ');
     cleanText = cleanText.replace(/^[A-Z][a-z]+:.*(?:click here|replace this|your name here|fill in|example).*$/gim, ' ');
+    
     // Clean up any double spaces created by removal
     cleanText = cleanText.replace(/\s+/g, ' ').trim();
 
@@ -77,14 +85,22 @@ export async function parseResumeText(text: string): Promise<string> {
   let cleaned = text
     .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
     .trim();
-  // Remove template "Tip:" paragraphs and instructional text (Fix #1)
-  cleaned = cleaned.replace(/\(Tip:[\s\S]*?\)/g, ' ');
-  cleaned = cleaned.replace(/\(Note:[\s\S]*?\)/g, ' ');
-  cleaned = cleaned.replace(/\(Advice:[\s\S]*?\)/g, ' ');
-  cleaned = cleaned.replace(/\(Suggestion:[\s\S]*?\)/g, ' ');
-  cleaned = cleaned.replace(/\(Example:[\s\S]*?\)/g, ' ');
+
+  // REMOVE TEMPLATE POISONING (Fix #4)
+  cleaned = cleaned.replace(/\bTip\s*:\s*[^.!?]*[.!?]/gi, ' ');
+  cleaned = cleaned.replace(/\bHint\s*:\s*[^.!?]*[.!?]/gi, ' ');
+  cleaned = cleaned.replace(/\bNote\s*:\s*[^.!?]*[.!?]/gi, ' ');
+  cleaned = cleaned.replace(/\bAdvice\s*:\s*[^.!?]*[.!?]/gi, ' ');
+  cleaned = cleaned.replace(/\bSuggestion\s*:\s*[^.!?]*[.!?]/gi, ' ');
+  cleaned = cleaned.replace(/\bExample\s*:\s*[^.!?]*[.!?]/gi, ' ');
   cleaned = cleaned.replace(/\[Optional\]/gi, ' ');
+  
+  cleaned = cleaned.replace(/use action verbs to describe your experience/gi, ' ');
+  cleaned = cleaned.replace(/include your gpa if/gi, ' ');
+  cleaned = cleaned.replace(/tailor this section to match the job/gi, ' ');
+  cleaned = cleaned.replace(/customize this resume template/gi, ' ');
   cleaned = cleaned.replace(/^[A-Z][a-z]+:.*(?:click here|replace this|your name here|fill in|example).*$/gim, ' ');
+  
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
   return cleaned;
 }
@@ -255,9 +271,9 @@ SCHOOL TIER RULES:
 
   try {
     const response = await callAI(systemPrompt, userPrompt, {
-        model: 'gemini-1.5-flash',
+        model: 'llama-3.3-70b-versatile',
         temperature: 0.1,
-        providerPriority: ['gemini', 'groq', 'openai'],
+        providerPriority: ['groq', 'gemini', 'openai'],
         response_format: { type: 'json_object' }
     });
 

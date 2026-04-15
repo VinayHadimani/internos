@@ -109,9 +109,9 @@ async function groqCall(apiKey: string, system: string, user: string, options: A
 
 async function geminiCall(apiKey: string, system: string, user: string, options: AICallOptions): Promise<string> {
   // Map models to Gemini compatible names if needed
-  let model = options.model || 'gemini-2.0-flash';
-  if (model.includes('llama')) model = 'gemini-2.0-flash';
-  if (model.includes('gpt')) model = 'gemini-2.0-flash';
+  let model = options.model || 'gemini-2.0-flash-001';
+  if (model.includes('llama')) model = 'gemini-2.0-flash-001';
+  if (model.includes('gpt')) model = 'gemini-2.0-flash-001';
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,

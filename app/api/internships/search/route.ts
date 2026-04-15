@@ -52,10 +52,10 @@ Return exactly this JSON:
       prompt,
       ``,
       {
-        model: 'gemini-1.5-flash',
+        model: 'llama-3.3-70b-versatile',
         temperature: 0.1,
         max_tokens: 800,
-        providerPriority: ['gemini', 'groq', 'openai']
+        providerPriority: ['groq', 'gemini', 'openai']
       }
     );
 
@@ -91,64 +91,57 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
   
   // Industry-agnostic keyword list — covers ALL major fields
   const allKeywords = [
-    // Tech & Engineering
+    // ── Technology ──
     'javascript', 'typescript', 'python', 'java', 'react', 'angular', 'vue', 'node',
     'mongodb', 'sql', 'postgresql', 'aws', 'docker', 'kubernetes', 'git',
     'html', 'css', 'figma', 'redux', 'nextjs', 'django', 'flask', 'spring',
     'machine learning', 'deep learning', 'tensorflow', 'pytorch', 'nlp',
-    'c++', 'c#', 'go', 'rust', 'php', 'swift', 'kotlin',
-    
-    // Data & Analytics
-    'excel', 'google sheets', 'tableau', 'power bi', 'r studio', 'spss', 'sas', 'vba', 'stata',
-    'data analysis', 'data visualization', 'statistical analysis', 'regression analysis',
-    'sql', 'mysql', 'bigquery', 'pandas', 'numpy',
-    
-    // Consulting & Strategy
+    // ── Business / Finance ──
+    'excel', 'powerpoint', 'tableau', 'power bi', 'r', 'stata', 'spss',
     'financial modeling', 'valuation', 'consulting', 'strategy', 'case study',
-    'due diligence', 'business analysis', 'market research', 'competitive analysis',
-    'stakeholder management', 'client engagement', 'presentation skills',
-    'management consulting', 'business strategy', 'financial analysis',
-    'mcKinsey', 'bain', 'bcg', 'deloitte', 'advisory', 'big four',
-    'problem solving', 'analytical skills', 'critical thinking',
-    
-    // Finance & Accounting
-    'investment banking', 'equity research', 'portfolio management',
-    'risk management', 'compliance', 'audit', 'accounting', 'tax',
-    'financial planning', 'budgeting', 'forecasting', 'treasury',
-    'derivatives', 'private equity', 'venture capital', 'hedge fund',
-    
-    // Marketing & Sales
-    'marketing', 'seo', 'sem', 'social media', 'brand management', 'salesforce',
-    'content marketing', 'digital marketing', 'email marketing', 'google analytics',
-    'market segmentation', 'customer acquisition', 'lead generation',
-    'brand strategy', 'public relations', 'event management',
-    
-    // Product & Design
-    'product management', 'product design', 'ux research', 'user research',
-    'wireframing', 'prototyping', 'adobe creative suite', 'photoshop', 'illustrator',
-    'indesign', 'sketch', 'invision', 'figma',
-    
-    // Operations & Supply Chain
-    'supply chain', 'logistics', 'operations management', 'process improvement',
-    'lean six sigma', 'project management', 'agile', 'scrum', 'jira',
-    'erp', 'sap', 'salesforce', 'crm',
-    
-    // HR & People
-    'human resources', 'recruiting', 'talent acquisition', 'organizational development',
-    'performance management', 'compensation', 'employee relations',
-    
-    // Legal
-    'contract negotiation', 'legal research', 'compliance', 'regulatory affairs',
-    'intellectual property', 'corporate law', 'litigation',
-    
-    // Healthcare & Life Sciences
-    'clinical research', 'healthcare management', 'pharmaceutical', 'biotechnology',
-    'medical devices', 'regulatory affairs', 'fda',
-    
-    // General Business
-    'business development', 'partnership management', 'revenue growth',
-    'customer success', 'account management', 'relationship management',
-    'cross-functional', 'leadership', 'team management', 'communication',
+    // ── Marketing ──
+    'marketing', 'seo', 'social media', 'brand management', 'salesforce',
+    // ── Product ──
+    'product management', 'agile', 'scrum', 'jira',
+    // ── Operations ──
+    'supply chain', 'logistics', 'operations',
+    // ── Design ──
+    'photoshop', 'illustrator', 'indesign', 'canva', 'ui design', 'ux design',
+    // ── Retail / Hospitality / Customer Service ──
+    'customer service', 'cash handling', 'pos', 'point of sale', 'stock management',
+    'retail', 'sales', 'merchandising', 'inventory management',
+    'hospitality', 'food service', 'waitstaff', 'barista', 'front desk',
+    'visual merchandising', 'store management', 'loss prevention',
+    // ── Sports / Fitness / Recreation ──
+    'sports', 'coaching', 'umpiring', 'fitness', 'recreation', 'personal training',
+    'athletic', 'sport management', 'exercise science', 'physiotherapy',
+    'soccer', 'football', 'cricket', 'basketball', 'swimming', 'tennis',
+    // ── Healthcare / Medical ──
+    'healthcare', 'nursing', 'medical', 'patient care', 'clinical',
+    'first aid', 'cpr', 'pharmacy', 'dentistry', 'psychology',
+    // ── Education / Teaching ──
+    'teaching', 'tutoring', 'education', 'curriculum', 'lesson planning',
+    'classroom management', 'early childhood', 'special education',
+    // ── Law / Legal ──
+    'legal', 'law', 'paralegal', 'contract', 'compliance', 'regulatory',
+    // ── HR / People ──
+    'human resources', 'recruiting', 'hiring', 'talent acquisition', 'payroll',
+    'employee relations', 'training and development',
+    // ── Trades / Skilled Labor ──
+    'carpentry', 'plumbing', 'electrical', 'welding', 'automotive', 'mechanic',
+    'construction', 'landscaping', 'culinary', 'chef', 'baking',
+    // ── Arts / Creative ──
+    'photography', 'videography', 'video editing', 'graphic design', 'animation',
+    'music', 'writing', 'content creation', 'journalism', 'copywriting',
+    // ── Accounting / Finance ──
+    'accounting', 'bookkeeping', 'auditing', 'tax', 'payroll', 'budgeting',
+    'accounts payable', 'accounts receivable', 'financial analysis',
+    // ── Data / Analytics ──
+    'data analysis', 'data entry', 'analytics', 'reporting', 'dashboards',
+    'business intelligence', 'statistical analysis',
+    // ── Communications / PR ──
+    'public relations', 'communications', 'media relations', 'event planning',
+    'community management', 'social media marketing',
   ];
   
   const found = allKeywords.filter(kw => {
@@ -194,16 +187,22 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
 
   // Explicit mapping for non-tech industries to roles
   const domainRoleMap: Record<string, string[]> = {
-    'retail': ['retail assistant', 'sales associate', 'cashier', 'merchandiser'],
-    'hospitality': ['waiter', 'waitress', 'barista', 'front desk associate'],
-    'sports': ['sports coach', 'recreation assistant', 'fitness instructor'],
-    'healthcare_support': ['care assistant', 'medical receptionist', 'healthcare aide'],
-    'trades': ['trades assistant', 'apprentice', 'labourer'],
-    'creative': ['graphic design assistant', 'social media intern', 'content creator'],
-    'admin_office': ['office assistant', 'receptionist', 'admin intern'],
-    'general': ['customer service representative', 'business intern', 'administrative assistant']
+    'retail': ['retail sales assistant', 'store associate', 'customer service representative'],
+    'sports': ['sports retail associate', 'fitness center attendant', 'recreation assistant'],
+    'hospitality': ['hotel front desk agent', 'restaurant server', 'hospitality intern'],
+    'healthcare': ['healthcare assistant', 'medical office intern', 'patient care aide'],
+    'education': ['teaching assistant', 'tutor', 'education intern'],
+    'finance': ['finance intern', 'accounting assistant', 'financial analyst intern'],
+    'marketing': ['marketing intern', 'social media coordinator', 'content writing intern'],
+    'law': ['legal intern', 'paralegal assistant', 'compliance intern'],
+    'design': ['design intern', 'graphic design assistant', 'ui/ux intern'],
+    'hr': ['human resources intern', 'recruiting coordinator', 'hr assistant'],
+    'consulting': ['management consulting intern', 'strategy analyst', 'business analyst'],
+    'data_science': ['data science intern', 'data analyst', 'ml engineer intern'],
+    'software_engineering': ['software engineering intern', 'frontend developer', 'backend developer'],
+    'communications': ['communications intern', 'pr assistant', 'media coordinator'],
+    'general': ['intern', 'assistant', 'administrator'],
   };
-  
   const roles = clientRoles.length > 0 ? clientRoles : (domainRoleMap[domain] || ['intern']);
   
   // Generate better search keywords from found skills
@@ -333,37 +332,50 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Fix #9 — Industry-specific queries
-    const DOMAIN_QUERIES: Record<string, string[]> = {
-      'retail': ['retail assistant', 'sales associate', 'cashier', 'shop assistant', 'customer service assistant', 'retail casual'],
-      'sport': ['sports retail', 'coach assistant', 'recreation officer', 'sport steward', 'sports store'],
-      'business': ['business intern', 'admin assistant', 'data entry', 'junior analyst'],
-      'software': ['software intern', 'junior developer', 'frontend intern', 'backend intern'],
-      'finance': ['accounting intern', 'finance assistant', 'junior bookkeeper'],
-      'hospitality': ['waiter', 'barista', 'cafe assistant', 'restaurant staff', 'hospitality casual'],
-      'trades': ['apprentice', 'trades assistant', 'labourer', 'construction assistant'],
-      'creative': ['content creator', 'social media assistant', 'graphic design intern', 'photography assistant']
-    };
+    // Fix #8 — Build SMART search queries that remote job APIs can actually use
+    const searchQueriesArr: string[] = [];
+    const industryName = (profile.industry || '').toLowerCase();
+    const skills = profile.skills || [];
+    const roles = profile.roles || [];
 
-    const industry = (profile.industry || '').toLowerCase();
-    const domainQueries = DOMAIN_QUERIES[industry] || [];
+    // Query 1: Primary role-based search (highest priority)
+    if (roles.length > 0) {
+      searchQueriesArr.push(roles[0]); // e.g., "retail sales assistant"
+    }
+    if (roles.length > 1) {
+      searchQueriesArr.push(roles[1]); // e.g., "customer service representative"
+    }
 
-    const searchQueriesArr = [
-      // Domain-specific queries first (most relevant)
-      ...domainQueries.slice(0, 4),
-      // Then AI-extracted keywords and roles
-      ...(profile.keywords || []).slice(0, 3),
-      ...(profile.roles || []).slice(0, 2),
-    ];
+    // Query 2: Top skill + industry combined
+    if (skills.length > 0) {
+      const topSkill = skills[0];
+      if (industryName && industryName !== 'general') {
+        searchQueriesArr.push(`${topSkill} ${industryName}`); // e.g., "customer service retail"
+      } else {
+        searchQueriesArr.push(topSkill); // e.g., "react"
+      }
+    }
 
-    // Deduplicate queries (case-insensitive)
-    const seen = new Set<string>();
-    const uniqueQueries = searchQueriesArr.filter(q => {
-      const key = q.toLowerCase().trim();
-      if (seen.has(key) || key.length < 3) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, 6);
+    // Query 3: Second + third skill
+    if (skills.length > 1) {
+      searchQueriesArr.push(skills.slice(1, 3).join(' ')); // e.g., "cash handling pos"
+    }
+
+    // Query 4: Just "internship" with NO location filter logic at aggregator level handled later
+    searchQueriesArr.push('internship');
+
+    // Query 5: Industry-specific broad search
+    if (industryName && industryName !== 'general' && industryName !== 'software_engineering') {
+      searchQueriesArr.push(`${industryName} intern`); // e.g., "retail intern", "sports intern"
+    }
+
+    // Query 6: Student/entry-level if detected
+    if (profile.experience_level === 'student' || profile.experience_level === 'fresher' || profile.experience_level === 'entry') {
+      searchQueriesArr.push('entry level remote');
+    }
+
+    // Deduplicate and limit to prevent API abuse
+    const uniqueQueries = [...new Set(searchQueriesArr.map(q => q.toLowerCase().trim()))].filter(q => q.length > 2).slice(0, 6);
 
     console.log(`[Search] Starting fetch for: ${uniqueQueries.join(', ')}`);
     
@@ -410,13 +422,18 @@ export async function POST(req: NextRequest) {
       };
     });
 
-    // Fix #10 — Strict filtering: Only return jobs with at least 15% match
+    // Fix #11 — Strict filtering: Only return jobs with at least 15% match
     const MIN_MATCH_SCORE = 15;
-    const finalJobs = scoredJobs
-      .filter(j => (j.matchScore || 0) >= MIN_MATCH_SCORE)
-      .slice(0, 50); // Hard limit for response size
+    const relevantJobs = scoredJobs.filter(j => (j.matchScore || 0) >= MIN_MATCH_SCORE);
 
-    console.log(`[Search] Returning ALL ${finalJobs.length} jobs (top: ${finalJobs[0]?.matchScore || 0}%, bottom: ${finalJobs[finalJobs.length - 1]?.matchScore || 0}%)`);
+    console.log(`[Search] Filtered ${scoredJobs.length - relevantJobs.length} low-score jobs (below ${MIN_MATCH_SCORE}%)`);
+    
+    // If we filtered too aggressively and have < 3 results, relax threshold to first 12
+    const finalJobs = relevantJobs.length >= 3 
+      ? relevantJobs 
+      : scoredJobs.slice(0, Math.min(12, scoredJobs.length));
+
+    console.log(`[Search] Returning ${finalJobs.length} relevant jobs (was ${scoredJobs.length})`);
 
     return NextResponse.json({
       success: true,

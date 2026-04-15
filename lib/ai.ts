@@ -38,8 +38,9 @@ Return ONLY JSON:
 }`;
 
     const response = await callAI(prompt, resumeText, {
-      model: 'gemini-1.5-flash',
-      temperature: 0.1
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.1,
+      providerPriority: ['groq', 'gemini', 'openai']
     });
 
     if (response.success && response.content) {
@@ -75,36 +76,45 @@ Return ONLY JSON:
 function extractSkillsByKeywords(text: string): string[] {
   const lowerText = text.toLowerCase();
   
-  const skillCategories = {
+  // Organized by domain for better coverage (Fix #7)
+  const allSkills: Record<string, string[]> = {
     tech: ['javascript', 'typescript', 'python', 'java', 'react', 'angular', 'vue', 'node',
       'mongodb', 'sql', 'postgresql', 'mysql', 'aws', 'docker', 'kubernetes', 'git',
       'html', 'css', 'tailwind', 'bootstrap', 'figma', 'redux', 'nextjs', 'django',
-      'flask', 'spring', 'android', 'ios', 'flutter', 'machine learning',
-      'data science', 'pandas', 'numpy', 'tensorflow', 'pytorch', 'graphql', 'c++', 'c#', 'go'],
-    analytics: ['excel', 'google sheets', 'tableau', 'power bi', 'spss', 'sas', 'vba', 'stata',
-      'r studio', 'data analysis', 'data visualization', 'statistical analysis'],
-    business: ['strategy', 'market research', 'business development', 'stakeholder management', 'presentation skills', 'client engagement'],
-    finance: ['investment banking', 'equity research', 'risk management', 'accounting', 'financial planning', 'budgeting'],
-    marketing: ['seo', 'sem', 'social media marketing', 'content marketing', 'digital marketing', 'google analytics'],
-    retail_hospitality: ['customer service', 'cash handling', 'pos', 'retail', 'merchandising', 'inventory', 'food service', 'hospitality', 'barista', 'waitstaff'],
-    healthcare: ['patient care', 'cpr', 'medical records', 'phlebotomy', 'clinical', 'nursing'],
-    creative: ['graphic design', 'illustration', 'photography', 'video editing', 'adobe photoshop', 'ui ux', 'copywriting'],
-    legal: ['legal research', 'paralegal', 'contract drafting', 'compliance', 'litigation'],
-    trades: ['electrical', 'plumbing', 'carpentry', 'welding', 'hvac', 'blueprint reading', 'osha'],
-    sports_fitness: ['coaching', 'fitness training', 'sports management', 'athletic training', 'first aid', 'officiating'],
-    education: ['lesson planning', 'classroom management', 'tutoring', 'curriculum development', 'grading']
+      'flask', 'spring', 'android', 'ios', 'flutter', 'react native', 'machine learning',
+      'data science', 'pandas', 'numpy', 'tensorflow', 'pytorch', 'graphql', 'rest api',
+      'c++', 'c#', 'go', 'rust', 'php', 'laravel', 'ruby', 'swift', 'kotlin'],
+    business: ['excel', 'google sheets', 'tableau', 'power bi', 'spss', 'sas', 'vba', 'stata',
+      'r studio', 'ggplot', 'financial modeling', 'case studies', 'strategy', 'market research',
+      'due diligence', 'management consulting', 'business strategy', 'financial analysis',
+      'valuation', 'consulting', 'accounting', 'bookkeeping', 'auditing', 'budgeting'],
+    soft_skills: ['leadership', 'communication', 'teamwork', 'problem solving', 'time management',
+      'critical thinking', 'presentation', 'negotiation', 'project management', 'organization',
+      'adaptability', 'conflict resolution', 'decision making', 'attention to detail'],
+    retail: ['customer service', 'cash handling', 'pos systems', 'point of sale', 'sales',
+      'merchandising', 'inventory management', 'stock management', 'visual merchandising',
+      'store management', 'loss prevention', 'retail operations'],
+    sports: ['coaching', 'fitness', 'personal training', 'athletic training', 'sports management',
+      'first aid', 'event coordination', 'team management', 'recreation', 'exercise science'],
+    marketing: ['social media', 'content writing', 'seo', 'email marketing', 'brand management',
+      'copywriting', 'digital marketing', 'market research', 'analytics', 'campaign management'],
+    design: ['photoshop', 'illustrator', 'indesign', 'canva', 'ui design', 'ux design',
+      'graphic design', 'video editing', 'photography', 'animation'],
+    operations: ['supply chain', 'logistics', 'operations management', 'quality assurance',
+      'process improvement', 'vendor management', 'procurement'],
+    healthcare: ['patient care', 'clinical', 'medical records', 'healthcare', 'phlebotomy',
+      'vital signs', 'electronic health records', 'hipaa', 'cpr'],
   };
   
   const found: string[] = [];
-  for (const categorySkills of Object.values(skillCategories)) {
-    for (const skill of categorySkills) {
-      if (lowerText.includes(skill.toLowerCase()) && !found.some(f => f.toLowerCase() === skill.toLowerCase())) {
+  for (const [, skills] of Object.entries(allSkills)) {
+    for (const skill of skills) {
+      if (lowerText.includes(skill.toLowerCase())) {
         found.push(skill);
       }
     }
   }
   
-  // Sort: longer/more specific skills first (they're more meaningful)
   found.sort((a, b) => b.length - a.length);
   
   if (/(^|[^a-z])r([^a-z]|$)/i.test(text) && !found.some((s) => s.toLowerCase() === 'r studio')) {

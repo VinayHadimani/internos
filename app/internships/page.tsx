@@ -160,7 +160,7 @@ function InternshipsContent() {
 
       const primarySkill =
         (Array.isArray(userSkills) && userSkills.length > 0 && String(userSkills[0])) ||
-        'software developer';
+        'internship';
 
       const res = await fetch(`/api/internships/search`, {
         method: 'POST',
@@ -309,8 +309,8 @@ function InternshipsContent() {
             <h1 className="text-3xl font-bold text-white tracking-tight mb-2">Jobs & Internships for You</h1>
             {skills.length > 0 && (
               <p className="text-[#777]">
-                Based on your skills: {skills.slice(0, 5).join(', ')}
-                {skills.length > 5 && ` +${skills.length - 5} more`}
+                Based on your skills: {[...new Set(skills.map(s => s.toLowerCase()))].slice(0, 5).join(', ')}
+                {[...new Set(skills.map(s => s.toLowerCase()))].length > 5 && ` +${[...new Set(skills.map(s => s.toLowerCase()))].length - 5} more`}
               </p>
             )}
           </div>
