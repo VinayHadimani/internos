@@ -53,10 +53,10 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
       .trim();
 
     // Remove template "Tip:" paragraphs and instructional text
-    cleanText = cleanText.replace(/\(Tip:.*?\)/gs, ' ');
-    cleanText = cleanText.replace(/\(Note:.*?\)/gs, ' ');
-    cleanText = cleanText.replace(/\(Advice:.*?\)/gs, ' ');
-    cleanText = cleanText.replace(/\(Suggestion:.*?\)/gs, ' ');
+    cleanText = cleanText.replace(/\(Tip:[\s\S]*?\)/g, ' ');
+    cleanText = cleanText.replace(/\(Note:[\s\S]*?\)/g, ' ');
+    cleanText = cleanText.replace(/\(Advice:[\s\S]*?\)/g, ' ');
+    cleanText = cleanText.replace(/\(Suggestion:[\s\S]*?\)/g, ' ');
     cleanText = cleanText.replace(/^[A-Z][a-z]+:.*(?:click here|replace this|your name here|fill in|example).*$/gim, ' ');
     // Clean up any double spaces created by removal
     cleanText = cleanText.replace(/\s+/g, ' ').trim();
@@ -78,10 +78,10 @@ export async function parseResumeText(text: string): Promise<string> {
     .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
     .trim();
   // Remove template "Tip:" paragraphs and instructional text
-  cleaned = cleaned.replace(/\(Tip:.*?\)/gs, ' ');
-  cleaned = cleaned.replace(/\(Note:.*?\)/gs, ' ');
-  cleaned = cleaned.replace(/\(Advice:.*?\)/gs, ' ');
-  cleaned = cleaned.replace(/\(Suggestion:.*?\)/gs, ' ');
+  cleaned = cleaned.replace(/\(Tip:[\s\S]*?\)/g, ' ');
+  cleaned = cleaned.replace(/\(Note:[\s\S]*?\)/g, ' ');
+  cleaned = cleaned.replace(/\(Advice:[\s\S]*?\)/g, ' ');
+  cleaned = cleaned.replace(/\(Suggestion:[\s\S]*?\)/g, ' ');
   cleaned = cleaned.replace(/^[A-Z][a-z]+:.*(?:click here|replace this|your name here|fill in|example).*$/gim, ' ');
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
   return cleaned;
