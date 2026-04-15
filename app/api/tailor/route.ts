@@ -191,11 +191,14 @@ STRICT RULES:
     baseAts += (percentPrefs * 20) * lengthFactor;
     
     // 10% length appropriateness booster
-    if (cleanContent.length >= 1000 && cleanContent.length <= 4000) {
+    if (cleanContent.length >= 800 && cleanContent.length <= 4000) {
       baseAts += 10;
     }
 
-    const atsScore = Math.min(95, Math.max(35, Math.round(baseAts)));
+    // Boost for strong domain match even if description is short
+    if (percentReqs > 0.8) baseAts += 5;
+
+    const atsScore = Math.min(98, Math.max(45, Math.round(baseAts)));
 
     console.log(`[Tailor API] Matched keywords (${matchedKeywords.length}): ${matchedKeywords.slice(0, 8).join(', ')}`);
     console.log(`[Tailor API] ATS Score calculated: ${atsScore}`);

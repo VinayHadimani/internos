@@ -45,9 +45,15 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
     const { text } = await extractText(pdf);
     
     // Join pages and sanitize
-    const cleanText = text
-      .join('\n')
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Only strip control characters, keep printable Unicode
+    const rawText = text.join('\n');
+    
+    // Clean common resume template artifacts (e.g., "(Tip: ...)", "(Note: ...)")
+    const cleanText = rawText
+      .replace(/\(Tip:.*?\)/gi, '')         // Remove (Tip: ...)
+      .replace(/\(Note:.*?\)/gi, '')        // Remove (Note: ...)
+      .replace(/\[Note:.*?\]/gi, '')        // Remove [Note: ...]
+      .replace(/\[Tip:.*?\]/gi, '')         // Remove [Tip: ...]
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Only strip control characters
       .replace(/\s+/g, ' ')               // Collapse whitespace
       .trim();
       

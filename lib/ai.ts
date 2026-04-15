@@ -58,7 +58,7 @@ Return exact JSON:
       experienceLevel: result.experienceLevel || 'fresher',
       industries: result.industries || [],
       roleTypes: result.roleTypes || [],
-      location: result.location || 'India'
+      location: result.location || ''
     };
   } catch (error) {
     console.error("Failed to extract skills:", error);
@@ -67,7 +67,7 @@ Return exact JSON:
       experienceLevel: 'fresher',
       industries: [],
       roleTypes: [],
-      location: 'India'
+      location: ''
     };
   }
 }

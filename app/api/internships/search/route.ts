@@ -17,6 +17,8 @@ interface ResumeProfile {
   roles: string[];
   industry: string;
   experience_level: string;
+  education_level?: string;
+  currently_enrolled?: boolean;
   keywords: string[];
 }
 
@@ -40,21 +42,22 @@ STEP 2: Extract skills using this PRIORITY ORDER:
 Resume (first 4000 chars):
 \${resumeText.slice(0, 4000)}
 
-Return JSON with exactly these fields:
-{
-  "skills": ["domain_skill_1", "domain_skill_2", "technical_skill_1", "specific_soft_skill"],
-  "roles": ["target_role_1", "target_role_2"],
-  "experience_level": "entry",
-  "keywords": ["search_query_1", "search_query_2", "search_query_3"],
-  "industry": "primary_industry"
-}
-
-RULES:
-- "skills" (5-12 items): Domain + technical first. The Career Objective domain keywords MUST be first.
-- "roles" (2-5 items): Job titles the person is TARGETING (from Career Objective), not just what they've done
-- "keywords" (3-8 items): Search-friendly phrases that would find relevant job postings. Include the Career Objective domain phrase. Example: if seeking "sports retail", include "sports retail", "retail associate", "retail sales"
 - "industry": Single word — the PRIMARY target industry from the Career Objective
-- If the person is a student seeking part-time work, set experience_level to "student"
+- Detect experience_level: "high_school", "college_student", "recent_graduate", or "early_career"
+- Detect education_level: "high_school", "bachelors", "masters"
+- Currently enrolled: true/false
+- If the person is a high school student or seeking part-time/casual work, explicitly mark it.
+
+Return exactly this JSON:
+{
+  "skills": [...],
+  "roles": [...],
+  "experience_level": "...",
+  "education_level": "...",
+  "currently_enrolled": true/false,
+  "keywords": [...],
+  "industry": "..."
+}
 
 Return ONLY valid JSON, no explanation.`;
 
@@ -185,6 +188,13 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
     [['product management', 'product design', 'ux', 'user research'], 'product'],
     [['accounting', 'audit', 'tax', 'financial planning', 'budgeting'], 'accounting'],
     [['business development', 'partnership', 'revenue', 'customer success', 'account management'], 'business_development'],
+    [['retail', 'customer service', 'sales assistant', 'cash handling', 'store', 'shop', 'point of sale', 'pos', 'merchandising'], 'retail'],
+    [['hospitality', 'food service', 'restaurant', 'barista', 'waiter', 'waitress', 'catering', 'hotel', 'front desk', 'reception'], 'hospitality'],
+    [['sports', 'coaching', 'fitness', 'athletic', 'recreation', 'umpire', 'referee', 'personal training'], 'sports'],
+    [['education', 'teaching', 'tutoring', 'childcare', 'early childhood', 'teacher aide', 'substitute teacher'], 'education'],
+    [['healthcare', 'aged care', 'disability support', 'caregiver', 'nursing assistant', 'medical assistant'], 'healthcare_support'],
+    [['trades', 'carpentry', 'plumbing', 'electrical', 'mechanic', 'welding', 'construction', 'apprentice'], 'trades'],
+    [['creative', 'photography', 'videography', 'graphic design', 'writing', 'journalism', 'content creation', 'social media'], 'creative'],
   ];
   
   for (const [keywords, domainName] of domainChecks) {
@@ -197,20 +207,16 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
   
   // Better role generation from domain
   const domainRoleMap: Record<string, string[]> = {
-    'embedded_systems': ['embedded systems engineer', 'firmware developer', 'iot developer', 'hardware engineer'],
-    'consulting': ['consultant', 'business analyst', 'strategy analyst', 'management consultant'],
-    'finance': ['financial analyst', 'investment analyst', 'risk analyst'],
-    'marketing': ['marketing analyst', 'marketing coordinator', 'digital marketing specialist'],
-    'software_engineering': ['software developer', 'web developer', 'full stack developer'],
-    'data_science': ['data analyst', 'data scientist', 'ml engineer'],
-    'operations': ['operations analyst', 'supply chain analyst', 'process analyst'],
-    'hr': ['hr coordinator', 'talent acquisition specialist', 'hr analyst'],
-    'legal': ['legal assistant', 'compliance analyst', 'paralegal'],
-    'healthcare': ['healthcare analyst', 'clinical research coordinator'],
-    'product': ['product analyst', 'product manager', 'ux researcher'],
     'accounting': ['accounting assistant', 'audit associate', 'financial analyst'],
     'business_development': ['business development associate', 'account manager', 'partnership manager'],
-    'general': ['business analyst', 'project coordinator', 'operations associate'],
+    'retail': ['retail assistant', 'customer service representative', 'sales associate', 'store team member'],
+    'hospitality': ['customer service representative', 'food service worker', 'hospitality assistant'],
+    'sports': ['sports coach', 'recreation assistant', 'community sports officer'],
+    'education': ['teacher aide', 'tutor', 'learning support assistant'],
+    'healthcare_support': ['care assistant', 'medical receptionist', 'healthcare support worker'],
+    'trades': ['apprentice', 'trade assistant', 'helper'],
+    'creative': ['content creator', 'creative assistant', 'photographer assistant'],
+    'general': ['customer service representative', 'business analyst', 'project coordinator', 'operations associate'],
   };
   
   const roles = clientRoles.length > 0 ? clientRoles : (domainRoleMap[domain] || ['intern']);
@@ -254,81 +260,95 @@ function scoreJob(job: any, profile: ResumeProfile, userLocation: string): numbe
   let score = 0;
   const jobTitle = (job.title || '').toLowerCase();
   const jobDesc = (job.description || '').toLowerCase();
+  const jobText = `${jobTitle} ${jobDesc}`;
   
-  // Clean job descriptions from BOTH stop words and soft noise words
-  const titleWords = jobTitle.split(/[\s,;.!]+/).filter((w: string) => !STOP_WORDS.has(w) && !SOFT_NOISE_WORDS.has(w));
-  const descWords = jobDesc.split(/[\s,;.!]+/).filter((w: string) => !STOP_WORDS.has(w) && !SOFT_NOISE_WORDS.has(w));
-  
-  const cleanedJobTitle = titleWords.join(' ');
-  const cleanedJobDesc = descWords.join(' ');
-
-  // ── Bonus: Location match (+10 City, +5 State, +4 Remote) ──
-  const jobLocation = (job.location || '').toLowerCase();
-  if (userLocation && jobLocation) {
-    const userParts = userLocation.split(',').map(s => s.trim().toLowerCase());
-    const userCity = userParts[0];
-    const userCountry = userParts[userParts.length - 1];
-    
-    const isRemote = jobLocation.includes('remote');
-    if (userCity && jobLocation.includes(userCity)) {
-       score += 10;
-    } else if (userCountry && jobLocation.includes(userCountry)) {
-       score += 5;
-    } else if (isRemote) {
-       score += 4;
-    }
-  }
-
-  // ── Skills match (Frequency-Weighted) ──
+  // ── 1. Skills Match (Weighted, Max 50 points) ──
   const userSkills = profile.skills || [];
-  const validSkills = userSkills.map(s => {
-    return s.toLowerCase().split(/\s+/).filter(w => !STOP_WORDS.has(w)).join(' ');
-  }).filter(s => s.length > 2);
-
-  if (validSkills.length > 0) {
-    let matchTotal = 0;
-    for (const skill of validSkills) {
-      if (!skill) continue;
+  const normalizedSkills = userSkills.map(s => s.toLowerCase().trim()).filter(s => s.length > 2);
+  
+  if (normalizedSkills.length > 0) {
+    let skillPoints = 0;
+    const matches: string[] = [];
+    
+    for (const skill of normalizedSkills) {
+      // Regex for whole word match to avoid partials like "java" matching "javascript"
+      const skillRegex = new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
       
-      let skillCount = 0;
-      // Count frequency in title (3x weight)
-      const titleMatches = (cleanedJobTitle.match(new RegExp(skill, 'gi')) || []).length;
-      skillCount += titleMatches * 3;
+      const titleMatches = (jobTitle.match(skillRegex) || []).length;
+      const descMatches = (jobDesc.match(skillRegex) || []).length;
       
-      // Count frequency in description (1x weight)
-      // Boost if in "requirements" section
-      const requirementsIdx = jobDesc.indexOf('require');
-      const targetSearchArea = requirementsIdx !== -1 ? jobDesc.substring(requirementsIdx) : jobDesc;
-      const descMatches = (targetSearchArea.match(new RegExp(skill, 'gi')) || []).length;
-      skillCount += Math.min(5, descMatches); // Cap desc matches to avoid fluff spamming
-
-      if (skillCount > 0) {
-        matchTotal += Math.min(10, skillCount); // Cap per-skill contribution
+      if (titleMatches > 0) {
+        skillPoints += 12; // Heavy weight for title match
+        matches.push(skill);
+      } else if (descMatches > 0) {
+        skillPoints += 7; // Good weight for description match
+        matches.push(skill);
       }
     }
-    // Base score from skills: 0-60 points
-    score += Math.min(60, (matchTotal / (validSkills.length * 0.5)) * 10);
+    
+    // Cap skills score at 50
+    score += Math.min(50, skillPoints);
   }
 
-  // ── Role/Title match (20 points) ──
-  const userRoles = profile.roles || [];
-  let roleMatchScore = 0;
-  for (const role of userRoles) {
-    const r = role.toLowerCase().split(/\s+/).filter(w => !STOP_WORDS.has(w)).join(' ');
-    if (cleanedJobTitle.includes(r)) {
-      roleMatchScore += 10;
-    } else if (cleanedJobDesc.includes(r)) {
-      roleMatchScore += 5;
+  // ── 2. Role/Title Match (Max 30 points) ──
+  const targetRoles = profile.roles || [];
+  const GENERIC_ROLE_SUFFIXES = ['representative', 'specialist', 'associate', 'coordinator', 'manager', 'professional', 'officer', 'executive', 'assistant', 'intern', 'trainee'];
+  
+  let rolePoints = 0;
+  for (const role of targetRoles) {
+    const cleanRole = role.toLowerCase();
+    const roleWords = cleanRole.split(/\s+/).filter(w => !STOP_WORDS.has(w) && !GENERIC_ROLE_SUFFIXES.includes(w));
+    
+    if (roleWords.length >= 2) {
+      // For multi-word roles, require at least the first 2 significant words
+      const primaryPhrase = roleWords.slice(0, 2).join(' ');
+      if (jobTitle.includes(primaryPhrase)) {
+        rolePoints += 30; // Direct match on primary phrase
+        break;
+      } else if (jobDesc.includes(primaryPhrase)) {
+        rolePoints += 15;
+      }
+    } else if (roleWords.length === 1) {
+      if (new RegExp(`\\b${roleWords[0]}\\b`, 'i').test(jobTitle)) {
+        rolePoints += 20;
+        break;
+      }
     }
   }
-  score += Math.min(20, roleMatchScore);
+  score += Math.min(30, rolePoints);
 
-  // ── High Intent Modifiers ──
-  if (jobTitle.includes('intern') || jobTitle.includes('internship')) score += 10;
-  if (jobTitle.includes('student') || jobTitle.includes('entry') || jobTitle.includes('junior')) score += 5;
+  // ── 3. Student/Seniority Fit (Max 10 points) ──
+  const isStudent = profile.experience_level === 'high_school' || profile.experience_level === 'college_student' || profile.experience_level === 'student';
+  const isHighSchool = profile.experience_level === 'high_school';
   
-  const seniorKw = ['senior', 'sr.', 'sr ', 'lead', 'manager', 'director', 'vp', 'executive', 'chief', 'principal', 'staff'];
-  if (seniorKw.some(k => jobTitle.includes(k))) score -= 15;
+  // Seniority Penalty
+  const seniorKw = ['senior', 'sr.', 'sr ', 'lead', 'manager', 'director', 'vp', 'executive', 'chief', 'principal', 'staff', 'head of'];
+  if (seniorKw.some(k => jobTitle.includes(k))) {
+    score -= 40; // Heavy penalty for senior roles if seeking entry level
+  }
+  
+  // Student/Entry Bonus
+  if (isStudent) {
+    if (jobTitle.includes('intern') || jobTitle.includes('student') || jobTitle.includes('trainee')) score += 10;
+    if (isHighSchool && (jobText.includes('high school') || jobText.includes('teen') || jobText.includes('school leaver') || jobText.includes('casual'))) {
+      score += 10;
+    }
+  }
+
+  // ── 4. Location Fit (Max 10 points) ──
+  if (userLocation && userLocation !== 'Any' && userLocation !== 'Remote') {
+    const jobLocation = (job.location || '').toLowerCase();
+    const userCity = userLocation.split(',')[0].toLowerCase().trim();
+    
+    if (jobLocation.includes(userCity)) {
+      score += 10;
+    } else if (jobLocation.includes('remote')) {
+      score += 5;
+    }
+  } else {
+    // If no location preference or remote preference, remain neutral
+    score += 5;
+  }
 
   return Math.max(0, Math.min(Math.round(score), 99));
 }
@@ -352,15 +372,16 @@ export async function POST(req: NextRequest) {
     } = body;
     
     const resumeText: string = body.resumeText || '';
-    const userLocation = bodyLocation || 'India';
+    const userLocation = bodyLocation || '';
 
     console.log('=== INTERNOS SEARCH ===');
+    console.log(`[Search] Location: ${userLocation || 'Any'}`);
 
     let profile: ResumeProfile | null = null;
 
-    // Fast Path: If client already parsed the resume, skip AI call
-    if (clientSkills.length > 0 && clientRoles.length > 0) {
-      console.log('[Search] Using client-provided profile, skipping AI extraction');
+    // Fast Path: Only skip AI if we have SUFFICIENT skills and roles
+    if (clientSkills.length >= 3 && clientRoles.length >= 1) {
+      console.log('[Search] Using client-provided profile');
       profile = {
         skills: clientSkills,
         roles: clientRoles,
@@ -368,7 +389,7 @@ export async function POST(req: NextRequest) {
         experience_level: clientExperience,
         keywords: [
           ...clientRoles.slice(0, 2).map((r: string) => `${r} internship`),
-          ...clientSkills.slice(0, 2).map((s: string) => `${s} intern`)
+          ...clientSkills.slice(0, 3).map((s: string) => `${s} intern`)
         ]
       };
     } else {
@@ -384,13 +405,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    console.log(`[Search] Profile — Industry: ${profile.industry}, Skills: ${profile.skills.length}`);
-
-    // Capped Queries to prevent Vercel 10s timeout
+    // Smart Query Building
+    const isStudent = profile.experience_level === 'high_school' || profile.experience_level === 'student';
+    
     const searchQueries = [...new Set([
       ...(profile.keywords || []),
-      ...(profile.roles || [])
-    ])].filter(q => q && q.trim().length > 0).slice(0, 5);
+      ...(profile.roles || []),
+      // If student, definitely search for their top skills + "casual" or "part-time"
+      ...(isStudent ? profile.skills.slice(0, 2).map(s => `${s} casual`) : [])
+    ])].filter(q => q && q.trim().length > 0).slice(0, 6);
+    
+    if (isStudent) {
+       searchQueries.push(...profile.skills.slice(0, 1).map(s => `${s} part-time`));
+    }
     
     const allJobsMap = new Map<string, JobResult>();
 

@@ -821,7 +821,7 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
     }
 
     const what = keywords.join(' ')
-    const where = location || 'India'
+    const where = location || ''
     const url = `http://api.adzuna.com/v1/api/jobs/in/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}&where=${encodeURIComponent(where)}`
     console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} | Location: ${where}`)
 

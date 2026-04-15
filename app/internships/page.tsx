@@ -169,7 +169,8 @@ function InternshipsContent() {
       if (data.success) {
         const filteredJobs = data.jobs || data.data || [];
         setAllJobs(filteredJobs);
-        setSkills(data.detected_skills || userSkills || []);
+        // Prefer dashboard skills if they are substantial
+        setSkills(userSkills.length >= 3 ? userSkills : (data.detected_skills || []));
       } else {
         setError(data.error || 'Failed to search jobs');
       }
