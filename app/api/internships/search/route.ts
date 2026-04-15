@@ -1,16 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { aggregateJobs, type JobResult } from '@/lib/aggregator';
 import { callAI } from '@/lib/rotating-ai';
-
-// ══════════════════════════════════════════════════════
-// AI-POWERED RESUME → JOB MATCHING PIPELINE
-//
-// Flow:
-// 1. AI reads resume → extracts skills, target roles, domain
-// 2. Build search queries from AI output
-// 3. Fetch jobs from aggregator using those queries
-// 4. Score each job against AI-extracted profile
-// ══════════════════════════════════════════════════════
+import { matchJobListings, type JobListing } from '@/lib/matching/match-engine';
+import { type StudentProfile } from '@/lib/resume-parser';
 
 interface ResumeProfile {
   skills: string[];
@@ -34,22 +26,15 @@ async function aiExtractProfile(resumeText: string): Promise<ResumeProfile | nul
 
 CRITICAL INSTRUCTION: This could be from ANY industry — sports, retail, consulting, finance, engineering, healthcare, hospitality, education, creative arts, or anything else. Do NOT default to tech/software.
 
-STEP 1: Find the Career Objective section. This is the MOST IMPORTANT signal for what jobs this person wants. Extract the exact domain/industry keywords from it.
+STEP 1: detect the candidate's country/location with 100% accuracy.
+- Signals for AUSTRALIA: Phone starts with +61 or 04xx/045xx. Postcodes like 3xxx, 2xxx. Terms: "Secondary College", "Year 11/12", "VET", "ATAR", "Casual", "Part-time".
+- Signals for INDIA: Phone starts with +91. 6-digit postcodes.
+- Signals for USA: Phone starts with +1. 5-digit zip codes.
+- If unsure, set detected_country to "remote".
 
-STEP 2: Extract skills using this PRIORITY ORDER:
-- TIER 1 (Domain-specific): Words from the Career Objective target (e.g., "sports retail", "customer service", "financial modeling")
-- TIER 2 (Technical/hard): Tools, software, certifications mentioned (e.g., "cash handling", "Excel", "SAP", "photography")
-- TIER 3 (Soft skills): ONLY include if uniquely demonstrated. NEVER include generic ones like "communication", "teamwork", "leadership" — they inflate scores for every job equally
+STEP 2: Extract skills that are ACTUALLY present. DOMAIN-SPECIFIC skills are 10x more important than generic soft skills.
 
-Resume (first 4000 chars):
-\${resumeText.slice(0, 4000)}
-
-- "industry": Single word — the PRIMARY target industry (e.g., "Retail", "Finance", "Healthcare", "Sports")
-- "detected_country": Use phone codes (+61=Australia, +91=India, etc.) or school locations to find the country.
-- Detect experience_level: "high_school", "student", "recent_graduate", or "early_career"
-- Detect education_level: "high_school", "bachelors", "masters"
-- Currently enrolled: true/false
-- If the person is a high school student or seeking part-time/casual work, explicitly mark it.
+STEP 3: Detect experience_level: "high_school", "student", "recent_graduate", or "junior".
 
 Return exactly this JSON:
 {
@@ -61,9 +46,7 @@ Return exactly this JSON:
   "keywords": [...],
   "industry": "...",
   "detected_country": "..."
-}
-
-Return ONLY valid JSON, no explanation.`;
+}`;
 
     const response = await callAI(
       prompt,
@@ -248,123 +231,35 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
 }
 
 /**
- * Score a job against the AI-extracted profile.
+ * Maps our internal prompt profile to the StudentProfile format 
+ * required by the match-engine.
  */
-const STOP_WORDS = new Set([
-  'the', 'a', 'an', 'and', 'or', 'in', 'of', 'for', 'with', 'to', 'at', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'shall', 'can', 'need', 'dare', 'ought', 'used', 'this', 'that', 'these', 'those', 'i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves', 'you', 'your', 'yours', 'yourself', 'yourselves', 'he', 'him', 'his', 'himself', 'she', 'her', 'hers', 'herself', 'it', 'its', 'itself', 'they', 'them', 'their', 'theirs', 'themselves', 'what', 'which', 'who', 'whom', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'because', 'as', 'until', 'while', 'about', 'between', 'through', 'during', 'before', 'after', 'above', 'below', 'from', 'up', 'down', 'out', 'on', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'any', 'nor'
-]);
-
-const SOFT_NOISE_WORDS = new Set([
-  'experience', 'work', 'working', 'team', 'teams', 'role', 'roles', 'position', 'opportunity', 'join', 'looking', 'seeking', 'hire', 'hiring', 'company', 'organization', 'environment', 'culture', 'values', 'benefits', 'including', 'ability', 'strong', 'excellent', 'good', 'great', 'preferred', 'required', 'requirements', 'qualifications', 'responsibilities', 'duties', 'tasks', 'must', 'year', 'years', 'month', 'months', 'time', 'full', 'part', 'based', 'related', 'relevant', 'etc', 'e.g', 'i.e', 'via', 'per', 'plus', 'well', 'also', 'new', 'make', 'ensure', 'help', 'support', 'develop', 'development', 'using', 'across', 'within', 'along', 'multiple', 'knowledge', 'understanding', 'skills', 'skill'
-]);
-
-function scoreJob(job: any, profile: ResumeProfile, userLocation: string): number {
-  let score = 0;
-  const jobTitle = (job.title || '').toLowerCase();
-  const jobDesc = (job.description || '').toLowerCase();
-  const jobText = `${jobTitle} ${jobDesc}`;
-  
-  // ── 1. Skills Match (Weighted, Max 50 points) ──
-  const userSkills = profile.skills || [];
-  const normalizedSkills = userSkills.map(s => s.toLowerCase().trim()).filter(s => s.length > 2);
-  
-  if (normalizedSkills.length > 0) {
-    let skillPoints = 0;
-    const matches: string[] = [];
-    
-    for (const skill of normalizedSkills) {
-      // Regex for whole word match to avoid partials like "java" matching "javascript"
-      const skillRegex = new RegExp(`\\b${skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-      
-      const titleMatches = (jobTitle.match(skillRegex) || []).length;
-      const descMatches = (jobDesc.match(skillRegex) || []).length;
-      
-      if (titleMatches > 0) {
-        skillPoints += 12; // Heavy weight for title match
-        matches.push(skill);
-      } else if (descMatches > 0) {
-        skillPoints += 7; // Good weight for description match
-        matches.push(skill);
-      }
-    }
-    
-    // Cap skills score at 50
-    score += Math.min(50, skillPoints);
-  }
-
-  // ── 2. Role/Title Match (Max 30 points) ──
-  const targetRoles = profile.roles || [];
-  const GENERIC_ROLE_SUFFIXES = ['representative', 'specialist', 'associate', 'coordinator', 'manager', 'professional', 'officer', 'executive', 'assistant', 'intern', 'trainee'];
-  
-  let rolePoints = 0;
-  for (const role of targetRoles) {
-    const cleanRole = role.toLowerCase();
-    const roleWords = cleanRole.split(/\s+/).filter(w => !STOP_WORDS.has(w) && !GENERIC_ROLE_SUFFIXES.includes(w));
-    
-    if (roleWords.length >= 2) {
-      // For multi-word roles, require at least the first 2 significant words
-      const primaryPhrase = roleWords.slice(0, 2).join(' ');
-      if (jobTitle.includes(primaryPhrase)) {
-        rolePoints += 30; // Direct match on primary phrase
-        break;
-      } else if (jobDesc.includes(primaryPhrase)) {
-        rolePoints += 15;
-      }
-    } else if (roleWords.length === 1) {
-      if (new RegExp(`\\b${roleWords[0]}\\b`, 'i').test(jobTitle)) {
-        rolePoints += 20;
-        break;
-      }
-    }
-  }
-  score += Math.min(30, rolePoints);
-
-  // ── 3. Student/Seniority Hard Filter (Max 10 points + HARD BLOCK) ──
-  const isStudent = profile.experience_level === 'high_school' || profile.experience_level === 'college_student' || profile.experience_level === 'student';
-  const isHighSchool = profile.experience_level === 'high_school';
-  
-  // Seniority Hard Block for Students
-  const seniorKw = ['senior', 'sr.', 'sr ', 'lead', 'manager', 'director', 'vp', 'vice president', 'executive', 'chief', 'principal', 'staff', 'head of'];
-  const yearsExpCheck = /([2-9]|\d{2})\+\s+(years|yrs)/i; // Matches 2+ years, 10+ years etc.
-  
-  if (isStudent && (seniorKw.some(k => jobTitle.includes(k)) || yearsExpCheck.test(jobDesc))) {
-    return 0; // HARD BLOCK
-  }
-  
-  // Student/Entry Bonus
-  if (isStudent) {
-    if (jobTitle.includes('intern') || jobTitle.includes('student') || jobTitle.includes('trainee')) score += 10;
-    if (isHighSchool && (jobText.includes('high school') || jobText.includes('teen') || jobText.includes('school leaver') || jobText.includes('casual'))) {
-      score += 10;
-    }
-  }
-
-  // ── 4. Location & Country Fit (Max 15 points) ──
-  const prefCountry = (profile.detected_country || '').toLowerCase();
-  const jobLocation = (job.location || '').toLowerCase();
-  
-  if (prefCountry && prefCountry !== 'remote') {
-    if (jobLocation.includes(prefCountry)) {
-      score += 15; // Strong country match
-    } else if (jobLocation.includes('remote')) {
-      score += 10;
-    } else if (userLocation && jobLocation.includes(userLocation.split(',')[0].toLowerCase())) {
-        score += 15;
-    } else {
-      score -= 10; // Penalty for wrong country/on-site
-    }
-  } else if (userLocation && userLocation !== 'Any' && userLocation !== 'Remote') {
-    const userCity = userLocation.split(',')[0].toLowerCase().trim();
-    if (jobLocation.includes(userCity)) {
-      score += 15;
-    } else if (jobLocation.includes('remote')) {
-      score += 10;
-    }
-  } else {
-    score += 5;
-  }
-
-  return Math.max(0, Math.min(Math.round(score), 99));
+function mapToStudentProfile(p: ResumeProfile, userLoc: string): StudentProfile {
+  return {
+    name: "Candidate",
+    education: {
+      degree: p.education_level || "Student",
+      year: p.currently_enrolled ? "Currently Enrolled" : "Completed",
+      graduation_year: new Date().getFullYear() + 2,
+      institution: "Detected School"
+    },
+    experience_level: "student_fresher",
+    verified_skills: {
+      languages: [],
+      frameworks: [],
+      tools: p.skills || [],
+      ai_ml: [],
+      domains: [p.industry || "general"]
+    },
+    projects: [],
+    certifications: [],
+    availability: {
+      type: "part-time",
+      remote_only: false,
+      location: p.detected_country || userLoc || "remote"
+    },
+    total_effective_experience_months: 0
+  };
 }
 
 function getMatchLabel(score: number): string {
@@ -427,18 +322,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Smart Query Building
-    const isStudent = profile.experience_level === 'high_school' || profile.experience_level === 'student';
+    // Smart Query Building (Fix #4)
+    const industryLower = (profile.industry || '').toLowerCase();
+    const isRetailOrSports = industryLower.includes('retail') || industryLower.includes('sport') || industryLower.includes('customer');
     
-    const searchQueries = [...new Set([
-      ...(profile.keywords || []),
-      ...(profile.roles || []),
-      // If student, definitely search for their top skills + "casual" or "part-time"
-      ...(isStudent ? profile.skills.slice(0, 2).map(s => `${s} casual`) : [])
-    ])].filter(q => q && q.trim().length > 0).slice(0, 6);
+    let searchQueries: string[] = [];
     
-    if (isStudent) {
-       searchQueries.push(...profile.skills.slice(0, 1).map(s => `${s} part-time`));
+    if (isRetailOrSports) {
+      // Domain-based query strategy: Use broad, common roles instead of AI-generated titles
+      searchQueries = [
+        "retail assistant",
+        "sales associate",
+        "customer service casual",
+        "shop assistant",
+        "part-time retail",
+        "sports shop associate"
+      ];
+    } else {
+      searchQueries = [...new Set([
+        ...(profile.keywords || []),
+        ...(profile.roles || []),
+        ...(profile.skills.slice(0, 2).map(s => `${s} intern`))
+      ])].filter(q => q && q.trim().length > 0).slice(0, 6);
     }
     
     const allJobsMap = new Map<string, JobResult>();
@@ -461,15 +366,30 @@ export async function POST(req: NextRequest) {
     }
 
     const rawJobs = Array.from(allJobsMap.values());
-    const scoredJobs = rawJobs.map(job => {
-      const matchScore = scoreJob(job, profile!, userLocation);
-      return { ...job, matchScore, matchLabel: getMatchLabel(matchScore) };
+    
+    // Fix #5: Integrate the robust matching engine
+    const studentProfileObj = mapToStudentProfile(profile!, userLocation);
+    const jobListings: JobListing[] = rawJobs.map(j => ({
+      title: j.title,
+      company: j.company,
+      location: j.location,
+      description: j.description || "",
+      requirements: [] // match-engine will parse requirements from description if needed
+    }));
+
+    const matchedResults = matchJobListings(studentProfileObj, jobListings);
+    
+    // Map back to our job structure
+    const scoredJobs = matchedResults.map(res => {
+      const original = rawJobs.find(rj => rj.title === res.title && rj.company === res.company)!;
+      return { 
+        ...original, 
+        matchScore: res.match_score, 
+        matchLabel: getMatchLabel(res.match_score) 
+      };
     });
 
-    const finalJobs = scoredJobs.sort((a, b) => {
-      if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
-      return (a.title || '').localeCompare(b.title || '');
-    });
+    const finalJobs = scoredJobs; // matchJobListings already sorts them
 
     console.log(`[Search] Returning ALL ${finalJobs.length} jobs (top: ${finalJobs[0]?.matchScore || 0}%, bottom: ${finalJobs[finalJobs.length - 1]?.matchScore || 0}%)`);
 

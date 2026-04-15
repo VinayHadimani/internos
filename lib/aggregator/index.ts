@@ -316,6 +316,10 @@ async function runFetchersInParallel(
 }> {
   // Run ALL fetchers in parallel with Promise.allSettled
   // so one slow/failing API doesn't block the others
+  const isIndia = (location || '').toLowerCase().includes('india');
+  const isAustralia = (location || '').toLowerCase().includes('australia') || (location || '').toLowerCase().includes('melbourne') || (location || '').toLowerCase().includes('sydney');
+  const isEU = (location || '').toLowerCase().includes('germany') || (location || '').toLowerCase().includes('europe') || (location || '').toLowerCase().includes('poland');
+
   const [
     remotiveResult,
     himalayasResult,
@@ -330,10 +334,10 @@ async function runFetchersInParallel(
     fetchHimalayas(keywords),
     fetchRemoteOK(keywords),
     fetchAdzuna(keywords, location),
-    fetchJSearch(keywords),
-    fetchInternshala(keywords),
+    fetchJSearch(keywords, location),
+    isIndia ? fetchInternshala(keywords) : Promise.resolve([]),
     fetchWeWorkRemotely(keywords),
-    fetchArbeitnow(keywords),
+    (isEU || !location) ? fetchArbeitnow(keywords) : Promise.resolve([]),
   ])
 
   const extract = (result: PromiseSettledResult<JobResult[]>, name: string): JobResult[] => {
@@ -825,10 +829,10 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
     
     // Map country names to Adzuna codes if needed, or just use 'in' for India as legacy
     // but default to 'in' only if specifically India. Otherwise use global search.
-    const countryCode = (where.toLowerCase() === 'india') ? 'in' : 
-                        (where.toLowerCase() === 'australia' || where.toLowerCase() === 'au') ? 'au' :
-                        (where.toLowerCase() === 'usa' || where.toLowerCase() === 'us') ? 'us' :
-                        (where.toLowerCase() === 'uk' || where.toLowerCase() === 'gb') ? 'gb' : 'us';
+    const countryCode = (where.toLowerCase().includes('india')) ? 'in' : 
+                        (where.toLowerCase().includes('australia') || where.toLowerCase().includes('au')) ? 'au' :
+                        (where.toLowerCase().includes('usa') || where.toLowerCase().includes('us')) ? 'us' :
+                        (where.toLowerCase().includes('uk') || where.toLowerCase().includes('gb')) ? 'gb' : 'us';
 
     const url = `http://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}&where=${encodeURIComponent(where)}`
     console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} | Location: ${where} | Country: ${countryCode}`)
@@ -872,7 +876,7 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
   }
 }
 
-export async function fetchJSearch(keywords: string[]): Promise<JobResult[]> {
+export async function fetchJSearch(keywords: string[], location?: string): Promise<JobResult[]> {
   const source = 'JSearch'
   try {
     const apiKey = process.env.JSEARCH_API_KEY
@@ -885,7 +889,7 @@ export async function fetchJSearch(keywords: string[]): Promise<JobResult[]> {
     const locationQuery = location ? ` in ${location}` : ''
     const fullQuery = `${query}${locationQuery}`
     
-    // For students, prioritize internships and part-time
+    // For students, prioritize internships and part-time (Fix #3)
     const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(fullQuery)}&page=1&num_pages=1&employment_types=INTERNSHIP,PARTTIME`
     console.error(`[${source}] Starting fetch for: ${fullQuery} | URL: ${url}`)
 

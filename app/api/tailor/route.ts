@@ -97,111 +97,59 @@ STRICT RULES:
     );
 
     console.log(`[Tailor API] Success via ${successProvider}! Final output length: ${cleanContent.length}`);
+    const evalSystemPrompt = `You are an ATS (Applicant Tracking System) simulator and recruitment analyst.
+Evaluate the following tailored resume against the job description.
 
-    // Extract matched keywords from the tailored resume
-    // Compare skills found in tailored resume against job description requirements
-    const jobLower = cleanJob.toLowerCase();
+TASKS:
+1. Calculate a realistic ATS Match Score (0-100).
+2. Identify matched keywords (skills/tools/domains).
+3. Identify critical missing keywords.
+4. Keep match score realistic: 
+   - 85%+ for clear perfect overlap.
+   - 60-80% for good overlap but missing some preferred/senior items.
+   - <60% if the candidate is high-school/student level and the job is professional.
+
+Return ONLY JSON:
+{
+  "score": number,
+  "matchedKeywords": ["..."],
+  "missingKeywords": ["..."]
+}`;
+
+    const evalUserPrompt = `TAILORED RESUME:\n${cleanContent}\n\nJOB DESCRIPTION:\n${cleanJob}`;
     
-    // Quick heuristic to find requirements and preferred blocks
-    const reqIndex = Math.max(
-      jobLower.indexOf('require'),
-      jobLower.indexOf('must have'),
-      jobLower.indexOf('qualific')
-    );
-    
-    const prefIndex = Math.max(
-      jobLower.indexOf('prefer'),
-      jobLower.indexOf('nice to have'),
-      jobLower.indexOf('bonus')
-    );
-    
-    let requireBlock = jobLower;
-    let preferBlock = "";
-    
-    if (reqIndex !== -1) {
-      if (prefIndex !== -1 && prefIndex > reqIndex) {
-        requireBlock = jobLower.substring(reqIndex, prefIndex);
-        preferBlock = jobLower.substring(prefIndex);
-      } else {
-        requireBlock = jobLower.substring(reqIndex);
-        if (prefIndex !== -1 && prefIndex < reqIndex) {
-          preferBlock = jobLower.substring(prefIndex, reqIndex);
-        }
+    const evalResponse = await callAI(evalSystemPrompt, evalUserPrompt, {
+      model: 'gemini-1.5-flash', // Fast and effective for extraction
+      temperature: 0.1
+    });
+
+    let atsScore = 0;
+    let matchedKeywords: string[] = [];
+    let missingKeywords: string[] = [];
+
+    if (evalResponse.success && evalResponse.content) {
+      try {
+        const jsonMatch = evalResponse.content.match(/\{[\s\S]*\}/);
+        const evalData = JSON.parse(jsonMatch ? jsonMatch[0] : evalResponse.content);
+        atsScore = evalData.score || 0;
+        matchedKeywords = evalData.matchedKeywords || [];
+        missingKeywords = evalData.missingKeywords || [];
+      } catch (e) {
+        console.error('[Tailor API] Failed to parse evaluation JSON, falling back to heuristic');
       }
-    } else if (prefIndex !== -1) {
-       preferBlock = jobLower.substring(prefIndex);
     }
 
-    const stopWords = new Set(['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 
-          'can', 'had', 'her', 'was', 'one', 'our', 'out', 'has', 'have', 'from', 'been',
-          'some', 'them', 'than', 'its', 'over', 'such', 'that', 'with', 'will', 'this',
-          'each', 'make', 'like', 'just', 'also', 'into', 'could', 'other', 'which',
-          'their', 'there', 'would', 'about', 'these', 'many', 'then', 'more', 'very',
-          'when', 'what', 'your', 'where', 'who', 'how', 'does', 'did', 'may', 'should',
-          'must', 'need', 'well', 'work', 'using', 'through', 'during', 'before', 'after',
-          'between', 'both', 'under', 'within', 'without', 'experience', 'including',
-          'ability', 'able', 'ensuring', 'various', 'strong', 'looking', 'role',
-          'team', 'will', 'working', 'join', 'across', 'world', 'every', 'day', 'years', 'month', 'time', 'full', 'part', 'based', 'intern', 'internship', 'student']);
-
-    const extractWords = (text: string) => text.split(/[\s,;.!?()\[\]{}\/\\|"'`~@#$%^&*+=<>:]+/).filter(w => w.length > 3 && !stopWords.has(w));
-    
-    const reqWordsSet = new Set(extractWords(requireBlock));
-    const prefWordsSet = new Set(extractWords(preferBlock));
-    
-    // If no distinct blocks found, treat entire description as required context
-    if (reqWordsSet.size < 5) {
-        extractWords(jobLower).forEach(w => reqWordsSet.add(w));
-    }
-    
-    const jobWords = new Set([...reqWordsSet, ...prefWordsSet]);
-    const resumeWords = new Set(extractWords(cleanContent.toLowerCase()));
-
-    // These are the "matched keywords" that would pass ATS screening
-    const matchedKeywords = [...jobWords]
-      .filter(w => resumeWords.has(w))
-      .slice(0, 15);
-      
-    // What's missing?
-    const missingKeywords = [...reqWordsSet]
-      .filter(w => !resumeWords.has(w))
-      .slice(0, 8);
-
-    // Calculate realistic ATS Score (35-95 range)
-    let percentReqs = 0;
-    if (reqWordsSet.size > 0) {
-       const matchedReqs = [...reqWordsSet].filter(w => resumeWords.has(w)).length;
-       percentReqs = matchedReqs / reqWordsSet.size;
-    }
-    
-    let percentPrefs = 0;
-    if (prefWordsSet.size > 0) {
-       const matchedPrefs = [...prefWordsSet].filter(w => resumeWords.has(w)).length;
-       percentPrefs = matchedPrefs / prefWordsSet.size;
-    }
-    
-    // Resume Length factor (1 page ~ 2000 chars, ideal student is 1.5 pages max ~ 3000)
-    let lengthFactor = 1.0;
-    if (cleanContent.length < 1000) lengthFactor = 0.6; // too short
-    else if (cleanContent.length > 5000) lengthFactor = 0.8; // far too long for an intern
-
-    let baseAts = 35;
-    // 60% weight to required
-    baseAts += (percentReqs * 50) * lengthFactor;
-    // 30% weight to preferred
-    baseAts += (percentPrefs * 20) * lengthFactor;
-    
-    // 10% length appropriateness booster
-    if (cleanContent.length >= 800 && cleanContent.length <= 4000) {
-      baseAts += 10;
+    // Fallback if AI evaluation fails
+    if (atsScore === 0) {
+      const jobWords = new Set(cleanJob.toLowerCase().split(/\W+/).filter(w => w.length > 3));
+      const resumeWords = new Set(cleanContent.toLowerCase().split(/\W+/));
+      matchedKeywords = [...jobWords].filter(w => resumeWords.has(w)).slice(0, 10);
+      missingKeywords = [...jobWords].filter(w => !resumeWords.has(w)).slice(0, 5);
+      atsScore = Math.min(85, Math.max(45, (matchedKeywords.length / Math.max(1, jobWords.size)) * 100));
     }
 
-    // Boost for strong domain match even if description is short
-    if (percentReqs > 0.8) baseAts += 5;
-
-    const atsScore = Math.min(98, Math.max(45, Math.round(baseAts)));
-
-    console.log(`[Tailor API] Matched keywords (${matchedKeywords.length}): ${matchedKeywords.slice(0, 8).join(', ')}`);
-    console.log(`[Tailor API] ATS Score calculated: ${atsScore}`);
+    console.log(`[Tailor API] AI ATS Score: ${atsScore}`);
+    console.log(`[Tailor API] Matched keywords (${matchedKeywords.length}): ${matchedKeywords.slice(0, 5).join(', ')}`);
 
     return Response.json({
       success: true,

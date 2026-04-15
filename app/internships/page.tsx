@@ -180,8 +180,8 @@ function InternshipsContent() {
         setSkills(detectedSkills);
 
         // DATA PURGE: Remove resume and skills from localStorage after display
-        // to keep results on point and ensure AI focuses only on latest.
-        console.log('[Internships] Purging resume data from localStorage after display');
+        // to keep results on point and ensure AI focuses only on latest. (Fix #6)
+        console.log('[Internships] Purging resume data after successful display');
         localStorage.removeItem('resumeText');
         localStorage.removeItem('userSkills');
         localStorage.removeItem('userExperience');
@@ -190,6 +190,9 @@ function InternshipsContent() {
         localStorage.removeItem('detectedCountry');
         localStorage.removeItem('resumeVersion');
         localStorage.removeItem('resumeTimestamp');
+        
+        // Purge server-side database record as well
+        fetch('/api/resume/cleanup', { method: 'DELETE' }).catch(err => console.error('[Internships] Database cleanup failed:', err));
       } else {
         setError(data.error || 'Failed to search jobs');
       }

@@ -17,11 +17,15 @@ export async function extractSkillsFromResume(resumeText: string): Promise<Extra
       `You are an expert recruiter and career analyst AI. Analyze this resume with EXTREME attention to what makes this candidate unique.
 
 CRITICAL RULES FOR EXTRACTION:
-1. Extract skills that are ACTUALLY present. Do NOT favor any specific industry (like tech/finance).
+1. Extract skills that are ACTUALLY present. Do NOT favor any specific industry (like tech/finance). 
 2. DOMAIN-SPECIFIC skills are 10x more important than generic soft skills.
 3. If the candidate is in Retail, Hospitality, Healthcare, Trades, Creative Arts, Sport, or Law, extract the specific terminology and tools for that domain.
-4. You MUST detect the candidate's location/country. Look for: address, phone country code (e.g., +61=Australia, +1=USA, +44=UK, +91=India), school location, or currency. If no country is found, set detected_country to "remote". NEVER default to India.
-5. You MUST identify the experience_level: 'high_school' (no degree, currently in school), 'student' (college/university), 'fresh_graduate' (0-1 yrs), 'junior' (1-3 yrs), 'mid' (3-7 yrs), 'senior' (7+ yrs). Base this on education dates and job titles.
+4. You MUST detect the candidate's country/location with 100% accuracy.
+   - Signals for AUSTRALIA: Phone starts with +61 or 04xx/045xx. Postcodes like 3xxx, 2xxx. Terms: "Secondary College", "Year 11/12", "VET", "ATAR", "Casual", "Part-time".
+   - Signals for INDIA: Phone starts with +91. 6-digit postcodes.
+   - Signals for USA: Phone starts with +1. 5-digit zip codes.
+   - If unsure, set detected_country to "remote". NEVER default to India or USA.
+5. You MUST identify the experience_level: 'high_school' (no degree, currently in school), 'student' (college/university), 'fresh_graduate' (0-1 yrs), 'junior' (1-3 yrs), 'mid' (3-7 yrs), 'senior' (7+ yrs).
 
 Return exact JSON:
 {
