@@ -247,9 +247,12 @@ export default function InternshipsPage() {
 
         {/* Loading */}
         {loading && (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="h-8 w-8 animate-spin mr-3 text-[#3B82F6]" />
-            <span className="text-xl text-[#777]">Searching for matching internships...</span>
+          <div className="flex flex-col items-center justify-center py-20">
+            <div className="flex items-center mb-4">
+              <Loader2 className="h-8 w-8 animate-spin mr-3 text-[#3B82F6]" />
+              <span className="text-xl text-[#777]">Searching for matching internships...</span>
+            </div>
+            <span className="text-[#555] text-sm text-center max-w-sm">Please don't refresh, just wait until your internships are found.</span>
           </div>
         )}
 
