@@ -256,11 +256,20 @@ const NOISE_WORDS = new Set([
   'reliable', 'flexible', 'positive', 'attitude', 'approach',
 ]);
 
-function scoreJob(job: any, profile: ResumeProfile): number {
+function scoreJob(job: any, profile: ResumeProfile, userLocation: string): number {
   let score = 0;
   const jobTitle = (job.title || '').toLowerCase();
   const jobDesc = (job.description || '').toLowerCase();
   const jobText = `${jobTitle} ${jobDesc}`;
+
+  // ── Bonus: Location match (+15 points) ──
+  const jobLocation = (job.location || '').toLowerCase();
+  if (userLocation && jobLocation) {
+    const city = userLocation.split(',')[0].trim().toLowerCase();
+    if (city && jobLocation.includes(city)) {
+       score += 15;
+    }
+  }
 
   // ── CAREER OBJECTIVE DOMAIN BONUS (up to 30 points) ──
   // The industry field and first few keywords are the STRONGEST signal
@@ -311,7 +320,8 @@ function scoreJob(job: any, profile: ResumeProfile): number {
       weightedTotal += weight;
       if (matched) weightedMatch += weight;
     }
-    score += (weightedMatch / Math.max(weightedTotal, 1)) * 50;
+    // Allow partial match to yield higher scores: matching 50% of listed skills gives max points
+    score += Math.min(50, (weightedMatch / Math.max(weightedTotal * 0.5, 1)) * 50);
   }
 
   // ── 20% — Role/title match (phrase-level) ──
@@ -333,7 +343,9 @@ function scoreJob(job: any, profile: ResumeProfile): number {
   // ── Bonus: Student/Entry/Intern title match ──
   const expLevel = (profile.experience_level || '').toLowerCase();
   if (expLevel === 'student' || expLevel === 'fresher' || expLevel === 'entry') {
-    if (jobTitle.includes('intern') || jobTitle.includes('entry') || jobTitle.includes('junior') || jobTitle.includes('trainee') || jobTitle.includes('associate')) {
+    if (jobTitle.includes('intern') || jobTitle.includes('internship')) {
+      score += 10;
+    } else if (jobTitle.includes('entry') || jobTitle.includes('junior') || jobTitle.includes('trainee') || jobTitle.includes('associate')) {
       score += 5;
     }
   }
@@ -346,9 +358,9 @@ function scoreJob(job: any, profile: ResumeProfile): number {
 }
 
 function getMatchLabel(score: number): string {
-  if (score >= 70) return 'Excellent Match';
-  if (score >= 50) return 'Good Match';
-  if (score >= 30) return 'Moderate Match';
+  if (score >= 75) return 'Excellent Match';
+  if (score >= 60) return 'Good Match';
+  if (score >= 40) return 'Moderate Match';
   return 'Low Match';
 }
 
@@ -410,11 +422,14 @@ export async function POST(req: NextRequest) {
     // Step 2: Fetch jobs using AI-generated queries
     // DETERMINISTIC: always run ALL queries, always return same results
     // ────────────────────────────────────────────
-    const searchQueries = [
-      ...(profile.keywords || []).slice(0, 5),  // Keywords first (more targeted)
-      ...(profile.skills || []).slice(0, 5),
-      ...(profile.roles || []).slice(0, 2)
+    const rawQueries = [
+      ...(profile.keywords || []),  // Keywords first (most targeted, e.g. AI internship, Machine Learning)
+      ...(profile.roles || []),
+      ...(profile.skills || [])
     ];
+    
+    // Prioritize keywords over raw skills, remove duplicates, limit to 8
+    const searchQueries = [...new Set(rawQueries)].filter(q => q && q.trim().length > 0).slice(0, 8);
     
     const allJobsMap = new Map<string, JobResult>();
 
@@ -445,7 +460,7 @@ export async function POST(req: NextRequest) {
     // Step 3: Score, rank, and return ALL results
     // ────────────────────────────────────────────
     const scoredJobs = rawJobs.map(job => {
-      const matchScore = scoreJob(job, profile!);
+      const matchScore = scoreJob(job, profile!, userLocation);
       return { ...job, matchScore, matchLabel: getMatchLabel(matchScore) };
     });
 
