@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Upload, ExternalLink, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { extractSkillsFromResume } from '@/lib/ai';
@@ -28,6 +28,7 @@ const PAGE_SIZE = 25;
 export default function InternshipsPage() {
   const { isAuthenticated, signOut } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [resumeText, setResumeText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [allJobs, setAllJobs] = useState<Job[]>([]);
@@ -45,12 +46,20 @@ export default function InternshipsPage() {
   }, [allJobs]);
 
   useEffect(() => {
+    // Clean up when leaving the page
+    return () => {
+      setAllJobs([]);
+    };
+  }, []);
+
+  useEffect(() => {
     const savedResume = localStorage.getItem('resumeText');
     if (savedResume) {
       setResumeText(savedResume);
+      setAllJobs([]);
       searchJobs(savedResume);
     }
-  }, []);
+  }, [pathname]);
 
   function handleJobClick(job: Job) {
     sessionStorage.setItem('selectedJob', JSON.stringify(job));
@@ -65,13 +74,30 @@ export default function InternshipsPage() {
     setError(null);
 
     try {
-      const text = await file.text();
+      let text = '';
+
+      if (file.name.endsWith('.pdf')) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await fetch('/api/parse-resume', {
+          method: 'POST',
+          body: formData,
+        });
+        if (!res.ok) throw new Error('PDF parsing failed');
+        const data = await res.json();
+        text = data.text || '';
+      } else {
+        text = await file.text();
+      }
+
       if (!text || text.length < 50) {
-        setError('Could not read enough text from the file. Use .txt from the dashboard PDF flow, or paste resume text.');
+        setError('Could not read enough text from the file.');
         return;
       }
+      
       setResumeText(text);
       localStorage.setItem('resumeText', text);
+      setAllJobs([]);
 
       const extracted = await extractSkillsFromResume(text);
       localStorage.setItem('userSkills', JSON.stringify(extracted.skills || []));
@@ -81,7 +107,7 @@ export default function InternshipsPage() {
 
       await searchJobs(text);
     } catch (err) {
-      setError('Failed to read resume file');
+      setError('Failed to read resume file: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setLoading(false);
     }
@@ -132,6 +158,8 @@ export default function InternshipsPage() {
 
   function handleRefresh() {
     if (resumeText) {
+      setAllJobs([]);
+      setCurrentPage(1);
       searchJobs(resumeText);
     }
   }
