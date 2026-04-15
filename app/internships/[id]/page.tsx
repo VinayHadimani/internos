@@ -305,7 +305,7 @@ export default function InternshipDetailPage({ params }: { params: Promise<{ id:
               </div>
               <div className="text-right">
                 <p className="text-4xl font-bold text-[#3B82F6]">{internship.matchScore || 0}%</p>
-                <p className="text-[#777] text-sm">{(internship.matchScore || 0) >= 60 ? 'Excellent match' : (internship.matchScore || 0) >= 40 ? 'Good match' : 'Fair match'}</p>
+                <p className="text-[#777] text-sm">{(internship.matchScore || 0) >= 75 ? 'Excellent match' : (internship.matchScore || 0) >= 60 ? 'Good match' : (internship.matchScore || 0) >= 40 ? 'Moderate match' : 'Low match'}</p>
               </div>
             </div>
           </div>

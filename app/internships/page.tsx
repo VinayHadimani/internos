@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,6 +29,7 @@ export default function InternshipsPage() {
   const { isAuthenticated, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const searchIdRef = useRef(0);
   const [resumeText, setResumeText] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [allJobs, setAllJobs] = useState<Job[]>([]);
@@ -114,6 +115,7 @@ export default function InternshipsPage() {
   }
 
   async function searchJobs(text: string) {
+    const currentSearchId = ++searchIdRef.current;
     setLoading(true);
     setError(null);
 
@@ -141,6 +143,11 @@ export default function InternshipsPage() {
       });
 
       const data = await res.json();
+      
+      // If a new search started while this one was running, discard these results
+      if (currentSearchId !== searchIdRef.current) {
+        return;
+      }
 
       if (data.success) {
         const filteredJobs = data.jobs || data.data || [];
@@ -150,9 +157,13 @@ export default function InternshipsPage() {
         setError(data.error || 'Failed to search jobs');
       }
     } catch (err) {
-      setError('Failed to connect to search service');
+      if (currentSearchId === searchIdRef.current) {
+        setError('Failed to connect to search service');
+      }
     } finally {
-      setLoading(false);
+      if (currentSearchId === searchIdRef.current) {
+        setLoading(false);
+      }
     }
   }
 
@@ -352,9 +363,9 @@ export default function InternshipsPage() {
 
                       <div className="flex flex-col items-end gap-3 mt-4 md:mt-0">
                         <span className={`text-sm font-bold px-3 py-1 rounded-full ${
-                          job.matchScore >= 70 ? 'bg-green-100 text-green-700' :
-                          job.matchScore >= 50 ? 'bg-yellow-100 text-yellow-700' :
-                          job.matchScore >= 30 ? 'bg-orange-100 text-orange-700' :
+                          job.matchScore >= 75 ? 'bg-green-100 text-green-700' :
+                          job.matchScore >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                          job.matchScore >= 40 ? 'bg-orange-100 text-orange-700' :
                           'bg-gray-100 text-gray-600'
                         }`}>
                           {job.matchScore}% match
