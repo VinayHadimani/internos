@@ -141,6 +141,10 @@ function InternshipsContent() {
       const userSkills = directSkills || JSON.parse(localStorage.getItem('userSkills') || '[]');
       const userExperience = localStorage.getItem('userExperience') || 'fresher';
       const userRoles = JSON.parse(localStorage.getItem('userRoles') || '[]');
+      
+      // Cache Buster to ensure we focus only on the latest resume
+      const resumeVersion = localStorage.getItem('resumeVersion') || Math.random().toString(36).substring(7);
+      if (!localStorage.getItem('resumeVersion')) localStorage.setItem('resumeVersion', resumeVersion);
 
       const primarySkill =
         (Array.isArray(userSkills) && userSkills.length > 0 && String(userSkills[0])) ||
@@ -156,6 +160,7 @@ function InternshipsContent() {
           experience: userExperience,
           preferredRoles: userRoles,
           query: primarySkill,
+          cacheBuster: resumeVersion
         })
       });
 
@@ -170,7 +175,18 @@ function InternshipsContent() {
         const filteredJobs = data.jobs || data.data || [];
         setAllJobs(filteredJobs);
         // Prefer dashboard skills if they are substantial
-        setSkills(userSkills.length >= 3 ? userSkills : (data.detected_skills || []));
+        const detectedSkills = userSkills.length >= 3 ? userSkills : (data.detected_skills || []);
+        setSkills(detectedSkills);
+
+        // DATA PURGE: Remove resume from "database" (localStorage) as requested
+        // to keep results on point and ensure AI focuses only on latest.
+        console.log('[Internships] Purging resume data from localStorage after display');
+        localStorage.removeItem('resumeText');
+        localStorage.removeItem('userSkills');
+        localStorage.removeItem('userExperience');
+        localStorage.removeItem('userRoles');
+        localStorage.removeItem('userLocation');
+        localStorage.removeItem('resumeVersion');
       } else {
         setError(data.error || 'Failed to search jobs');
       }

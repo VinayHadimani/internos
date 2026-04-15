@@ -53,6 +53,7 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
       .replace(/\(Note:.*?\)/gi, '')        // Remove (Note: ...)
       .replace(/\[Note:.*?\]/gi, '')        // Remove [Note: ...]
       .replace(/\[Tip:.*?\]/gi, '')         // Remove [Tip: ...]
+      .replace(/^Page\s+\d+$/gim, '')      // Remove Page Number markers
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Only strip control characters
       .replace(/\s+/g, ' ')               // Collapse whitespace
       .trim();

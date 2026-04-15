@@ -18,6 +18,10 @@ const TODO_MARKER = /\b(TODO|TBD|FIXME|\[X\])\b/gi;
 
 const LUXURY = /\bLUXURIOUSLY\b/gi;
 
+const TEMPLATE_TIP = /^\(Tip:.*?\)$|^\(?Tip:.*?\)?$/i;
+const TEMPLATE_NOTE = /^\(Note:.*?\)$|^\(?Note:.*?\)?$/i;
+const PAGE_MARKER = /^Page\s+\d+$/i;
+
 /** Suspicious long tokens (tracking / encoded blobs), not normal words */
 const LONG_BLOB = /\b[A-Za-z0-9+/]{36,}={0,2}\b/g;
 
@@ -56,6 +60,7 @@ function paragraphIsJunk(block: string): boolean {
   if (DISCLAIMER.test(lower)) return true;
   if (SYSTEM_LEAK.test(lower)) return true;
   if (/^lorem ipsum\b/i.test(s)) return true;
+  if (TEMPLATE_TIP.test(s) || TEMPLATE_NOTE.test(s)) return true;
   return false;
 }
 
@@ -65,6 +70,7 @@ function lineIsJunk(line: string): boolean {
   if (RECRUITER_LINE.test(t)) return true;
   if (SYSTEM_LEAK.test(t)) return true;
   if (LONG_BLOB.test(t) && !t.includes('http')) return true;
+  if (TEMPLATE_TIP.test(t) || TEMPLATE_NOTE.test(t) || PAGE_MARKER.test(t)) return true;
   const low = t.toLowerCase();
   if (
     /eager\s+to\s+learn/.test(low) &&

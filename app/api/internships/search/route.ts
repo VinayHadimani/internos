@@ -317,14 +317,16 @@ function scoreJob(job: any, profile: ResumeProfile, userLocation: string): numbe
   }
   score += Math.min(30, rolePoints);
 
-  // ── 3. Student/Seniority Fit (Max 10 points) ──
+  // ── 3. Student/Seniority Hard Filter (Max 10 points + HARD BLOCK) ──
   const isStudent = profile.experience_level === 'high_school' || profile.experience_level === 'college_student' || profile.experience_level === 'student';
   const isHighSchool = profile.experience_level === 'high_school';
   
-  // Seniority Penalty
-  const seniorKw = ['senior', 'sr.', 'sr ', 'lead', 'manager', 'director', 'vp', 'executive', 'chief', 'principal', 'staff', 'head of'];
-  if (seniorKw.some(k => jobTitle.includes(k))) {
-    score -= 40; // Heavy penalty for senior roles if seeking entry level
+  // Seniority Hard Block for Students
+  const seniorKw = ['senior', 'sr.', 'sr ', 'lead', 'manager', 'director', 'vp', 'vice president', 'executive', 'chief', 'principal', 'staff', 'head of'];
+  const yearsExpCheck = /([2-9]|\d{2})\+\s+(years|yrs)/i; // Matches 2+ years, 10+ years etc.
+  
+  if (isStudent && (seniorKw.some(k => jobTitle.includes(k)) || yearsExpCheck.test(jobDesc))) {
+    return 0; // HARD BLOCK
   }
   
   // Student/Entry Bonus
@@ -368,7 +370,8 @@ export async function POST(req: NextRequest) {
       location: bodyLocation = '', 
       skills: clientSkills = [], 
       preferredRoles: clientRoles = [],
-      experience: clientExperience = 'fresher'
+      experience: clientExperience = 'fresher',
+      cacheBuster = ''
     } = body;
     
     const resumeText: string = body.resumeText || '';
@@ -450,15 +453,16 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      total: finalJobs.length,           // Total count for pagination
-      page: 1,                           // Current page
-      pageSize: 25,                      // Items per page
+      total: finalJobs.length,
+      page: 1,
+      pageSize: 25,
       totalPages: Math.ceil(finalJobs.length / 25),
       detected_skills: profile.skills,
       detected_domains: [profile.industry],
       target_roles: profile.roles,
-      jobs: finalJobs,                   // ALL jobs — client handles pagination
-      count: finalJobs.length
+      jobs: finalJobs,
+      count: finalJobs.length,
+      cacheBuster
     });
 
   } catch (error) {

@@ -33,6 +33,15 @@ export default function DashboardPage() {
     setUploading(true);
     setError(null);
     try {
+      // Clear ghost data at the start of every upload
+      localStorage.removeItem('resumeText');
+      localStorage.removeItem('userSkills');
+      localStorage.removeItem('userExperience');
+      localStorage.removeItem('userRoles');
+      localStorage.removeItem('userLocation');
+      sessionStorage.removeItem('selectedJob');
+      setResumeText(null);
+      
       let text = '';
       if (file.type === 'application/pdf') {
         const buffer = await file.arrayBuffer();
@@ -45,13 +54,6 @@ export default function DashboardPage() {
       if (!text || text.length < 50) {
         throw new Error('Could not extract enough text from the resume. Please ensure it is a valid document.');
       }
-      
-      // Clear ghost data
-      localStorage.removeItem('resumeText');
-      localStorage.removeItem('userSkills');
-      localStorage.removeItem('userExperience');
-      localStorage.removeItem('userRoles');
-      localStorage.removeItem('userLocation');
       
       setResumeText(text);
       
