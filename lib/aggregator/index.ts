@@ -822,8 +822,16 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
 
     const what = keywords.join(' ')
     const where = location || ''
-    const url = `http://api.adzuna.com/v1/api/jobs/in/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}&where=${encodeURIComponent(where)}`
-    console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} | Location: ${where}`)
+    
+    // Map country names to Adzuna codes if needed, or just use 'in' for India as legacy
+    // but default to 'in' only if specifically India. Otherwise use global search.
+    const countryCode = (where.toLowerCase() === 'india') ? 'in' : 
+                        (where.toLowerCase() === 'australia' || where.toLowerCase() === 'au') ? 'au' :
+                        (where.toLowerCase() === 'usa' || where.toLowerCase() === 'us') ? 'us' :
+                        (where.toLowerCase() === 'uk' || where.toLowerCase() === 'gb') ? 'gb' : 'us';
+
+    const url = `http://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}&where=${encodeURIComponent(where)}`
+    console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} | Location: ${where} | Country: ${countryCode}`)
 
     const res = await fetch(url, { signal: AbortSignal.timeout(7000) })
     console.error(`[${source}] Response status: ${res.status}`)
@@ -874,8 +882,12 @@ export async function fetchJSearch(keywords: string[]): Promise<JobResult[]> {
     }
 
     const query = keywords.join(' ')
-    const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(query)}&page=1&num_pages=1`
-    console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} | URL: ${url}`)
+    const locationQuery = location ? ` in ${location}` : ''
+    const fullQuery = `${query}${locationQuery}`
+    
+    // For students, prioritize internships and part-time
+    const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(fullQuery)}&page=1&num_pages=1&employment_types=INTERNSHIP,PARTTIME`
+    console.error(`[${source}] Starting fetch for: ${fullQuery} | URL: ${url}`)
 
     const res = await fetch(url, {
       headers: {

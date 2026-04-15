@@ -20,6 +20,8 @@ interface ResumeProfile {
   education_level?: string;
   currently_enrolled?: boolean;
   keywords: string[];
+  location?: string;
+  detected_country?: string;
 }
 
 /**
@@ -42,8 +44,9 @@ STEP 2: Extract skills using this PRIORITY ORDER:
 Resume (first 4000 chars):
 \${resumeText.slice(0, 4000)}
 
-- "industry": Single word — the PRIMARY target industry from the Career Objective
-- Detect experience_level: "high_school", "college_student", "recent_graduate", or "early_career"
+- "industry": Single word — the PRIMARY target industry (e.g., "Retail", "Finance", "Healthcare", "Sports")
+- "detected_country": Use phone codes (+61=Australia, +91=India, etc.) or school locations to find the country.
+- Detect experience_level: "high_school", "student", "recent_graduate", or "early_career"
 - Detect education_level: "high_school", "bachelors", "masters"
 - Currently enrolled: true/false
 - If the person is a high school student or seeking part-time/casual work, explicitly mark it.
@@ -56,7 +59,8 @@ Return exactly this JSON:
   "education_level": "...",
   "currently_enrolled": true/false,
   "keywords": [...],
-  "industry": "..."
+  "industry": "...",
+  "detected_country": "..."
 }
 
 Return ONLY valid JSON, no explanation.`;
@@ -199,24 +203,22 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
   
   for (const [keywords, domainName] of domainChecks) {
     const matchCount = keywords.filter(k => lower.includes(k)).length;
-    if (matchCount >= 2 && matchCount > maxMatches) {
+    if (matchCount >= 1 && matchCount > maxMatches) {
       maxMatches = matchCount;
       domain = domainName;
     }
   }
-  
-  // Better role generation from domain
+
+  // Explicit mapping for non-tech industries to roles
   const domainRoleMap: Record<string, string[]> = {
-    'accounting': ['accounting assistant', 'audit associate', 'financial analyst'],
-    'business_development': ['business development associate', 'account manager', 'partnership manager'],
-    'retail': ['retail assistant', 'customer service representative', 'sales associate', 'store team member'],
-    'hospitality': ['customer service representative', 'food service worker', 'hospitality assistant'],
-    'sports': ['sports coach', 'recreation assistant', 'community sports officer'],
-    'education': ['teacher aide', 'tutor', 'learning support assistant'],
-    'healthcare_support': ['care assistant', 'medical receptionist', 'healthcare support worker'],
-    'trades': ['apprentice', 'trade assistant', 'helper'],
-    'creative': ['content creator', 'creative assistant', 'photographer assistant'],
-    'general': ['customer service representative', 'business analyst', 'project coordinator', 'operations associate'],
+    'retail': ['retail assistant', 'sales associate', 'cashier', 'merchandiser'],
+    'hospitality': ['waiter', 'waitress', 'barista', 'front desk associate'],
+    'sports': ['sports coach', 'recreation assistant', 'fitness instructor'],
+    'healthcare_support': ['care assistant', 'medical receptionist', 'healthcare aide'],
+    'trades': ['trades assistant', 'apprentice', 'labourer'],
+    'creative': ['graphic design assistant', 'social media intern', 'content creator'],
+    'admin_office': ['office assistant', 'receptionist', 'admin intern'],
+    'general': ['customer service representative', 'business intern', 'administrative assistant']
   };
   
   const roles = clientRoles.length > 0 ? clientRoles : (domainRoleMap[domain] || ['intern']);
@@ -337,18 +339,28 @@ function scoreJob(job: any, profile: ResumeProfile, userLocation: string): numbe
     }
   }
 
-  // ── 4. Location Fit (Max 10 points) ──
-  if (userLocation && userLocation !== 'Any' && userLocation !== 'Remote') {
-    const jobLocation = (job.location || '').toLowerCase();
-    const userCity = userLocation.split(',')[0].toLowerCase().trim();
-    
-    if (jobLocation.includes(userCity)) {
-      score += 10;
+  // ── 4. Location & Country Fit (Max 15 points) ──
+  const prefCountry = (profile.detected_country || '').toLowerCase();
+  const jobLocation = (job.location || '').toLowerCase();
+  
+  if (prefCountry && prefCountry !== 'remote') {
+    if (jobLocation.includes(prefCountry)) {
+      score += 15; // Strong country match
     } else if (jobLocation.includes('remote')) {
-      score += 5;
+      score += 10;
+    } else if (userLocation && jobLocation.includes(userLocation.split(',')[0].toLowerCase())) {
+        score += 15;
+    } else {
+      score -= 10; // Penalty for wrong country/on-site
+    }
+  } else if (userLocation && userLocation !== 'Any' && userLocation !== 'Remote') {
+    const userCity = userLocation.split(',')[0].toLowerCase().trim();
+    if (jobLocation.includes(userCity)) {
+      score += 15;
+    } else if (jobLocation.includes('remote')) {
+      score += 10;
     }
   } else {
-    // If no location preference or remote preference, remain neutral
     score += 5;
   }
 
@@ -398,6 +410,13 @@ export async function POST(req: NextRequest) {
     } else {
       // Start AI extraction in background
       profile = await aiExtractProfile(resumeText);
+      
+      // CRITICAL FIX: Merge dashboard skills with AI roles/experience
+      // Do not let AI ignore the perfectly detected dashboard skills
+      if (profile && clientSkills.length > 0) {
+        profile.skills = [...new Set([...clientSkills, ...profile.skills])];
+      }
+      
       if (!profile) {
         console.log('[Search] AI unavailable, using keyword fallback');
         profile = fallbackExtractProfile(
@@ -425,9 +444,12 @@ export async function POST(req: NextRequest) {
     const allJobsMap = new Map<string, JobResult>();
 
     // Sequential batching with timeout check
+    // Fix #2: Use detected country if available
+    const searchLocation = profile.detected_country || userLocation;
+    
     for (const q of searchQueries) {
       try {
-        const batch = await aggregateJobs(q, userLocation);
+        const batch = await aggregateJobs(q, searchLocation);
         for (const job of batch) {
           const key = `${job.title}-${job.company}`.toLowerCase().replace(/\s+/g, '');
           if (!allJobsMap.has(key)) allJobsMap.set(key, job);

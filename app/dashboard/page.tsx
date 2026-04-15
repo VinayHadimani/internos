@@ -39,6 +39,7 @@ export default function DashboardPage() {
       localStorage.removeItem('userExperience');
       localStorage.removeItem('userRoles');
       localStorage.removeItem('userLocation');
+      localStorage.removeItem('detectedCountry');
       sessionStorage.removeItem('selectedJob');
       setResumeText(null);
       
@@ -62,9 +63,10 @@ export default function DashboardPage() {
       console.log('=== SKILLS EXTRACTED ===', extracted);
       
       localStorage.setItem('userSkills', JSON.stringify(extracted.skills || []));
-      localStorage.setItem('userExperience', extracted.experienceLevel || 'fresher');
+      localStorage.setItem('userExperience', extracted.experienceLevel || 'student');
       localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
-      localStorage.setItem('userLocation', extracted.location || 'India');
+      localStorage.setItem('userLocation', extracted.location || '');
+      localStorage.setItem('detectedCountry', extracted.detected_country || 'remote');
       localStorage.setItem('resumeText', text);
       localStorage.setItem('lastUserId', user?.id || 'anonymous');
       localStorage.setItem('resumeTimestamp', String(Date.now()));

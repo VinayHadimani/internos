@@ -47,15 +47,15 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
     // Join pages and sanitize
     const rawText = text.join('\n');
     
-    // Clean common resume template artifacts (e.g., "(Tip: ...)", "(Note: ...)")
+    // Clean common resume template artifacts
     const cleanText = rawText
-      .replace(/\(Tip:.*?\)/gi, '')         // Remove (Tip: ...)
-      .replace(/\(Note:.*?\)/gi, '')        // Remove (Note: ...)
-      .replace(/\[Note:.*?\]/gi, '')        // Remove [Note: ...]
-      .replace(/\[Tip:.*?\]/gi, '')         // Remove [Tip: ...]
-      .replace(/^Page\s+\d+$/gim, '')      // Remove Page Number markers
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '') // Only strip control characters
-      .replace(/\s+/g, ' ')               // Collapse whitespace
+      .replace(/^(?:Tip|Note|Advice|Suggestion|Hint|Task):.*$/gim, '') // Remove instructions starting with these words
+      .replace(/\((?:Tip|Note|Advice|Suggestion|Hint):.*?\)/gi, '')    // Remove (Tip: ...)
+      .replace(/\[(?:Tip|Note|Advice|Suggestion|Hint):.*?\]/gi, '')    // Remove [Tip: ...]
+      .replace(/^Page\s+\d+$/gim, '')                                 // Remove Page Number markers
+      .replace(/\[your name here\]|example@example\.com|\[city, country\]/gi, '') // Remove obvious placeholders
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')                // Strip control characters
+      .replace(/\s+/g, ' ')                                           // Collapse whitespace
       .trim();
       
     return cleanText;
@@ -70,6 +70,10 @@ export async function parseResumePDF(buffer: ArrayBuffer): Promise<string> {
  */
 export async function parseResumeText(text: string): Promise<string> {
   return text
+    .replace(/^(?:Tip|Note|Advice|Suggestion|Hint|Task):.*$/gim, '')
+    .replace(/\((?:Tip|Note|Advice|Suggestion|Hint):.*?\)/gi, '')
+    .replace(/\[(?:Tip|Note|Advice|Suggestion|Hint):.*?\]/gi, '')
+    .replace(/\[your name here\]|example@example\.com|\[city, country\]/gi, '')
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
     .replace(/\s+/g, ' ')
     .trim();

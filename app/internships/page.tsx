@@ -156,6 +156,7 @@ function InternshipsContent() {
         body: JSON.stringify({ 
           resumeText: text,
           location: userLocation,
+          detectedCountry: localStorage.getItem('detectedCountry') || 'remote',
           skills: userSkills,
           experience: userExperience,
           preferredRoles: userRoles,
@@ -178,7 +179,7 @@ function InternshipsContent() {
         const detectedSkills = userSkills.length >= 3 ? userSkills : (data.detected_skills || []);
         setSkills(detectedSkills);
 
-        // DATA PURGE: Remove resume from "database" (localStorage) as requested
+        // DATA PURGE: Remove resume and skills from localStorage after display
         // to keep results on point and ensure AI focuses only on latest.
         console.log('[Internships] Purging resume data from localStorage after display');
         localStorage.removeItem('resumeText');
@@ -186,7 +187,9 @@ function InternshipsContent() {
         localStorage.removeItem('userExperience');
         localStorage.removeItem('userRoles');
         localStorage.removeItem('userLocation');
+        localStorage.removeItem('detectedCountry');
         localStorage.removeItem('resumeVersion');
+        localStorage.removeItem('resumeTimestamp');
       } else {
         setError(data.error || 'Failed to search jobs');
       }

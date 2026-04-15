@@ -4,10 +4,11 @@ import { callAI } from '@/lib/rotating-ai';
 
 export interface ExtractedSkills {
   skills: string[];
-  experienceLevel: 'fresher' | 'junior' | 'mid' | 'senior';
+  experienceLevel: 'high_school' | 'student' | 'fresh_graduate' | 'junior' | 'mid' | 'senior';
   industries: string[];
   roleTypes: string[];
   location: string;
+  detected_country: string;
 }
 
 export async function extractSkillsFromResume(resumeText: string): Promise<ExtractedSkills> {
@@ -15,25 +16,21 @@ export async function extractSkillsFromResume(resumeText: string): Promise<Extra
     const extractResponse = await callAI(
       `You are an expert recruiter and career analyst AI. Analyze this resume with EXTREME attention to what makes this candidate unique.
 
-CRITICAL RULES FOR SKILL EXTRACTION:
-1. Extract skills that are ACTUALLY present on the resume. Do NOT favor any specific industry (like tech or finance) over others.
+CRITICAL RULES FOR EXTRACTION:
+1. Extract skills that are ACTUALLY present. Do NOT favor any specific industry (like tech/finance).
 2. DOMAIN-SPECIFIC skills are 10x more important than generic soft skills.
 3. If the candidate is in Retail, Hospitality, Healthcare, Trades, Creative Arts, Sport, or Law, extract the specific terminology and tools for that domain.
-4. If the resume mentions a Career Objective or target role, those keywords MUST be prioritized as top skills.
-5. Derive target roles from what the candidate WANTS to do (Objective), not just past experience.
-
-SKILL EXTRACTION HIERARCHY:
-- TIER 1 (Domain-specific): Industry terms, specialized tools (e.g., "point of sale", "patient care", "CAD software", "litigation research"), domain certifications, target role keywords.
-- TIER 2 (Technical/Hard skills): Specific software, measurable capabilities, methodologies.
-- TIER 3 (Soft skills): Only include if exceptional and backed by evidence. Avoid generic terms like "communication" or "teamwork" unless they are the primary focus of the role.
+4. You MUST detect the candidate's location/country. Look for: address, phone country code (e.g., +61=Australia, +1=USA, +44=UK, +91=India), school location, or currency. If no country is found, set detected_country to "remote". NEVER default to India.
+5. You MUST identify the experience_level: 'high_school' (no degree, currently in school), 'student' (college/university), 'fresh_graduate' (0-1 yrs), 'junior' (1-3 yrs), 'mid' (3-7 yrs), 'senior' (7+ yrs). Base this on education dates and job titles.
 
 Return exact JSON:
 {
   "skills": ["skill1", "skill2", "..."],
-  "experienceLevel": "fresher" | "junior" | "mid" | "senior",
-  "industries": ["industry1", "industry2"],
-  "roleTypes": ["role1", "role2"],
-  "location": "City, Country"
+  "experienceLevel": "high_school" | "student" | "fresh_graduate" | "junior" | "mid" | "senior",
+  "industries": ["industry1", "..."],
+  "roleTypes": ["role1", "..."],
+  "location": "City",
+  "detected_country": "Country Name"
 }`,
       resumeText,
       {
@@ -55,19 +52,21 @@ Return exact JSON:
     
     return {
       skills: result.skills?.length > 0 ? result.skills : extractSkillsByKeywords(resumeText),
-      experienceLevel: result.experienceLevel || 'fresher',
+      experienceLevel: result.experienceLevel || 'student',
       industries: result.industries || [],
       roleTypes: result.roleTypes || [],
-      location: result.location || ''
+      location: result.location || '',
+      detected_country: result.detected_country || 'remote'
     };
   } catch (error) {
     console.error("Failed to extract skills:", error);
     return {
       skills: extractSkillsByKeywords(resumeText),
-      experienceLevel: 'fresher',
+      experienceLevel: 'student',
       industries: [],
       roleTypes: [],
-      location: ''
+      location: '',
+      detected_country: 'remote'
     };
   }
 }
