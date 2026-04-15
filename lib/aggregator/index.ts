@@ -599,11 +599,8 @@ export async function fetchRemotive(keywords: string[]): Promise<JobResult[]> {
       console.error(`[${source}] Empty response keys: ${Object.keys(data).join(', ')}`)
       console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 500)}`)
     }
-    const currencySymbol = countryCode === 'in' ? '₹' : countryCode === 'au' ? 'A$' : countryCode === 'gb' ? '£' : countryCode === 'de' ? '€' : '$';
-    return results.map((job: Record<string, unknown>) => {
-      const rawSalary = job.salary_min && job.salary_max
-        ? `${currencySymbol}${Number(job.salary_min).toLocaleString()} - ${currencySymbol}${Number(job.salary_max).toLocaleString()}`
-        : String(job.salary || '')
+    return realJobs.map((job: Record<string, unknown>) => {
+      const rawSalary = String(job.salary || '')
       const rawDescription = String(job.description || '')
       return {
         title: String(job.title || ''),
@@ -902,9 +899,10 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
     }
 
     const what = keywords.join(' ')
+    const where = location || ''
     const countryCode = getAdzunaCountryCode(location)
     const url = `http://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}${where ? `&where=${encodeURIComponent(where)}` : ''}`
-    console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} ${where ? `| Location: ${where}` : ''} | Country: ${countryCode}`)
+    console.error(`[${source}] Starting fetch for: ${what} ${where ? `| Location: ${where}` : ''} | Country: ${countryCode}`)
 
     const res = await fetch(url, { signal: AbortSignal.timeout(7000) })
     console.error(`[${source}] Response status: ${res.status}`)
@@ -965,7 +963,7 @@ export async function fetchJSearch(keywords: string[], location?: string): Promi
 
     const res = await fetch(url, {
       headers: {
-        'X-RapidAPI-Key': apiKey,
+        'X-RapidAPI-Key': rapidApiKey,
         'X-RapidAPI-Host': 'jsearch.p.rapidapi.com',
       },
       signal: AbortSignal.timeout(12000),
