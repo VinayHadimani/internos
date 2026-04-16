@@ -89,6 +89,8 @@ function InternshipsContent() {
     // Clear ALL previous resume data to prevent cross-contamination (Fix 9)
     localStorage.removeItem('resumeText');
     localStorage.removeItem('userSkills');
+    localStorage.removeItem('userHardSkills');
+    localStorage.removeItem('userSoftSkills');
     localStorage.removeItem('userExperience');
     localStorage.removeItem('userRoles');
     localStorage.removeItem('userLocation');
@@ -129,13 +131,15 @@ function InternshipsContent() {
       setAllJobs([]);
 
       const extracted = await extractSkillsFromResume(text);
-      localStorage.setItem('userSkills', JSON.stringify(extracted.skills || []));
-      localStorage.setItem('userExperience', extracted.experience_level || 'student');
-      localStorage.setItem('userRoles', JSON.stringify(extracted.roles || []));
+      localStorage.setItem('userHardSkills', JSON.stringify(extracted.hard_skills || []));
+      localStorage.setItem('userSoftSkills', JSON.stringify(extracted.soft_skills || []));
+      localStorage.setItem('userSkills', JSON.stringify([...(extracted.hard_skills || []), ...(extracted.soft_skills || [])]));
+      localStorage.setItem('userExperience', extracted.experienceLevel || 'student');
+      localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
       localStorage.setItem('userLocation', extracted.location || 'remote');
       localStorage.setItem('detectedCountry', extracted.detected_country || 'remote');
 
-      await searchJobs(text, extracted.skills || []);
+      await searchJobs(text, extracted.hard_skills || []);
     } catch (err) {
       setError('Failed to read resume file: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -150,7 +154,9 @@ function InternshipsContent() {
 
     try {
       const userLocation = localStorage.getItem('userLocation') || 'remote';
-      const userSkills = directSkills || JSON.parse(localStorage.getItem('userSkills') || '[]');
+      // Prefer hard skills for search queries — soft skills match everything and return garbage
+      const userHardSkills = directSkills || JSON.parse(localStorage.getItem('userHardSkills') || localStorage.getItem('userSkills') || '[]');
+      const userSoftSkills = JSON.parse(localStorage.getItem('userSoftSkills') || '[]');
       const userExperience = localStorage.getItem('userExperience') || 'student';
       const userRoles = JSON.parse(localStorage.getItem('userRoles') || '[]');
       
@@ -158,8 +164,10 @@ function InternshipsContent() {
       const resumeVersion = localStorage.getItem('resumeVersion') || Math.random().toString(36).substring(7);
       if (!localStorage.getItem('resumeVersion')) localStorage.setItem('resumeVersion', resumeVersion);
 
+      // Use first HARD skill or first role as initial query — NOT soft skills like "communication"
       const primarySkill =
-        (Array.isArray(userSkills) && userSkills.length > 0 && String(userSkills[0])) ||
+        (Array.isArray(userRoles) && userRoles.length > 0 && String(userRoles[0])) ||
+        (Array.isArray(userHardSkills) && userHardSkills.length > 0 && String(userHardSkills[0])) ||
         'internship';
 
       const res = await fetch(`/api/internships/search`, {
@@ -169,7 +177,8 @@ function InternshipsContent() {
           resumeText: text,
           location: userLocation,
           detectedCountry: localStorage.getItem('detectedCountry') || 'remote',
-          skills: userSkills,
+          skills: userHardSkills,        // Only hard skills for search
+          softSkills: userSoftSkills,     // Soft skills for display only
           experience: userExperience,
           preferredRoles: userRoles,
           query: primarySkill,
@@ -188,8 +197,7 @@ function InternshipsContent() {
         const filteredJobs = data.jobs || data.data || [];
         setAllJobs(filteredJobs);
         // Prefer dashboard skills if they are substantial
-        const detectedSkills = userSkills.length >= 3 ? userSkills : (data.detected_skills || []);
-        setSkills(detectedSkills);
+        setSkills(data.detected_skills || [...userHardSkills, ...userSoftSkills] || []);
 
         // Clean up resume data after results are displayed (Fix 8)
         if (!hasCleanedUpRef.current) {
@@ -200,6 +208,8 @@ function InternshipsContent() {
           setTimeout(() => {
             localStorage.removeItem('resumeText');
             localStorage.removeItem('userSkills');
+            localStorage.removeItem('userHardSkills');
+            localStorage.removeItem('userSoftSkills');
             localStorage.removeItem('userExperience');
             localStorage.removeItem('userRoles');
             localStorage.removeItem('userLocation');

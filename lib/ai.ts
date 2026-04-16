@@ -3,39 +3,49 @@
 import { callAI } from '@/lib/rotating-ai';
 
 export interface ExtractedSkills {
-  skills: string[];
-  roles: string[];
-  keywords: string[];
+  hard_skills: string[];
+  soft_skills: string[];
+  experienceLevel: 'fresher' | 'junior' | 'mid' | 'senior';
+  industries: string[];
+  roleTypes: string[];
   location: string;
-  industry: string;
-  experience_level: string;
   detected_country: string;
 }
 
 export async function extractSkillsFromResume(resumeText: string): Promise<ExtractedSkills> {
   try {
     const prompt = `You are an expert recruiter and skill extraction AI. Analyze the resume thoroughly.
-Extract:
-- Technical, domain-specific, and soft skills (not just tech - sports, retail, service, etc.).
-- Target roles the candidate is seeking or qualified for.
-- 5-8 search keywords that would find relevant entry-level jobs/internship.
-- Location (City/State) AND Detect Country based on:
-  * Phone prefixes (+61 AU, +91 IN, +1 US, +44 UK, +49 DE).
-  * Postcode patterns (3xxx/2xxx AU, 5-6 digits IN/US, etc.).
-  * School names and terms (Secondary College, Year 11/12 = AU).
-- Industry/Domain (Retail, Sport, Software, Finance, etc.).
-- Experience level: "high_school", "student", "recent_grad", or "junior".
 
-Return ONLY JSON:
+CRITICAL: Separate HARD skills from SOFT skills.
+- Hard skills = specific, searchable abilities (Python, financial modeling, SEO, inventory management, cash handling, POS systems, coaching, first aid)
+- Soft skills = generic interpersonal traits (communication, teamwork, leadership, organisation, time management, problem solving, adaptability)
+
+Extract:
+- Hard skills specific to this person's ACTUAL experience (not assumed)
+- Soft skills (keep separate — they are NOT useful for job matching)
+- Experience level (fresher/junior/mid/senior based on years)
+- The PRIMARY industry from their ACTUAL work experience (e.g., "retail" if they worked at a store, "sports" if they coached, "finance" if they did banking)
+- Target role types matching THEIR industry, NOT generic titles. A retail worker gets "retail sales assistant", NOT "business analyst"
+- Location/City from their address or contact info
+- Detect Country based on: Phone prefixes (+61 AU, +91 IN, +1 US, +44 UK). Postcode patterns (3xxx/2xxx AU, 5-6 digits IN/US). School names and terms (Secondary College, Year 11/12 = AU).
+
+Return ONLY this JSON:
 {
-  "skills": [],
-  "roles": [],
-  "keywords": [],
-  "location": "City, State",
-  "detected_country": "australia/india/us/uk/germany/canada",
-  "industry": "...",
-  "experience_level": "..."
-}`;
+  "hard_skills": ["cash handling", "POS systems", "inventory management"],
+  "soft_skills": ["communication", "teamwork"],
+  "experienceLevel": "fresher",
+  "industries": ["retail"],
+  "roleTypes": ["retail sales assistant", "store associate"],
+  "location": "City, Country",
+  "detected_country": "australia"
+}
+
+RULES:
+1. hard_skills must be SPECIFIC and searchable. NO soft skills mixed in. Minimum 2, maximum 10.
+2. soft_skills are for DISPLAY ONLY. They should NOT be used for job matching.
+3. industries must match the ACTUAL work in the resume, not assumed. If they worked at a soccer club, industry is "sports". If they did customer service, industry is "retail".
+4. roleTypes must be INDUSTRY-SPECIFIC, not generic "business analyst" for everyone.
+5. Return ONLY valid JSON, no explanation.`;
 
     const response = await callAI(prompt, resumeText, {
       model: 'llama-3.3-70b-versatile',
@@ -47,12 +57,12 @@ Return ONLY JSON:
        const cleaned = response.content.replace(/```json|```/g, '').trim();
        const parsed = JSON.parse(cleaned);
        return {
-         skills: parsed.skills || [],
-         roles: parsed.roles || [],
-         keywords: parsed.keywords || [],
+         hard_skills: parsed.hard_skills?.length > 0 ? parsed.hard_skills : extractSkillsByKeywords(resumeText),
+         soft_skills: parsed.soft_skills || [],
+         experienceLevel: parsed.experienceLevel || 'fresher',
+         industries: parsed.industries || [],
+         roleTypes: parsed.roleTypes || [],
          location: parsed.location || 'remote',
-         industry: parsed.industry || 'General',
-         experience_level: parsed.experience_level || 'student',
          detected_country: parsed.detected_country || 'remote'
        };
     }
@@ -60,15 +70,15 @@ Return ONLY JSON:
     console.error("AI Skill extraction failed:", e);
   }
   
-  // High-School / Student sensitive fallback
+  // Fallback — use keyword extraction for hard skills
   return { 
-    skills: ["Communication", "Teamwork"], 
-    roles: ["Intern"], 
-    keywords: ["internship"], 
-    location: "remote", 
-    industry: "General", 
-    experience_level: "student",
-    detected_country: "remote" 
+    hard_skills: extractSkillsByKeywords(resumeText),
+    soft_skills: [],
+    experienceLevel: 'fresher',
+    industries: [],
+    roleTypes: [],
+    location: 'remote',
+    detected_country: 'remote'
   };
 }
 
@@ -88,14 +98,12 @@ function extractSkillsByKeywords(text: string): string[] {
       'r studio', 'ggplot', 'financial modeling', 'case studies', 'strategy', 'market research',
       'due diligence', 'management consulting', 'business strategy', 'financial analysis',
       'valuation', 'consulting', 'accounting', 'bookkeeping', 'auditing', 'budgeting'],
-    soft_skills: ['leadership', 'communication', 'teamwork', 'problem solving', 'time management',
-      'critical thinking', 'presentation', 'negotiation', 'project management', 'organization',
-      'adaptability', 'conflict resolution', 'decision making', 'attention to detail'],
-    retail: ['customer service', 'cash handling', 'pos systems', 'point of sale', 'sales',
+    retail: ['cash handling', 'pos systems', 'point of sale', 'sales',
       'merchandising', 'inventory management', 'stock management', 'visual merchandising',
       'store management', 'loss prevention', 'retail operations'],
     sports: ['coaching', 'fitness', 'personal training', 'athletic training', 'sports management',
-      'first aid', 'event coordination', 'team management', 'recreation', 'exercise science'],
+      'first aid', 'event coordination', 'team management', 'recreation', 'exercise science',
+      'umpiring', 'refereeing'],
     marketing: ['social media', 'content writing', 'seo', 'email marketing', 'brand management',
       'copywriting', 'digital marketing', 'market research', 'analytics', 'campaign management'],
     design: ['photoshop', 'illustrator', 'indesign', 'canva', 'ui design', 'ux design',
@@ -104,6 +112,8 @@ function extractSkillsByKeywords(text: string): string[] {
       'process improvement', 'vendor management', 'procurement'],
     healthcare: ['patient care', 'clinical', 'medical records', 'healthcare', 'phlebotomy',
       'vital signs', 'electronic health records', 'hipaa', 'cpr'],
+    hospitality: ['food service', 'front desk', 'hotel management', 'bartending',
+      'food safety', 'housekeeping', 'reservation systems'],
   };
   
   const found: string[] = [];
