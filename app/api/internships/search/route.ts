@@ -22,8 +22,9 @@ interface ResumeProfile {
 
 function cleanResumeText(text: string): string {
   // Remove template instructions/tips from common resume builders
+  // Use character class to support multi-line matching on older targets
   return text
-    .replace(/\(Tip:[\s\S]*?\)/g, '')
+    .replace(/\(Tip:[\s\S]*?\)/gi, '')
     .replace(/^Tip:.*$/gm, '')
     .replace(/^Page \d+$/gm, '')
     .replace(/^((?:Resume|CV|Curriculum Vitae)\s*)$/gim, '')
@@ -311,7 +312,7 @@ export async function POST(request: NextRequest) {
         ...job,
         matchScore: scoreJob(job, finalProfile),
       }))
-      .filter(job => job.matchScore >= 15) // Lowered threshold as requested
+      .filter(job => job.matchScore >= 15) // Minimal match threshold
       .sort((a, b) => b.matchScore - a.matchScore);
 
     console.log(`[Search] ${scored.length} relevant jobs scored >= 15%`);
