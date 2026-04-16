@@ -910,43 +910,54 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
 
     const what = keywords.join(' ')
     const where = location || ''
-    const countryCode = getAdzunaCountryCode(location)
-    const url = `http://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}${where ? `&where=${encodeURIComponent(where)}` : ''}`
-    console.error(`[${source}] Starting fetch for: ${what} ${where ? `| Location: ${where}` : ''} | Country: ${countryCode}`)
+    const singleCountry = getAdzunaCountryCode(location)
 
-    const res = await fetch(url, { signal: AbortSignal.timeout(7000) })
-    console.error(`[${source}] Response status: ${res.status}`)
-    if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      console.error(`[${source}] Error body (first 500): ${body.substring(0, 500)}`)
-      return []
-    }
-    const data = await res.json()
-    const results = data.results || []
-    console.error(`[${source}] Results returned: ${results.length}`)
-    if (results.length === 0) {
-      console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 500)}`)
-    }
+    // If we detected a specific country, just search that one.
+    // If location is empty/remote, search AU + GB + US in parallel for better coverage.
+    const countries: string[] = (where === '' || where === 'remote')
+      ? ['us', 'au', 'gb']
+      : [singleCountry]
 
-    const currencySymbol = countryCode === 'in' ? '₹' : countryCode === 'au' ? 'A$' : countryCode === 'gb' ? '£' : countryCode === 'de' ? '€' : countryCode === 'ca' ? 'C$' : '$';
-    return results.map((job: Record<string, unknown>) => {
-      const rawSalary = job.salary_min && job.salary_max
-        ? `${currencySymbol}${Number(job.salary_min).toLocaleString()} - ${currencySymbol}${Number(job.salary_max).toLocaleString()}`
-        : String(job.salary || '')
-      const rawDescription = String(job.description || job.adref || '')
-      return {
-        title: String(job.title || ''),
-        company: String((job.company as Record<string, unknown>)?.display_name || job.company || ''),
-        location: String((job.location as Record<string, unknown>)?.display_name || job.location || ''),
-        salary: rawSalary,
-        salaryObj: normalizeSalary(rawSalary),
-        url: String(job.redirect_url || ''),
-        source: 'Adzuna',
-        type: String(job.contract_type || job.contract_time || ''),
-        description: sanitizeDescription(rawDescription),
-        postedAt: normalizeDate(job.created || job.publication_date),
-      }
-    })
+    const CURRENCY: Record<string, string> = { in: '₹', au: 'A$', gb: '£', de: '€', ca: 'C$', us: '$' }
+
+    console.error(`[${source}] Searching ${countries.join(',')} for: ${what}${where ? ` | Location: ${where}` : ''}`)
+
+    const allResults = await Promise.all(countries.map(async (country) => {
+      try {
+        const perPage = countries.length === 1 ? 20 : 10
+        const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=${perPage}&what=${encodeURIComponent(what)}${where && where !== 'remote' ? `&where=${encodeURIComponent(where)}` : ''}`
+        const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
+        if (!res.ok) {
+          console.error(`[${source}/${country}] Status ${res.status}`)
+          return []
+        }
+        const data = await res.json()
+        const results: Record<string, unknown>[] = data.results || []
+        console.error(`[${source}/${country}] Results: ${results.length}`)
+        const currencySymbol = CURRENCY[country] ?? '$'
+        return results.map((job) => {
+          const rawSalary = job.salary_min && job.salary_max
+            ? `${currencySymbol}${Number(job.salary_min).toLocaleString()} - ${currencySymbol}${Number(job.salary_max).toLocaleString()}`
+            : String(job.salary || '')
+          return {
+            title: String(job.title || ''),
+            company: String((job.company as Record<string, unknown>)?.display_name || job.company || ''),
+            location: String((job.location as Record<string, unknown>)?.display_name || job.location || ''),
+            salary: rawSalary,
+            salaryObj: normalizeSalary(rawSalary),
+            url: String(job.redirect_url || ''),
+            source: 'Adzuna',
+            type: String(job.contract_type || job.contract_time || ''),
+            description: sanitizeDescription(String(job.description || job.adref || '')),
+            postedAt: normalizeDate(job.created || job.publication_date),
+          }
+        })
+      } catch { return [] }
+    }))
+
+    const results = allResults.flat()
+    console.error(`[${source}] Total results across all countries: ${results.length}`)
+    return results
   } catch (err) {
     console.error(`[${source}] Fetch failed:`, err instanceof Error ? err.message : String(err))
     if (err instanceof Error && err.stack) console.error(`[${source}] Stack:`, err.stack.split('\n').slice(0, 3).join('\n'))
@@ -957,19 +968,21 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
 export async function fetchJSearch(keywords: string[], location?: string): Promise<JobResult[]> {
   const source = 'JSearch'
   try {
-    const rapidApiKey = process.env.RAPID_API_KEY
+    // Accept either RAPID_API_KEY or JSEARCH_API_KEY env var name
+    const rapidApiKey = process.env.RAPID_API_KEY || process.env.JSEARCH_API_KEY
     if (!rapidApiKey) {
-      console.error(`[${source}] Skipping: no RapidAPI key configured`)
+      console.error(`[${source}] Skipping: no API key (set RAPID_API_KEY or JSEARCH_API_KEY)`)
       return []
     }
 
     const query = keywords.join(' ')
     const locationParam = location && location !== 'remote' ? ` ${location}` : '';
     const fullQuery = `${query}${locationParam}`
-    
-    // For students, prioritize internships and part-time (Fix #3)
-    const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(fullQuery)}&page=1&num_pages=1&employment_types=INTERNSHIP,PARTTIME`
-    console.error(`[${source}] Starting fetch for: ${fullQuery} | URL: ${url}`)
+
+    // No employment_types filter — retail/hospitality/all job types must be allowed
+    // JSearch returns all relevant jobs and we score them server-side
+    const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(fullQuery)}&page=1&num_pages=1`
+    console.error(`[${source}] Starting fetch for: ${fullQuery}`)
 
     const res = await fetch(url, {
       headers: {
