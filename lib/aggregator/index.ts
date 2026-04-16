@@ -968,58 +968,68 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
 export async function fetchJSearch(keywords: string[], location?: string): Promise<JobResult[]> {
   const source = 'JSearch'
   try {
-    // Accept either RAPID_API_KEY or JSEARCH_API_KEY env var name
-    const rapidApiKey = process.env.RAPID_API_KEY || process.env.JSEARCH_API_KEY
-    if (!rapidApiKey) {
-      console.error(`[${source}] Skipping: no API key (set RAPID_API_KEY or JSEARCH_API_KEY)`)
+    // Check JSEARCH_API_KEY first, then fall back to RAPID_API_KEY
+    const apiKey = process.env.JSEARCH_API_KEY || process.env.RAPID_API_KEY
+    if (!apiKey) {
+      console.error(`[${source}] Skipping: no API key (set JSEARCH_API_KEY or RAPID_API_KEY in env vars)`)
       return []
     }
 
     const query = keywords.join(' ')
-    const locationParam = location && location !== 'remote' ? ` ${location}` : '';
+    const locationParam = location && location !== 'remote' ? ` ${location}` : ''
     const fullQuery = `${query}${locationParam}`
 
-    // No employment_types filter — retail/hospitality/all job types must be allowed
-    // JSearch returns all relevant jobs and we score them server-side
-    const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(fullQuery)}&page=1&num_pages=1`
-    console.error(`[${source}] Starting fetch for: ${fullQuery}`)
+    // num_pages=2 → up to 20 results; no employment_type filter so retail/hospitality jobs come through
+    const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(fullQuery)}&page=1&num_pages=2`
+    console.error(`[${source}] Fetching: "${fullQuery}"`)
 
     const res = await fetch(url, {
       headers: {
-        'X-RapidAPI-Key': rapidApiKey,
+        'X-RapidAPI-Key': apiKey,
         'X-RapidAPI-Host': 'jsearch.p.rapidapi.com',
       },
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(15000), // 15s — JSearch is slower than other APIs
     })
-    console.error(`[${source}] Response status: ${res.status}`)
+
+    console.error(`[${source}] Status: ${res.status}`)
     if (!res.ok) {
       const body = await res.text().catch(() => '')
-      console.error(`[${source}] Error body (first 500): ${body.substring(0, 500)}`)
+      console.error(`[${source}] Error: ${body.substring(0, 300)}`)
       return []
     }
+
     const data = await res.json()
-    const jobs = data.data || []
-    console.error(`[${source}] Results returned: ${jobs.length}`)
+    const jobs: Record<string, unknown>[] = data.data || []
+    console.error(`[${source}] Got ${jobs.length} jobs`)
     if (jobs.length === 0) {
-      console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 500)}`)
+      console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 400)}`)
     }
 
-    return jobs.map((job: Record<string, unknown>) => {
+    return jobs.map((job) => {
       const rawSalary = job.job_min_salary && job.job_max_salary
         ? `${job.job_min_salary} - ${job.job_max_salary} ${job.job_salary_period || ''}`
         : String(job.job_salary || '')
-      const rawDescription = String(job.job_description || '')
+
+      // Build a proper location string from all available fields
+      const city    = String(job.job_city    || '')
+      const state   = String(job.job_state   || '')
+      const country = String(job.job_country || '')
+      const isRemote = Boolean(job.job_is_remote)
+      const locationStr = isRemote
+        ? 'Remote'
+        : [city, state, country].filter(Boolean).join(', ') || 'Remote'
+
       return {
-        title: String(job.job_title || ''),
-        company: String(job.employer_name || ''),
-        location: String(job.job_city || job.job_country || job.job_is_remote ? 'Remote' : ''),
-        salary: rawSalary,
-        salaryObj: normalizeSalary(rawSalary),
-        url: String(job.job_apply_link || ''),
-        source: 'JSearch',
-        type: String(job.job_employment_type || ''),
-        description: sanitizeDescription(rawDescription),
-        postedAt: normalizeDate(job.job_posted_at_datetime_utc || job.job_posted_at),
+        title:       String(job.job_title     || ''),
+        company:     String(job.employer_name || ''),
+        location:    locationStr,
+        salary:      rawSalary,
+        salaryObj:   normalizeSalary(rawSalary),
+        url:         String(job.job_apply_link || '#'),
+        source:      'JSearch',
+        type:        String(job.job_employment_type || ''),
+        description: sanitizeDescription(String(job.job_description || '')),
+        postedAt:    normalizeDate(job.job_posted_at_datetime_utc || job.job_posted_at),
       }
     })
   } catch (err) {
