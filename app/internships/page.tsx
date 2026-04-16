@@ -133,10 +133,12 @@ function InternshipsContent() {
       const extracted = await extractSkillsFromResume(text);
       localStorage.setItem('userHardSkills', JSON.stringify(extracted.hard_skills || []));
       localStorage.setItem('userSoftSkills', JSON.stringify(extracted.soft_skills || []));
-      localStorage.setItem('userSkills', JSON.stringify([...(extracted.hard_skills || []), ...(extracted.soft_skills || [])]));
-      localStorage.setItem('userExperience', extracted.experienceLevel || 'fresher');
-      localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
-      localStorage.setItem('userLocation', extracted.location || 'India');
+      localStorage.setItem('userSkills', JSON.stringify(extracted.skills || [...(extracted.hard_skills || []), ...(extracted.soft_skills || [])]));
+      localStorage.setItem('userExperience', extracted.experience_level || extracted.experienceLevel || 'entry');
+      localStorage.setItem('userExperienceLevel', extracted.experience_level || extracted.experienceLevel || 'entry');
+      localStorage.setItem('userRoles', JSON.stringify(extracted.roles?.length ? extracted.roles : (extracted.roleTypes || [])));
+      localStorage.setItem('userLocation', extracted.location || '');
+      localStorage.setItem('userIndustry', extracted.industry || '');
 
       await searchJobs(text, extracted.hard_skills || []);
     } catch (err) {
@@ -155,8 +157,9 @@ function InternshipsContent() {
       const userLocation = localStorage.getItem('userLocation') || '';
       const userHardSkills = directSkills || JSON.parse(localStorage.getItem('userHardSkills') || '[]');
       const userSoftSkills = JSON.parse(localStorage.getItem('userSoftSkills') || '[]');
-      const userExperience = localStorage.getItem('userExperience') || 'fresher';
+      const userExperience = localStorage.getItem('userExperienceLevel') || localStorage.getItem('userExperience') || 'entry';
       const userRoles = JSON.parse(localStorage.getItem('userRoles') || '[]');
+      const userIndustry = localStorage.getItem('userIndustry') || '';
 
       const primarySkill =
         (userRoles.length > 0 && userRoles[0]) ||
@@ -173,6 +176,7 @@ function InternshipsContent() {
           softSkills: userSoftSkills,
           experience: userExperience,
           preferredRoles: userRoles,
+          industry: userIndustry,
           query: primarySkill,
         })
       });

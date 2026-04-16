@@ -27,15 +27,13 @@ export default function DashboardPage() {
   }, []);
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    // Clear ALL previous resume data to prevent cross-contamination (Fix #4 & #9)
-    localStorage.removeItem('resumeText');
-    localStorage.removeItem('userSkills');
-    localStorage.removeItem('userExperience');
-    localStorage.removeItem('userRoles');
-    localStorage.removeItem('userLocation');
-    localStorage.removeItem('detectedCountry');
-    localStorage.removeItem('resumeVersion');
-    localStorage.removeItem('resumeTimestamp');
+    // Clear ALL previous resume data to prevent cross-contamination
+    [
+      'resumeText', 'userSkills', 'userHardSkills', 'userSoftSkills',
+      'userExperience', 'userRoles', 'userLocation', 'userIndustry',
+      'userExperienceLevel', 'userName', 'userEmail', 'userPhone', 'userEducation',
+      'detectedCountry', 'resumeVersion', 'resumeTimestamp',
+    ].forEach(k => localStorage.removeItem(k));
     sessionStorage.removeItem('selectedJob');
 
     const file = e.target.files?.[0];
@@ -72,24 +70,27 @@ export default function DashboardPage() {
       const extracted = await extractSkillsFromResume(text);
       console.log('=== SKILLS EXTRACTED ===', extracted);
 
-      // Clear old data first (prevents cross-resume pollution)
-      ['userSkills', 'userHardSkills', 'userSoftSkills', 'userRoles',
-       'userExperience', 'userLocation'].forEach(k => localStorage.removeItem(k));
-
+      // Save all fields — full set to avoid stale data
       localStorage.setItem('userHardSkills', JSON.stringify(extracted.hard_skills || []));
       localStorage.setItem('userSoftSkills', JSON.stringify(extracted.soft_skills || []));
-      localStorage.setItem('userSkills', JSON.stringify([...(extracted.hard_skills || []), ...(extracted.soft_skills || [])]));
-      localStorage.setItem('userExperience', extracted.experienceLevel || 'fresher');
-      localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
-      localStorage.setItem('userLocation', extracted.location || 'India');
+      localStorage.setItem('userSkills', JSON.stringify(extracted.skills || [...(extracted.hard_skills || []), ...(extracted.soft_skills || [])]));
+      localStorage.setItem('userExperience', extracted.experience_level || extracted.experienceLevel || 'entry');
+      localStorage.setItem('userExperienceLevel', extracted.experience_level || extracted.experienceLevel || 'entry');
+      localStorage.setItem('userRoles', JSON.stringify(extracted.roles?.length ? extracted.roles : (extracted.roleTypes || [])));
+      localStorage.setItem('userLocation', extracted.location || '');
+      localStorage.setItem('userIndustry', extracted.industry || '');
+      if (extracted.name) localStorage.setItem('userName', extracted.name);
+      if (extracted.email) localStorage.setItem('userEmail', extracted.email);
+      if (extracted.phone) localStorage.setItem('userPhone', extracted.phone);
+      if (extracted.education) localStorage.setItem('userEducation', extracted.education);
       localStorage.setItem('resumeText', text);
       localStorage.setItem('lastUserId', user?.id || 'anonymous');
       localStorage.setItem('resumeTimestamp', String(Date.now()));
       
-      // Verify saved:
       console.log('=== SAVED TO STORAGE ===');
-      console.log('userSkills:', localStorage.getItem('userSkills'));
-      console.log('userExperience:', localStorage.getItem('userExperience'));
+      console.log('userHardSkills:', localStorage.getItem('userHardSkills'));
+      console.log('userRoles:', localStorage.getItem('userRoles'));
+      console.log('userIndustry:', localStorage.getItem('userIndustry'));
     } catch (error) {
       console.error('Upload failed:', error);
       setError(error instanceof Error ? error.message : 'Failed to process resume. Please try a .txt file.');
