@@ -89,59 +89,28 @@ Return exactly this JSON:
 function fallbackExtractProfile(resumeText: string, clientSkills: string[], clientRoles: string[]): ResumeProfile {
   const lower = resumeText.toLowerCase();
   
-  // Industry-agnostic keyword list — covers ALL major fields
   const allKeywords = [
-    // ── Technology ──
     'javascript', 'typescript', 'python', 'java', 'react', 'angular', 'vue', 'node',
     'mongodb', 'sql', 'postgresql', 'aws', 'docker', 'kubernetes', 'git',
     'html', 'css', 'figma', 'redux', 'nextjs', 'django', 'flask', 'spring',
     'machine learning', 'deep learning', 'tensorflow', 'pytorch', 'nlp',
-    // ── Business / Finance ──
     'excel', 'powerpoint', 'tableau', 'power bi', 'r', 'stata', 'spss',
     'financial modeling', 'valuation', 'consulting', 'strategy', 'case study',
-    // ── Marketing ──
     'marketing', 'seo', 'social media', 'brand management', 'salesforce',
-    // ── Product ──
     'product management', 'agile', 'scrum', 'jira',
-    // ── Operations ──
     'supply chain', 'logistics', 'operations',
-    // ── Design ──
-    'photoshop', 'illustrator', 'indesign', 'canva', 'ui design', 'ux design',
-    // ── Retail / Hospitality / Customer Service ──
-    'customer service', 'cash handling', 'pos', 'point of sale', 'stock management',
-    'retail', 'sales', 'merchandising', 'inventory management',
-    'hospitality', 'food service', 'waitstaff', 'barista', 'front desk',
-    'visual merchandising', 'store management', 'loss prevention',
-    // ── Sports / Fitness / Recreation ──
+    'photoshop', 'illustrator', 'indesign', 'canva',
+    'customer service', 'cash handling', 'pos', 'retail', 'sales', 'merchandising',
+    'inventory management', 'stock management', 'visual merchandising',
     'sports', 'coaching', 'umpiring', 'fitness', 'recreation', 'personal training',
-    'athletic', 'sport management', 'exercise science', 'physiotherapy',
-    'soccer', 'football', 'cricket', 'basketball', 'swimming', 'tennis',
-    // ── Healthcare / Medical ──
-    'healthcare', 'nursing', 'medical', 'patient care', 'clinical',
-    'first aid', 'cpr', 'pharmacy', 'dentistry', 'psychology',
-    // ── Education / Teaching ──
-    'teaching', 'tutoring', 'education', 'curriculum', 'lesson planning',
-    'classroom management', 'early childhood', 'special education',
-    // ── Law / Legal ──
-    'legal', 'law', 'paralegal', 'contract', 'compliance', 'regulatory',
-    // ── HR / People ──
-    'human resources', 'recruiting', 'hiring', 'talent acquisition', 'payroll',
-    'employee relations', 'training and development',
-    // ── Trades / Skilled Labor ──
-    'carpentry', 'plumbing', 'electrical', 'welding', 'automotive', 'mechanic',
-    'construction', 'landscaping', 'culinary', 'chef', 'baking',
-    // ── Arts / Creative ──
-    'photography', 'videography', 'video editing', 'graphic design', 'animation',
-    'music', 'writing', 'content creation', 'journalism', 'copywriting',
-    // ── Accounting / Finance ──
-    'accounting', 'bookkeeping', 'auditing', 'tax', 'payroll', 'budgeting',
-    'accounts payable', 'accounts receivable', 'financial analysis',
-    // ── Data / Analytics ──
-    'data analysis', 'data entry', 'analytics', 'reporting', 'dashboards',
-    'business intelligence', 'statistical analysis',
-    // ── Communications / PR ──
-    'public relations', 'communications', 'media relations', 'event planning',
-    'community management', 'social media marketing',
+    'athletic', 'soccer', 'football', 'cricket', 'basketball', 'swimming',
+    'hospitality', 'food service', 'front desk', 'hotel',
+    'healthcare', 'nursing', 'patient care', 'first aid',
+    'teaching', 'tutoring', 'education', 'classroom',
+    'legal', 'law', 'paralegal', 'compliance',
+    'accounting', 'bookkeeping', 'auditing',
+    'photography', 'videography', 'video editing', 'graphic design',
+    'data analysis', 'data entry', 'analytics',
   ];
   
   const found = allKeywords.filter(kw => {
@@ -151,81 +120,60 @@ function fallbackExtractProfile(resumeText: string, clientSkills: string[], clie
   
   const skills = [...new Set([...found, ...clientSkills])].filter(Boolean);
   
-  // Detect domain — pick the one with the MOST keyword matches
   let domain = 'general';
-  let maxMatches = 0;
-  const domainChecks: [string[], string][] = [
-    [['embedded', 'arduino', 'raspberry', 'microcontroller', 'fpga', 'pcb', 'firmware', 'ocaml', 'verilog', 'vhdl', 'iot', 'rtos', 'stm32', 'esp32', 'hardware design', 'circuit', 'signal processing', 'robotics', 'control systems'], 'embedded_systems'],
-    [['consulting', 'strategy', 'mckinsey', 'bain', 'bcg', 'deloitte', 'advisory', 'big four', 'case study'], 'consulting'],
-    [['finance', 'banking', 'investment', 'valuation', 'equity', 'portfolio', 'derivatives', 'private equity', 'venture capital'], 'finance'],
-    [['marketing', 'seo', 'social media', 'brand', 'content marketing', 'digital marketing', 'market research'], 'marketing'],
-    [['react', 'angular', 'node', 'python', 'javascript', 'developer', 'engineer', 'software'], 'software_engineering'],
-    [['machine learning', 'data science', 'tensorflow', 'pytorch', 'data analysis', 'statistical'], 'data_science'],
-    [['supply chain', 'logistics', 'operations', 'lean', 'six sigma', 'erp'], 'operations'],
-    [['human resources', 'recruiting', 'talent', 'organizational', 'performance management'], 'hr'],
-    [['legal', 'compliance', 'contract', 'regulatory', 'intellectual property'], 'legal'],
-    [['healthcare', 'clinical', 'pharmaceutical', 'biotech', 'medical'], 'healthcare'],
-    [['product management', 'product design', 'ux', 'user research'], 'product'],
-    [['accounting', 'audit', 'tax', 'financial planning', 'budgeting'], 'accounting'],
-    [['business development', 'partnership', 'revenue', 'customer success', 'account management'], 'business_development'],
-    [['retail', 'customer service', 'sales assistant', 'cash handling', 'store', 'shop', 'point of sale', 'pos', 'merchandising'], 'retail'],
-    [['hospitality', 'food service', 'restaurant', 'barista', 'waiter', 'waitress', 'catering', 'hotel', 'front desk', 'reception'], 'hospitality'],
-    [['sports', 'coaching', 'fitness', 'athletic', 'recreation', 'umpire', 'referee', 'personal training'], 'sports'],
-    [['education', 'teaching', 'tutoring', 'childcare', 'early childhood', 'teacher aide', 'substitute teacher'], 'education'],
-    [['healthcare', 'aged care', 'disability support', 'caregiver', 'nursing assistant', 'medical assistant'], 'healthcare_support'],
-    [['trades', 'carpentry', 'plumbing', 'electrical', 'mechanic', 'welding', 'construction', 'apprentice'], 'trades'],
-    [['creative', 'photography', 'videography', 'graphic design', 'writing', 'journalism', 'content creation', 'social media'], 'creative'],
-  ];
-  
-  for (const [keywords, domainName] of domainChecks) {
-    const matchCount = keywords.filter(k => lower.includes(k)).length;
-    if (matchCount >= 1 && matchCount > maxMatches) {
-      maxMatches = matchCount;
-      domain = domainName;
-    }
-  }
+  if (['consulting', 'strategy', 'mckinsey', 'bain', 'bcg', 'deloitte', 'advisory'].some(k => lower.includes(k))) domain = 'consulting';
+  else if (['finance', 'banking', 'investment', 'valuation', 'equity', 'accounting', 'bookkeeping'].some(k => lower.includes(k))) domain = 'finance';
+  else if (['retail', 'customer service', 'cash handling', 'pos', 'shop', 'store', 'merchandising', 'sales assistant'].some(k => lower.includes(k))) domain = 'retail';
+  else if (['sport', 'coaching', 'umpir', 'fitness', 'recreation', 'athletic', 'soccer', 'cricket', 'football', 'swimming', 'basketball'].some(k => lower.includes(k))) domain = 'sports';
+  else if (['hospitality', 'food service', 'hotel', 'restaurant', 'barista', 'culinary', 'chef', 'front desk'].some(k => lower.includes(k))) domain = 'hospitality';
+  else if (['healthcare', 'nursing', 'medical', 'patient', 'clinical', 'first aid', 'pharmacy'].some(k => lower.includes(k))) domain = 'healthcare';
+  else if (['teaching', 'tutoring', 'education', 'classroom', 'curriculum'].some(k => lower.includes(k))) domain = 'education';
+  else if (['legal', 'law', 'paralegal', 'compliance', 'regulatory'].some(k => lower.includes(k))) domain = 'law';
+  else if (['marketing', 'seo', 'social media', 'brand', 'content creation', 'copywriting'].some(k => lower.includes(k))) domain = 'marketing';
+  else if (['react', 'angular', 'node', 'python', 'javascript', 'developer', 'engineer', 'programming'].some(k => lower.includes(k))) domain = 'software_engineering';
+  else if (['machine learning', 'data science', 'tensorflow', 'pytorch', 'data analysis'].some(k => lower.includes(k))) domain = 'data_science';
+  else if (['photography', 'videography', 'video editing', 'graphic design', 'animation'].some(k => lower.includes(k))) domain = 'design';
 
-  // Explicit mapping for non-tech industries to roles
-  const domainRoleMap: Record<string, string[]> = {
-    'retail': ['retail sales assistant', 'store associate', 'customer service representative'],
-    'sports': ['sports retail associate', 'fitness center attendant', 'recreation assistant'],
-    'hospitality': ['hotel front desk agent', 'restaurant server', 'hospitality intern'],
-    'healthcare': ['healthcare assistant', 'medical office intern', 'patient care aide'],
-    'education': ['teaching assistant', 'tutor', 'education intern'],
-    'finance': ['finance intern', 'accounting assistant', 'financial analyst intern'],
+  const domainRoles: Record<string, string[]> = {
+    'retail': ['retail sales assistant', 'customer service representative', 'store associate'],
+    'sports': ['sports retail associate', 'recreation assistant', 'customer service representative'],
+    'hospitality': ['front desk agent', 'customer service representative', 'hospitality assistant'],
+    'healthcare': ['healthcare assistant', 'patient care aide', 'customer service representative'],
+    'education': ['teaching assistant', 'tutor', 'after school program assistant'],
+    'finance': ['finance intern', 'accounting assistant', 'bookkeeping assistant'],
     'marketing': ['marketing intern', 'social media coordinator', 'content writing intern'],
-    'law': ['legal intern', 'paralegal assistant', 'compliance intern'],
-    'design': ['design intern', 'graphic design assistant', 'ui/ux intern'],
-    'hr': ['human resources intern', 'recruiting coordinator', 'hr assistant'],
-    'consulting': ['management consulting intern', 'strategy analyst', 'business analyst'],
-    'data_science': ['data science intern', 'data analyst', 'ml engineer intern'],
-    'software_engineering': ['software engineering intern', 'frontend developer', 'backend developer'],
-    'communications': ['communications intern', 'pr assistant', 'media coordinator'],
-    'general': ['intern', 'assistant', 'administrator'],
+    'data_science': ['data analyst intern', 'data science intern'],
+    'software_engineering': ['software engineer intern', 'frontend developer', 'backend developer'],
+    'consulting': ['consulting intern', 'business analyst intern'],
+    'law': ['legal intern', 'paralegal assistant'],
+    'design': ['design intern', 'graphic design assistant'],
+    'general': ['intern', 'customer service representative', 'assistant'],
   };
-  const roles = clientRoles.length > 0 ? clientRoles : (domainRoleMap[domain] || ['intern']);
   
-  // Generate better search keywords from found skills
-  const searchKeywords: string[] = [];
-  if (domain !== 'general') {
-    searchKeywords.push(`${domain.replace('_', ' ')} intern`);
-    searchKeywords.push(`${domain.replace('_', ' ')} analyst`);
-  }
-  // Add top 3 most relevant found skills as search terms
-  for (const skill of found.slice(0, 3)) {
-    searchKeywords.push(`${skill} intern`);
-  }
-  // Add roles as search terms
-  for (const role of roles.slice(0, 2)) {
-    searchKeywords.push(`${role} internship`);
-  }
+  const roles = clientRoles.length > 0 ? clientRoles : (domainRoles[domain] || ['intern']);
+  
+  const domainQueries: Record<string, string[]> = {
+    'retail': ['retail sales associate', 'retail customer service', 'store associate'],
+    'sports': ['sports retail', 'customer service retail', 'recreation assistant'],
+    'hospitality': ['customer service', 'front desk', 'hospitality staff'],
+    'healthcare': ['healthcare assistant', 'patient care', 'customer service'],
+    'education': ['teaching assistant', 'tutor', 'education assistant'],
+    'finance': ['finance intern', 'accounting assistant', 'bookkeeping'],
+    'marketing': ['marketing intern', 'social media coordinator', 'content writer'],
+    'data_science': ['data analyst intern', 'data science intern'],
+    'software_engineering': ['software engineer intern', 'junior developer'],
+    'consulting': ['consulting intern', 'business analyst intern'],
+    'law': ['legal intern', 'paralegal'],
+    'design': ['design intern', 'graphic design'],
+    'general': ['internship', 'customer service', 'entry level'],
+  };
   
   return {
     skills,
     roles,
     industry: domain,
     experience_level: 'student',
-    keywords: [...new Set(searchKeywords)].slice(0, 6)
+    keywords: domainQueries[domain] || ['internship', 'entry level']
   };
 }
 
@@ -282,7 +230,7 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { 
-      query = 'software developer', 
+      query = 'internship', 
       location: bodyLocation = '', 
       skills: clientSkills = [], 
       preferredRoles: clientRoles = [],
