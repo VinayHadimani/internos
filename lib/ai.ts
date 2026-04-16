@@ -1,23 +1,9 @@
-"use server";
-
 import { callAI } from '@/lib/rotating-ai';
-
-function cleanResumeText(text: string): string {
-  return text
-    .replace(/\(Tip:[\s\S]*?\)/g, '')
-    .replace(/\(Optional:[\s\S]*?\)/g, '')
-    .replace(/\[[\s\S]*?Tip:[\s\S]*?\]/g, '')
-    .replace(/^Tip:.*$/gm, '')
-    .split('\n')
-    .map(l => l.trim())
-    .filter(l => l.length > 0)
-    .join('\n');
-}
 
 export interface ExtractedSkills {
   hard_skills: string[];
   soft_skills: string[];
-  skills: string[];           // combined hard + soft (backward compat)
+  skills: string[];
   experience: string;
   location: string;
   education: string;
@@ -27,53 +13,39 @@ export interface ExtractedSkills {
   name: string;
   email: string;
   phone: string;
-  // legacy aliases kept for backward compat
-  experienceLevel: string;
-  industries: string[];
-  roleTypes: string[];
+}
+
+function cleanResumeText(text: string): string {
+  return text
+    .replace(/\(Tip:.*?\)/gi, '')
+    .replace(/\(Optional:.*?\)/gi, '')
+    .replace(/\[.*?Tip:.*?\]/gi, '')
+    .replace(/Tip:.*?(?:\n|$)/gi, '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .join('\n');
 }
 
 export async function extractSkillsFromResume(resumeText: string): Promise<ExtractedSkills> {
-  const empty: ExtractedSkills = {
-    hard_skills: [],
-    soft_skills: [],
-    skills: [],
-    experience: '',
-    location: '',
-    education: '',
-    roles: [],
-    industry: '',
-    experience_level: 'entry',
-    name: '',
-    email: '',
-    phone: '',
-    experienceLevel: 'entry',
-    industries: [],
-    roleTypes: [],
-  };
-
   try {
     const clean = cleanResumeText(resumeText);
 
-    const systemPrompt = `You are a resume analyst. Extract structured data from resumes. Return ONLY valid JSON, no markdown, no explanation.`;
-
-    const userPrompt = `Analyze this resume and extract structured data.
+    const extractResponse = await callAI(
+      `You are a resume analyst. Analyze this resume and extract structured data.
 
 RULES:
 - CAREER OBJECTIVE comes first: if there's a Professional Summary, Career Objective, or About Me section, read it to understand what roles they WANT
-- Separate HARD SKILLS (technical, tools, software, certifications, equipment, operational abilities) from SOFT SKILLS (communication, teamwork, leadership)
-- Operational abilities ARE hard skills: "cash handling", "operating cash register", "inventory management", "food preparation", "serving customers" etc
+- Separate HARD SKILLS (technical, tools, software, certifications, equipment) from SOFT SKILLS (communication, teamwork, leadership)
+- Operational abilities are hard skills: "cash handling", "operating cash register", "inventory management", "food preparation" etc.
 - For students/entry-level: coursework, projects, and part-time jobs count as valid experience
-- DO NOT leave hard_skills empty. If they have no technical skills, list whatever specific abilities they DO have.
-- roles should match the CAREER OBJECTIVE, not generic titles
-- industry = where they WANT to work (from career objective), not just where they've worked
-- experience_level: "entry" (student/0-1yr), "junior" (1-3yr), "mid" (3-7yr), "senior" (7+yr)
+- Extract actual experience level: "entry" (student/0-1yr), "junior" (1-3yr), "mid" (3-7yr), "senior" (7+yr)
 
-Return ONLY this JSON:
+Return ONLY valid JSON:
 {
   "hard_skills": ["skill1", "skill2"],
   "soft_skills": ["skill1", "skill2"],
-  "experience": "summary of their work experience",
+  "experience": "2 years at Company X as Role",
   "location": "City, Country",
   "education": "Degree from University",
   "roles": ["Target Role 1", "Target Role 2"],
@@ -85,29 +57,27 @@ Return ONLY this JSON:
 }
 
 RESUME:
-${clean.slice(0, 5000)}`;
+${clean}`,
+      clean,
+      {
+        model: 'llama-3.3-70b-versatile',
+        temperature: 0.2,
+        max_tokens: 500,
+        response_format: { type: 'json_object' }
+      }
+    );
 
-    const response = await callAI(systemPrompt, userPrompt, {
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0.2,
-      providerPriority: ['groq', 'gemini', 'openai'],
-    });
-
-    if (!response.success || !response.content) {
-      console.error('[ai.ts] AI extraction failed:', response.error);
-      return empty;
+    if (!extractResponse.success) {
+      throw new Error(extractResponse.error || 'AI Extraction failed');
     }
 
-    const jsonStr = response.content
-      .replace(/```json\n?/g, '')
-      .replace(/```/g, '')
-      .trim();
+    let raw = extractResponse.content || '{}';
+    raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
 
-    const parsed = JSON.parse(jsonStr);
+    const parsed = JSON.parse(raw);
 
-    const hard_skills: string[] = Array.isArray(parsed.hard_skills) ? parsed.hard_skills : [];
-    const soft_skills: string[] = Array.isArray(parsed.soft_skills) ? parsed.soft_skills : [];
-    const roles: string[] = Array.isArray(parsed.roles) ? parsed.roles : [];
+    const hard_skills = Array.isArray(parsed.hard_skills) ? parsed.hard_skills : [];
+    const soft_skills = Array.isArray(parsed.soft_skills) ? parsed.soft_skills : [];
 
     return {
       hard_skills,
@@ -116,52 +86,63 @@ ${clean.slice(0, 5000)}`;
       experience: parsed.experience || '',
       location: parsed.location || '',
       education: parsed.education || '',
-      roles,
+      roles: Array.isArray(parsed.roles) ? parsed.roles : [],
       industry: parsed.industry || '',
       experience_level: parsed.experience_level || 'entry',
       name: parsed.name || '',
       email: parsed.email || '',
       phone: parsed.phone || '',
-      // legacy aliases
-      experienceLevel: parsed.experience_level || 'entry',
-      industries: parsed.industry ? [parsed.industry] : [],
-      roleTypes: roles,
     };
   } catch (err) {
-    console.error('[ai.ts] Extract skills error:', err);
-    return empty;
+    console.error('Extract skills error:', err);
+    return {
+      hard_skills: [],
+      soft_skills: [],
+      skills: [],
+      experience: '',
+      location: '',
+      education: '',
+      roles: [],
+      industry: '',
+      experience_level: 'entry',
+      name: '',
+      email: '',
+      phone: '',
+    };
   }
 }
 
-/**
- * Translates foreign-language job descriptions to English using AI.
- */
+function isEnglish(text: string): boolean {
+  if (!text) return true;
+  const nonEnglishPatterns = /[\u0900-\u097F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\u0400-\u04FF\u0600-\u06FF\u0E00-\u0E7F]/;
+  if (nonEnglishPatterns.test(text)) return false;
+  const asciiCount = (text.match(/[\x00-\x7F]/g) || []).length;
+  return asciiCount / text.length > 0.95;
+}
+
 export async function translateJobToEnglish(text: string, sourceLanguage?: string): Promise<string> {
+  if (!text || isEnglish(text)) return text;
+
   try {
     const response = await callAI(
-      'You are a professional translator. Translate the provided text to English. Return ONLY the translated text, no explanation.',
-      sourceLanguage
-        ? `Translate this ${sourceLanguage} text to English:\n\n${text}`
-        : `Translate this text to English:\n\n${text}`,
-      { model: 'llama-3.3-70b-versatile', temperature: 0.1, providerPriority: ['groq', 'gemini', 'openai'] }
+      `You are a professional translator. Translate the following job posting to English.
+
+Rules:
+1. Maintain all formatting and structure
+2. Keep company names, URLs, and technical terms unchanged
+3. Use professional business English
+4. Preserve all job details accurately
+5. Return ONLY the translated text, no explanations`,
+      `Translate this job posting to English:\n\n${text}`,
+      {
+        model: 'llama-3.3-70b-versatile',
+        max_tokens: 2000
+      }
     );
-    return response.success && response.content ? response.content : text;
-  } catch {
+
+    return response.content || text;
+  } catch (error) {
+    console.error('Translation failed:', error);
     return text;
   }
-}
-
-// Keyword-based fallback (legacy — only used if AI completely unavailable)
-export function extractSkillsByKeywords(text: string): string[] {
-  const KNOWN_SKILLS = [
-    'python', 'javascript', 'typescript', 'java', 'c++', 'c#', 'react', 'node.js',
-    'sql', 'mongodb', 'postgresql', 'aws', 'docker', 'kubernetes', 'git',
-    'html', 'css', 'angular', 'vue', 'next.js', 'express', 'django', 'flask',
-    'machine learning', 'data analysis', 'excel', 'tableau', 'power bi',
-    'figma', 'photoshop', 'illustrator', 'seo', 'google analytics',
-    'cash handling', 'inventory management', 'customer service', 'food preparation',
-    'microsoft office', 'word', 'powerpoint', 'outlook',
-  ];
-  const lower = text.toLowerCase();
-  return KNOWN_SKILLS.filter(skill => lower.includes(skill));
 }

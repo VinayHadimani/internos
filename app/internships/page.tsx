@@ -134,9 +134,9 @@ function InternshipsContent() {
       localStorage.setItem('userHardSkills', JSON.stringify(extracted.hard_skills || []));
       localStorage.setItem('userSoftSkills', JSON.stringify(extracted.soft_skills || []));
       localStorage.setItem('userSkills', JSON.stringify(extracted.skills || [...(extracted.hard_skills || []), ...(extracted.soft_skills || [])]));
-      localStorage.setItem('userExperience', extracted.experience_level || extracted.experienceLevel || 'entry');
-      localStorage.setItem('userExperienceLevel', extracted.experience_level || extracted.experienceLevel || 'entry');
-      localStorage.setItem('userRoles', JSON.stringify(extracted.roles?.length ? extracted.roles : (extracted.roleTypes || [])));
+      localStorage.setItem('userExperience', extracted.experience_level || 'entry');
+      localStorage.setItem('userExperienceLevel', extracted.experience_level || 'entry');
+      localStorage.setItem('userRoles', JSON.stringify(extracted.roles || []));
       localStorage.setItem('userLocation', extracted.location || '');
       localStorage.setItem('userIndustry', extracted.industry || '');
 
