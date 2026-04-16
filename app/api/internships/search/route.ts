@@ -413,13 +413,8 @@ export async function POST(req: NextRequest) {
     const allJobs = await aggregateJobs(searchQueries.join(' '), bodyLocation || undefined, userCountry);
     console.log(`[Search] Fetched ${allJobs?.length || 0} total jobs in ${Date.now() - startTime}ms`);
 
-    // ── Step 5: Filter non-English jobs (only for non-DE users) ──
-    let filtered = allJobs || [];
-    if (userCountry !== 'DE') {
-      const before = filtered.length;
-      filtered = filtered.filter(j => !isLikelyGermanJob(j));
-      if (filtered.length < before) console.log(`[Search] Removed ${before - filtered.length} German-language jobs`);
-    }
+    // ── Step 5: Keep all jobs (country penalty in scoring handles filtering) ──
+    const filtered = allJobs || [];
 
     // ── Step 6: Deduplicate ──
     const deduped = deduplicateJobs(filtered);

@@ -235,25 +235,26 @@ async function runFetchersInParallel(
   wework: JobResult[]
   arbeitnow: JobResult[]
 }> {
-  const [
-    remotiveResult,
-    himalayasResult,
-    remoteOKResult,
-    adzunaResult,
-    jsearchResult,
-    internshalaResult,
-    weworkResult,
-    arbeitnowResult,
-  ] = await Promise.allSettled([
-    fetchRemotive(keywords),
-    fetchHimalayas(keywords),
-    fetchRemoteOK(keywords),
-    fetchAdzuna(keywords, location, userCountry),
-    fetchJSearch(keywords),
-    fetchInternshala(keywords),
-    fetchWeWorkRemotely(keywords),
-    fetchArbeitnow(keywords),
-  ])
+    console.error(`[Aggregator] Starting parallel fetchers for keywords: [${keywords.join(', ')}]`);
+    const [
+      remotiveResult,
+      himalayasResult,
+      remoteOKResult,
+      adzunaResult,
+      jsearchResult,
+      internshalaResult,
+      weworkResult,
+      arbeitnowResult,
+    ] = await Promise.allSettled([
+      fetchRemotive(keywords),
+      fetchHimalayas(keywords),
+      fetchRemoteOK(keywords),
+      fetchAdzuna(keywords, location, userCountry),
+      fetchJSearch(keywords),
+      fetchInternshala(keywords),
+      fetchWeWorkRemotely(keywords),
+      fetchArbeitnow(keywords),
+    ])
 
   const extract = (result: PromiseSettledResult<JobResult[]>, name: string): JobResult[] => {
     if (result.status === 'fulfilled') return result.value
@@ -622,11 +623,12 @@ export async function fetchArbeitnow(keywords: string[]): Promise<JobResult[]> {
 // FIX: Adzuna now routes to the correct country based on user's location
 export async function fetchAdzuna(keywords: string[], location: string, userCountry?: string | null): Promise<JobResult[]> {
   const source = 'Adzuna'
+  console.error(`[${source}] Entering fetcher...`);
   try {
     const appId = process.env.ADZUNA_APP_ID
     const appKey = process.env.ADZUNA_APP_KEY
     if (!appId || !appKey) {
-      console.error(`[${source}] Skipping: no API keys configured`)
+      console.error(`[${source}] Skipping: no API keys configured (ADZUNA_APP_ID/KEY)`)
       return []
     }
 
@@ -676,10 +678,11 @@ export async function fetchAdzuna(keywords: string[], location: string, userCoun
 // FIX: JSearch fetches 2 pages instead of 1 for more results
 export async function fetchJSearch(keywords: string[]): Promise<JobResult[]> {
   const source = 'JSearch'
+  console.error(`[${source}] Entering fetcher...`);
   try {
     const apiKey = process.env.JSEARCH_API_KEY || process.env.RAPID_API_KEY
     if (!apiKey) {
-      console.error(`[${source}] Skipping: no API key configured`)
+      console.error(`[${source}] Skipping: no API key configured (JSEARCH_API_KEY/RAPID_API_KEY)`)
       return []
     }
 
