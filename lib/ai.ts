@@ -2,6 +2,16 @@
 
 import { callAI } from '@/lib/rotating-ai';
 
+function cleanResumeText(text: string): string {
+  return text
+    .replace(/\(Tip:[\s\S]*?\)/g, '')
+    .replace(/^Tip:.*$/gm, '')
+    .replace(/^Page \d+$/gm, '')
+    .replace(/^((?:Resume|CV|Curriculum Vitae)\s*)$/gim, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 export interface ExtractedSkills {
   hard_skills: string[];
   soft_skills: string[];
@@ -13,29 +23,36 @@ export interface ExtractedSkills {
 
 export async function extractSkillsFromResume(resumeText: string): Promise<ExtractedSkills> {
   try {
+    const cleanedText = cleanResumeText(resumeText);
+
     const prompt = `You are a resume analysis engine. Read the resume and extract a professional profile.
 
-The resume could be from ANY career field. Do not assume any default industry.
+The resume could be from ANY career field and ANY experience level (high school student to senior professional).
+Do not assume any default industry.
+
+IMPORTANT: Many resumes contain template "(Tip: ...)" paragraphs. IGNORE these — they are resume-writing instructions, not real content.
+
+If the resume has a "Career Objective" or "Objective" section, READ IT CAREFULLY. It states what job they want — use it as the PRIMARY source for roleTypes and industries.
 
 Extract and return JSON:
 {
-  "hard_skills": ["specific, searchable abilities from the resume"],
+  "hard_skills": ["specific abilities found in the resume"],
   "soft_skills": ["generic interpersonal traits"],
   "experienceLevel": "fresher or junior or mid or senior",
-  "industries": ["primary industry from their work experience"],
-  "roleTypes": ["3-5 job titles they should search for, based on their actual work"],
-  "location": "city, country from their address"
+  "industries": ["industry from career objective or work experience"],
+  "roleTypes": ["3-5 job titles from their career objective or work experience"],
+  "location": "city, country"
 }
 
 RULES:
-1. hard_skills = specific searchable skills (Python, SEO, AutoCAD, patient care, inventory management). NO soft skills.
-2. soft_skills = generic traits (communication, teamwork, leadership). Separate from hard_skills.
-3. industries = what industry their WORK EXPERIENCE is in. Not what they studied unless they have no work experience.
-4. roleTypes = realistic job titles for this person. Based on WHERE they worked, not just what they know. 3-5 titles.
+1. hard_skills = specific searchable skills. For entry-level workers with NO technical skills, include basic abilities: "cash handling", "operating cash register", "customer service", "basic math", "serving customers", "food preparation". NEVER leave this empty.
+2. soft_skills = generic traits only (communication, teamwork, leadership). Keep separate from hard_skills.
+3. industries = what industry they want to work in. Use the Career Objective first. One or two words.
+4. roleTypes = job titles that match THEIR career objective or work. Not generic. 3-5 titles.
 5. location = extract from address/contact info.
 6. Return ONLY valid JSON, no explanation.`;
 
-    const response = await callAI(prompt, resumeText, {
+    const response = await callAI(prompt, cleanedText, {
       model: 'llama-3.3-70b-versatile',
       temperature: 0.1,
       providerPriority: ['groq', 'gemini', 'openai']

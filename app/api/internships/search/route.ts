@@ -24,14 +24,43 @@ const SOFT_SKILLS = new Set([
 ]);
 
 /**
+ * Remove template "Tip:" paragraphs, page numbers, and other non-resume noise
+ * that confuse the AI extraction.
+ */
+function cleanResumeText(text: string): string {
+  return text
+    // Remove "(Tip: ...)" inline template paragraphs
+    .replace(/\(Tip:[\s\S]*?\)/g, '')
+    // Remove standalone "Tip:" lines
+    .replace(/^Tip:.*$/gm, '')
+    // Remove page numbers
+    .replace(/^Page \d+$/gm, '')
+    // Remove standalone Resume/CV headers
+    .replace(/^((?:Resume|CV|Curriculum Vitae)\s*)$/gim, '')
+    // Collapse multiple blank lines
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
  * Use AI to deeply analyze ANY resume and extract what jobs this person should search for.
  * Fully generic — works for retail, healthcare, engineering, arts, law, trades, anything.
  */
 async function aiExtractProfile(resumeText: string): Promise<ResumeProfile | null> {
   try {
+    const cleanedText = cleanResumeText(resumeText);
+    if (cleanedText.length < 50) {
+      console.error('[Search] Resume too short after cleaning');
+      return null;
+    }
+
     const prompt = `You are a career analysis engine. Your ONLY job is to read a resume and determine what jobs this person should search for.
 
-You will see a resume. It could be from ANY field — retail, healthcare, engineering, arts, finance, sports, hospitality, law, education, science, trades, government, non-profit, or anything else. Do NOT assume any default industry.
+You will see a resume. It could be from ANY field and ANY experience level — high school student, trade apprentice, retail worker, doctor, engineer, artist, lawyer, teacher — anything. Do NOT assume any default industry.
+
+IMPORTANT: Many resumes contain template instructions like "(Tip: ...)" paragraphs. IGNORE those — they are resume-writing tips, not real content.
+
+If the resume has a "Career Objective" or "Objective" section, READ IT FIRST. It states exactly what kind of job they want.
 
 Analyze the resume and return JSON with EXACTLY these fields:
 
@@ -39,30 +68,32 @@ Analyze the resume and return JSON with EXACTLY these fields:
   "hard_skills": ["list of specific, searchable skills found in the resume"],
   "soft_skills": ["list of generic interpersonal skills found in the resume"],
   "roles": ["list of 3-5 job titles this person should search for"],
-  "industry": "primary industry from their actual work experience",
+  "industry": "primary industry from their career objective or work experience",
   "experience_level": "fresher or junior or mid or senior",
   "search_keywords": ["list of 4-6 search phrases to type into a job board"]
 }
 
 RULES FOR EACH FIELD:
 
-1. hard_skills — ONLY specific, searchable abilities. Examples: "Python", "financial modeling", "SEO", "inventory management", "AutoCAD", "patient care", "lesson planning". NEVER include generic traits like "communication" or "leadership" here.
+1. hard_skills — Specific, searchable abilities found in the resume. Examples: "Python", "financial modeling", "AutoCAD", "cash register operation", "inventory management", "food preparation", "Microsoft Office". For entry-level workers with NO technical skills, list whatever they DO know: "cash handling", "basic math", "serving customers", "operating cash register" are all valid hard skills. NEVER leave this empty. NEVER put soft skills here.
 
-2. soft_skills — Generic interpersonal traits for display only. Examples: "communication", "teamwork", "leadership", "problem-solving". These are NOT used for job matching.
+2. soft_skills — Generic interpersonal traits for display only. Examples: "communication", "teamwork", "leadership", "numeracy". These are NOT used for job matching.
 
-3. roles — Job titles this person would realistically apply for. Base this on their WORK EXPERIENCE and EDUCATION, not just their skills. A Wharton consultant gets "management consultant intern", "business analyst". A retail worker gets "store supervisor", "retail manager". A nursing student gets "registered nurse", "clinical assistant". Include 3-5 roles ordered by relevance.
+3. roles — Job titles this person would realistically apply for. If there is a Career Objective, use it as the PRIMARY source. "Customer service work in a sports retail environment" → roles: ["retail sales assistant", "sports store associate", "customer service representative"]. Include 3-5 roles ordered by relevance.
 
-4. industry — The ONE industry that best describes their work experience. Look at WHERE they worked, not just what they studied. Someone who worked at a Small Business Development Center is in "consulting". Someone who worked at a grocery store is in "retail". Keep it to a single word or short phrase.
+4. industry — The ONE industry they want to work in. Use the Career Objective if present. "Sports retail" is a valid industry. "Food service", "healthcare", "construction", "education" are all valid. This does NOT need to be a formal category name.
 
-5. search_keywords — Phrases you would actually type into Indeed or LinkedIn job search. These should combine industry + role + skill. Examples for a retail worker: ["retail management internship", "store supervisor jobs", "customer service specialist"], for a CS student: ["software engineering internship", "full stack developer intern", "python developer jobs"]. NEVER use soft skills as search terms. NEVER use just one word — use 2-4 word phrases.
+5. search_keywords — THE MOST IMPORTANT FIELD. Phrases you would actually type into Indeed or LinkedIn. For someone with no technical skills, use their career objective + industry + role type. ALWAYS include industry + role combinations. Examples: ["sports retail assistant", "retail customer service", "store associate", "sports store job"]. NEVER use soft skill names. NEVER use single words. ALWAYS 2-4 words per phrase. Include 4-6 phrases.
 
-6. MOST IMPORTANT: Read the resume holistically. Look at job titles, company names, project descriptions, education, and extracurriculars TOGETHER to determine what this person does. Do not fixate on one skill keyword.
+6. CAREER OBJECTIVE RULE: If the resume contains a Career Objective or Objective section, it is the PRIMARY signal for roles, industry, and search_keywords. Use it before looking at skills.
+
+7. NO-HARD-SKILL RULE: If the person has no technical skills, DO NOT leave hard_skills empty. Every person has done SOMETHING specific: "operating cash register", "serving customers", "stacking shelves", "basic math", "Microsoft Word". Extract those.
 
 Return ONLY valid JSON. No explanation.`;
 
     const response = await callAI(
       prompt,
-      resumeText.slice(0, 4000),
+      cleanedText.slice(0, 4000),
       {
         model: 'llama-3.3-70b-versatile',
         temperature: 0.1,
@@ -188,8 +219,18 @@ function scoreJob(job: any, profile: ResumeProfile): number {
     }
   }
 
+  // ── Partial role-word bonus: words from user roles appear in title (not full phrase) ──
+  const titleWords = jobTitle.split(/\s+/);
+  const roleWordMatches = userRoles.filter(role => {
+    const roleWords = role.split(/\s+/).filter(w => w.length > 3);
+    return roleWords.some(rw => titleWords.includes(rw));
+  });
+  if (roleWordMatches.length > 0 && rolesMatched.length === 0) {
+    score += 5; // small bonus for partial title match
+  }
+
   // ── 15%: Junior/intern bonus (only if something matched) ──
-  if (skillsMatched.length > 0 || rolesMatched.length > 0) {
+  if (skillsMatched.length > 0 || rolesMatched.length > 0 || roleWordMatches.length > 0) {
     if (/intern|entry|trainee|junior|graduate|fresher/.test(jobTitle)) {
       score += 10;
     } else {
@@ -285,6 +326,20 @@ export async function POST(req: NextRequest) {
     }
 
     const uniqueQueries = [...new Set(searchQueries)].slice(0, 5);
+
+    // Safety: if AI returned no job-board-style queries, append "internship" to first query
+    const hasUsefulQuery = uniqueQueries.some(q => {
+      const lower = q.toLowerCase();
+      return lower.includes('internship') || lower.includes('job') || lower.includes('role')
+        || lower.includes('assistant') || lower.includes('position') || lower.includes('associate');
+    });
+    if (!hasUsefulQuery && uniqueQueries.length > 0) {
+      uniqueQueries.push(uniqueQueries[0] + ' internship');
+    }
+    if (uniqueQueries.length === 0) {
+      uniqueQueries.push('internship');
+    }
+
     console.log(`[Search] Queries: ${uniqueQueries.join(' | ')}`);
 
     console.log(`[Search] Starting fetch for: ${uniqueQueries.join(', ')}`);
