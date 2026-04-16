@@ -353,11 +353,11 @@ async function runFetchersInParallel(
     fetchRemoteOK(keywords),
     fetchAdzuna(keywords, location),
     fetchJSearch(keywords, location),
-    // Fix #14 — Gating: Only fetch from Internshala if user is in India
-    (location.toLowerCase().includes('india')) ? fetchInternshala(keywords) : Promise.resolve([]),
+    // Run all fetchers in parallel — no location gating to avoid missing relevant results
+    (fetchInternshala(keywords)),
     fetchWeWorkRemotely(keywords),
-    // Fix #14 — Gating: Only fetch from Arbeitnow if user is in Germany/Europe or location is remote
-    (location.toLowerCase().includes('germany') || location.toLowerCase().includes('europe') || location.toLowerCase() === 'remote') ? fetchArbeitnow(keywords) : Promise.resolve([]),
+    // Arbeitnow: good for global remote roles, always run it
+    (fetchArbeitnow(keywords)),
   ])
 
   const extract = (result: PromiseSettledResult<JobResult[]>, name: string): JobResult[] => {
@@ -508,12 +508,40 @@ const INTERN_SHALA_PROFILES: Record<string, string> = {
   'statistical': 'data-science',
   'regression': 'data-science',
   'retail': 'retail',
+  'retail sales': 'retail',
+  'retail assistant': 'retail',
+  'store assistant': 'retail',
+  'store associate': 'retail',
+  'shop assistant': 'retail',
+  'sales assistant': 'retail',
+  'sales associate': 'sales',
   'customer service': 'customer-service',
+  'cashier': 'retail',
+  'cash handling': 'retail',
+  'cash register': 'retail',
+  'pos': 'retail',
+  'point of sale': 'retail',
   'hospitality': 'hospitality',
-  'sports': 'sports',
-  'fitness': 'sports',
-  'education': 'education',
-  'teaching': 'education'
+  'food': 'hospitality',
+  'restaurant': 'hospitality',
+  'barista': 'hospitality',
+  'waiter': 'hospitality',
+  'waitress': 'hospitality',
+  'chef': 'hospitality',
+  'cooking': 'hospitality',
+  'food preparation': 'hospitality',
+  'construction': 'operations',
+  'trades': 'operations',
+  'plumbing': 'operations',
+  'electrician': 'operations',
+  'electrical': 'operations',
+  'nursing': 'research',
+  'medical': 'healthcare',
+  'teacher': 'education',
+  'tutoring': 'education',
+  'tutor': 'education',
+  'bookkeeping': 'accounting',
+  'payroll': 'accounting',
 }
 
 export async function fetchInternshala(keywords: string[]): Promise<JobResult[]> {

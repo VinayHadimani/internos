@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2, Upload, ExternalLink, Search, ChevronLeft, ChevronRight } from 'lucide-react';
-import { extractSkillsFromResume } from '@/lib/ai';
 
 interface Job {
   title: string;
@@ -74,9 +73,8 @@ function InternshipsContent() {
     if (savedResume) {
       setResumeText(savedResume);
       setAllJobs([]);
-      
-      const skillsToUse = urlSkills ? JSON.parse(urlSkills) : undefined;
-      searchJobs(savedResume, skillsToUse);
+      // Server handles AI extraction — no client-side AI needed
+      searchJobs(savedResume);
     }
   }, [pathname, searchParams, user, isAuthenticated]);
 
@@ -130,17 +128,12 @@ function InternshipsContent() {
       localStorage.setItem('resumeText', text);
       setAllJobs([]);
 
-      const extracted = await extractSkillsFromResume(text);
-      localStorage.setItem('userHardSkills', JSON.stringify(extracted.hard_skills || []));
-      localStorage.setItem('userSoftSkills', JSON.stringify(extracted.soft_skills || []));
-      localStorage.setItem('userSkills', JSON.stringify(extracted.skills || [...(extracted.hard_skills || []), ...(extracted.soft_skills || [])]));
-      localStorage.setItem('userExperience', extracted.experience_level || 'entry');
-      localStorage.setItem('userExperienceLevel', extracted.experience_level || 'entry');
-      localStorage.setItem('userRoles', JSON.stringify(extracted.roles || []));
-      localStorage.setItem('userLocation', extracted.location || '');
-      localStorage.setItem('userIndustry', extracted.industry || '');
+      // Extract location hint client-side for display only (no AI needed here)
+      const locMatch = text.match(/(?:location|address|city|based in)[:\s]*([^\n,]{3,40})/i);
+      if (locMatch) localStorage.setItem('userLocation', locMatch[1].trim());
 
-      await searchJobs(text, extracted.hard_skills || []);
+      // Server does AI extraction — just send the raw resume text
+      await searchJobs(text);
     } catch (err) {
       setError('Failed to read resume file: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -148,36 +141,21 @@ function InternshipsContent() {
     }
   }
 
-  async function searchJobs(text: string, directSkills?: string[]) {
+  async function searchJobs(text: string) {
     const currentSearchId = ++searchIdRef.current;
     setLoading(true);
     setError(null);
 
     try {
       const userLocation = localStorage.getItem('userLocation') || '';
-      const userHardSkills = directSkills || JSON.parse(localStorage.getItem('userHardSkills') || '[]');
-      const userSoftSkills = JSON.parse(localStorage.getItem('userSoftSkills') || '[]');
-      const userExperience = localStorage.getItem('userExperienceLevel') || localStorage.getItem('userExperience') || 'entry';
-      const userRoles = JSON.parse(localStorage.getItem('userRoles') || '[]');
-      const userIndustry = localStorage.getItem('userIndustry') || '';
 
-      const primarySkill =
-        (userRoles.length > 0 && userRoles[0]) ||
-        (userHardSkills.length > 0 && userHardSkills[0]) ||
-        'internship';
-
+      // Send resume text to server — AI extraction happens on the server side
       const res = await fetch(`/api/internships/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           resumeText: text,
           location: userLocation,
-          skills: userHardSkills,
-          softSkills: userSoftSkills,
-          experience: userExperience,
-          preferredRoles: userRoles,
-          industry: userIndustry,
-          query: primarySkill,
         })
       });
 
@@ -191,28 +169,24 @@ function InternshipsContent() {
       if (data.success) {
         const filteredJobs = data.jobs || data.data || [];
         setAllJobs(filteredJobs);
-        // Prefer dashboard skills if they are substantial
-        setSkills(data.detected_skills || [...userHardSkills, ...userSoftSkills] || []);
+        // Use server-detected skills for display
+        setSkills(data.detected_skills || []);
 
-        // Clean up resume data after results are displayed (Fix 8)
+        // Save server-extracted data to localStorage for other pages
+        if (data.target_roles) localStorage.setItem('userRoles', JSON.stringify(data.target_roles));
+        if (data.detected_domains) localStorage.setItem('userIndustry', data.detected_domains[0] || '');
+        if (data.profile?.hard_skills) localStorage.setItem('userHardSkills', JSON.stringify(data.profile.hard_skills));
+        if (data.profile?.soft_skills) localStorage.setItem('userSoftSkills', JSON.stringify(data.profile.soft_skills));
+        if (data.profile?.experience_level) localStorage.setItem('userExperienceLevel', data.profile.experience_level);
+
+        // Clean up raw resume text after results are displayed
         if (!hasCleanedUpRef.current) {
           hasCleanedUpRef.current = true;
-          // Purge server-side database record as well
           fetch('/api/resume/cleanup', { method: 'DELETE' }).catch(err => console.error('[Internships] Database cleanup failed:', err));
-          
           setTimeout(() => {
             localStorage.removeItem('resumeText');
-            localStorage.removeItem('userSkills');
-            localStorage.removeItem('userHardSkills');
-            localStorage.removeItem('userSoftSkills');
-            localStorage.removeItem('userExperience');
-            localStorage.removeItem('userRoles');
-            localStorage.removeItem('userLocation');
-            localStorage.removeItem('detectedCountry');
-            localStorage.removeItem('resumeVersion');
-            localStorage.removeItem('resumeTimestamp');
-            console.log('[Internships] Resume data cleaned up after display');
-          }, 2000); // 2 second delay to ensure results are rendered first
+            console.log('[Internships] Resume text cleaned up after display');
+          }, 2000);
         }
       } else {
         setError(data.error || 'Failed to search jobs');
@@ -232,6 +206,7 @@ function InternshipsContent() {
     if (resumeText) {
       setAllJobs([]);
       setCurrentPage(1);
+      hasCleanedUpRef.current = false; // Allow cleanup to re-run on refresh
       searchJobs(resumeText);
     }
   }
