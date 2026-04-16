@@ -315,55 +315,60 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Fix Blocker 2 — Build SMART search queries that remote job APIs can actually use
+    // ═══════════════════════════════════════════════════════
+    // SMART QUERY BUILDER — domain-specific, not soft-skill-based
+    // ═══════════════════════════════════════════════════════
     const searchQueries: string[] = [];
     const industry = (profile.industry || '').toLowerCase();
     const skills = profile.skills || [];
     const roles = profile.roles || [];
+    const keywords = profile.keywords || [];
 
-    // 1. Use AI-generated roles/keywords if available (best quality)
+    // 1. AI-generated roles (best quality queries)
     if (roles.length > 0) {
       roles.slice(0, 3).forEach(r => searchQueries.push(r));
     }
-    const aiKeywords = profile.keywords || [];
-    if (aiKeywords.length > 0) {
-      aiKeywords.slice(0, 3).forEach(k => searchQueries.push(k));
+
+    // 2. AI-generated keywords  
+    if (keywords.length > 0) {
+      keywords.slice(0, 3).forEach(k => searchQueries.push(k));
     }
 
-    // 2. Build domain-specific queries from industry + top skills
-    if (searchQueries.length < 3) {
-      // Industry-based broad searches
-      if (industry === 'retail') searchQueries.push('retail associate', 'customer service', 'store associate');
-      else if (industry === 'sports') searchQueries.push('sports retail', 'fitness', 'recreation');
-      else if (industry === 'hospitality') searchQueries.push('hospitality', 'front desk', 'customer service');
-      else if (industry === 'healthcare') searchQueries.push('healthcare assistant', 'patient care');
-      else if (industry === 'education') searchQueries.push('teaching assistant', 'tutor');
-      else if (industry === 'finance') searchQueries.push('finance intern', 'accounting assistant');
-      else if (industry === 'marketing') searchQueries.push('marketing intern', 'social media coordinator');
-      else if (industry === 'data_science') searchQueries.push('data analyst intern', 'data science');
-      else if (industry === 'software_engineering') searchQueries.push('software engineer intern', 'frontend developer');
-      else if (industry === 'consulting') searchQueries.push('consulting intern', 'business analyst');
-      else if (industry === 'law') searchQueries.push('legal intern', 'paralegal');
-      else if (industry === 'design') searchQueries.push('design intern', 'graphic design');
-      else if (industry === 'hr') searchQueries.push('human resources intern', 'recruiting coordinator');
-      else searchQueries.push('internship', 'entry level');
+    // 3. Domain-specific fallbacks (when AI roles/keywords are empty or weak)
+    if (searchQueries.length < 2) {
+      const domainQueries: Record<string, string[]> = {
+        'retail': ['retail associate', 'retail sales', 'store associate', 'customer service representative', 'shop assistant'],
+        'sports': ['sports retail', 'fitness center', 'recreation assistant', 'sports coach', 'athletic assistant'],
+        'hospitality': ['hospitality', 'front desk agent', 'restaurant staff', 'hotel associate'],
+        'healthcare': ['healthcare assistant', 'patient care aide', 'medical receptionist'],
+        'education': ['teaching assistant', 'tutor', 'after school program', 'education assistant'],
+        'finance': ['finance intern', 'accounting assistant', 'bookkeeping'],
+        'marketing': ['marketing intern', 'social media coordinator', 'content writer'],
+        'data_science': ['data analyst intern', 'data science intern', 'analytics intern'],
+        'software_engineering': ['software engineer intern', 'junior developer', 'frontend intern'],
+        'consulting': ['consulting intern', 'business analyst intern', 'strategy analyst'],
+        'law': ['legal intern', 'paralegal', 'compliance assistant'],
+        'design': ['design intern', 'graphic design', 'ui ux intern'],
+        'hr': ['human resources intern', 'recruiting coordinator', 'hr assistant'],
+        'communications': ['communications intern', 'public relations assistant'],
+        'general': ['internship', 'entry level', 'assistant'],
+      };
+      const queries = domainQueries[industry] || domainQueries['general'];
+      queries.slice(0, 4).forEach(q => searchQueries.push(q));
     }
 
-    // 3. Only use hard skills as search terms (skip soft skills)
-    const softSkillPatterns = /^(communication|teamwork|leadership|organisation|organization|numeracy|problem.?solving|time.?management|interpersonal|adaptability|critical.?thinking|attention.?to.?detail|presentation|negotiation)$/i;
-    const hardSkills = skills.filter(s => !softSkillPatterns.test(s));
-    if (hardSkills.length > 0) {
-      searchQueries.push(hardSkills.slice(0, 2).join(' '));
+    // 4. Filter out soft-skill-only queries (they return garbage from job APIs)
+    const softSkillOnly = /^(communication|teamwork|leadership|organisation|organization|numeracy|problem\s*solving|time\s*management|interpersonal|adaptability|critical\s*thinking|attention\s*to\s*detail|presentation|negotiation)$/i;
+    const usefulQueries = searchQueries.filter(q => !softSkillOnly.test(q.trim()));
+
+    // 5. Always ensure "internship" is in the mix for broad coverage
+    if (!usefulQueries.some(q => q.toLowerCase().includes('intern'))) {
+      usefulQueries.push('internship');
     }
 
-    // 4. Always add a broad "internship" query for coverage
-    if (!searchQueries.includes('internship')) {
-      searchQueries.push('internship');
-    }
-
-    // Deduplicate and limit to prevent API abuse
-    const uniqueQueries = [...new Set(searchQueries)].filter(q => q.length > 2).slice(0, 6);
-    console.log(`[Search] Smart queries: ${uniqueQueries.join(' | ')}`);
+    // Deduplicate and limit to 6 queries max (API abuse prevention)
+    const uniqueQueries = [...new Set(usefulQueries)].filter(q => q.length > 2).slice(0, 6);
+    console.log(`[Search] Smart queries (${uniqueQueries.length}): ${uniqueQueries.join(' | ')}`);
 
     console.log(`[Search] Starting fetch for: ${uniqueQueries.join(', ')}`);
     
