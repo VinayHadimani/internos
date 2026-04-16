@@ -409,18 +409,12 @@ export async function POST(req: NextRequest) {
     // ── Step 4: Fetch jobs in parallel for all queries ──
     const userLocation = bodyLocation || '';
     const allJobsMap = new Map<string, JobResult>();
-    const batches = await Promise.all(searchQueries.map(q => aggregateJobs(q, userLocation)));
-    for (const batch of batches) {
-      for (const job of batch) {
-        const key = `${job.title}-${job.company}`.toLowerCase().replace(/\s+/g, '');
-        if (!allJobsMap.has(key)) allJobsMap.set(key, job);
-      }
-    }
-    const rawJobs = Array.from(allJobsMap.values());
-    console.log(`[Search] Fetched ${rawJobs.length} raw jobs in ${Date.now() - startTime}ms`);
+    // ── Step 4: Fetch jobs from all sources ──
+    const allJobs = await aggregateJobs(searchQueries.join(' '), bodyLocation || undefined, userCountry);
+    console.log(`[Search] Fetched ${allJobs?.length || 0} total jobs in ${Date.now() - startTime}ms`);
 
     // ── Step 5: Filter non-English jobs (only for non-DE users) ──
-    let filtered = rawJobs;
+    let filtered = allJobs || [];
     if (userCountry !== 'DE') {
       const before = filtered.length;
       filtered = filtered.filter(j => !isLikelyGermanJob(j));
@@ -458,7 +452,7 @@ export async function POST(req: NextRequest) {
       target_roles: profile.roles,
       profile,
       // ── Debug metadata ──
-      total_fetched: rawJobs.length,
+      total_fetched: allJobs.length,
       zero_match_filtered: zeroCount,
       country_detected: userCountry,
       search_queries_used: searchQueries,

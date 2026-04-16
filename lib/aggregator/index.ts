@@ -1,20 +1,16 @@
-// AI call removed — parseJobQuery no longer needs it (search route handles AI)
 import * as cheerio from 'cheerio'
 import { normalizeSalary, type SalaryInfo } from '@/lib/utils/salary'
 
-// Add this helper function at the top:
 function cleanText(text: string): string {
   if (!text) return '';
   
   return text
-    // Fix HTML entities
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    // Fix mojibake (encoding errors)
     .replace(/â/g, "'")
     .replace(/â€"/g, '-')
     .replace(/â€"/g, '-')
@@ -26,7 +22,6 @@ function cleanText(text: string): string {
     .replace(/Ã‚Â/g, '')
     .replace(/Â/g, '')
     .replace(/â/g, '')
-    // Remove extra whitespace
     .replace(/\s+/g, ' ')
     .replace(/\n\s*\n/g, '\n\n')
     .trim();
@@ -47,27 +42,19 @@ export interface JobResult {
   locationScore?: number
 }
 
-/**
- * Normalize a date value to ISO 8601 string.
- * Accepts: ISO string, Unix timestamp (seconds or milliseconds), Date object.
- * Returns undefined if unparseable.
- */
 function normalizeDate(value: unknown): string | undefined {
   if (!value) return undefined
   if (value instanceof Date) {
     const time = value.getTime()
     return Number.isNaN(time) ? undefined : value.toISOString()
   }
-  // Already ISO string
   if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
     try { return new Date(value).toISOString() } catch { return undefined }
   }
-  // Unix timestamp (seconds or milliseconds)
   if (typeof value === 'number') {
     const ts = value > 1e12 ? value : value * 1000
     try { return new Date(ts).toISOString() } catch { return undefined }
   }
-  // String timestamp
   if (typeof value === 'string') {
     try { return new Date(value).toISOString() } catch { return undefined }
   }
@@ -80,20 +67,12 @@ function getPostedAtTimestamp(value: string | Date | undefined): number | null {
   return Number.isNaN(parsed) ? null : parsed
 }
 
-/**
- * Parse relative posting timestamps from free-form text.
- * Examples: "Posted 2 days ago", "Posted 5 hours ago", "Posted today".
- */
 function parseRelativePostedAt(text: string): string | undefined {
   if (!text) return undefined
   const normalized = text.toLowerCase()
 
-  if (/\bposted\s+today\b/.test(normalized)) {
-    return new Date().toISOString()
-  }
-  if (/\bposted\s+yesterday\b/.test(normalized)) {
-    return new Date(Date.now() - (24 * 60 * 60 * 1000)).toISOString()
-  }
+  if (/\bposted\s+today\b/.test(normalized)) return new Date().toISOString()
+  if (/\bposted\s+yesterday\b/.test(normalized)) return new Date(Date.now() - (24 * 60 * 60 * 1000)).toISOString()
 
   const match = normalized.match(/\bposted\s+(\d+)\s+(minute|hour|day|week|month|year)s?\s+ago\b/)
   if (!match) return undefined
@@ -104,28 +83,14 @@ function parseRelativePostedAt(text: string): string | undefined {
 
   const now = new Date()
   switch (unit) {
-    case 'minute':
-      now.setMinutes(now.getMinutes() - amount)
-      break
-    case 'hour':
-      now.setHours(now.getHours() - amount)
-      break
-    case 'day':
-      now.setDate(now.getDate() - amount)
-      break
-    case 'week':
-      now.setDate(now.getDate() - (amount * 7))
-      break
-    case 'month':
-      now.setMonth(now.getMonth() - amount)
-      break
-    case 'year':
-      now.setFullYear(now.getFullYear() - amount)
-      break
-    default:
-      return undefined
+    case 'minute': now.setMinutes(now.getMinutes() - amount); break
+    case 'hour': now.setHours(now.getHours() - amount); break
+    case 'day': now.setDate(now.getDate() - amount); break
+    case 'week': now.setDate(now.getDate() - (amount * 7)); break
+    case 'month': now.setMonth(now.getMonth() - amount); break
+    case 'year': now.setFullYear(now.getFullYear() - amount); break
+    default: return undefined
   }
-
   return now.toISOString()
 }
 
@@ -135,11 +100,7 @@ export interface ParsedQuery {
   location: string
 }
 
-// ─── Query Parser (NO AI — just string parsing) ─────────────
-// The search route already uses AI to generate the right queries.
-// This just splits them into keywords for the fetch functions.
 export async function parseJobQuery(query: string): Promise<ParsedQuery> {
-  // Detect job type from query
   let job_type = ''
   const lower = query.toLowerCase()
   if (lower.includes('internship') || lower.includes('intern')) job_type = 'internship'
@@ -147,41 +108,25 @@ export async function parseJobQuery(query: string): Promise<ParsedQuery> {
   else if (lower.includes('part-time') || lower.includes('part time')) job_type = 'part-time'
   else if (lower.includes('contract')) job_type = 'contract'
   
-  // Detect location
   let location = ''
   const locationPatterns = ['remote', 'india', 'us', 'usa', 'uk', 'germany', 'europe']
   for (const loc of locationPatterns) {
     if (lower.includes(loc)) { location = loc; break }
   }
   
-  // Split query into keywords, preserving multi-word terms
   const keywords = query
     .split(/\s+/)
     .filter(w => w.length > 1)
     .filter(w => !['the', 'and', 'for', 'a', 'an', 'in', 'at', 'of', 'to', 'or'].includes(w.toLowerCase()))
   
-  if (keywords.length === 0) {
-    // Use the full query as one keyword
-    return { keywords: [query || 'internship'], job_type, location }
-  }
-  
+  if (keywords.length === 0) return { keywords: [query || 'internship'], job_type, location }
   return { keywords, job_type, location }
 }
 
-/**
- * Sanitize a job description: strip HTML, trim whitespace, limit to 2000 chars.
- */
 function sanitizeDescription(raw: string): string {
   if (!raw) return ''
-  
-  // 1. Replace block-level tags with spaces to avoid words sticking together
-  // e.g., <div>One</div><div>Two</div> -> One Two
-  let processed = raw.replace(/<(div|p|br|li|h[1-6]|tr)[^>]*>/gi, ' ');
-  
-  // 2. Strip all remaining HTML tags
+  let processed = raw.replace(/<(div|p|br|li|h[1-6]|tr)[^>]*>/gi, ' ')
   processed = processed.replace(/<[^>]*>/g, ' ')
-  
-  // 3. Decode common HTML entities and fix encoding artifacts
   processed = processed
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
@@ -189,110 +134,56 @@ function sanitizeDescription(raw: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&nbsp;/g, ' ')
-    .replace(/\u00A0/g, ' ') // Non-breaking space
-    .replace(/\u2011/g, '-') // Non-breaking hyphen
-    .replace(/â/g, '-')    // Common garbled hyphen artifact
-  
-  // 4. Collapse multiple whitespaces/newlines into a single space
-  // and trim the result
+    .replace(/\u00A0/g, ' ')
+    .replace(/\u2011/g, '-')
+    .replace(/â/g, '-')
   const stripped = processed.replace(/\s+/g, ' ').trim()
-  
   return stripped.length > 2500 ? stripped.substring(0, 2500) + '...' : stripped
 }
 
 // ─── Location Matching ───────────────────────────────────────
 
-/**
- * Location aliases for common variations.
- * Maps canonical names to their known variations.
- */
 const LOCATION_ALIASES: Record<string, string[]> = {
-  // India
   'gurgaon': ['gurgaon', 'gurugram', 'delhi ncr', 'ncr', 'delhi'],
   'bangalore': ['bangalore', 'bengaluru', 'karnataka'],
   'mumbai': ['mumbai', 'bombay', 'maharashtra', 'navi mumbai', 'thane'],
+  'pune': ['pune', 'maharashtra'],
+  'hyderabad': ['hyderabad', 'telangana', 'secunderabad'],
+  'chennai': ['chennai', 'tamil nadu'],
+  'kolkata': ['kolkata', 'calcutta', 'west bengal'],
+  'delhi': ['delhi', 'new delhi', 'delhi ncr', 'ncr'],
   'noida': ['noida', 'uttar pradesh', 'delhi ncr', 'ncr'],
-  // Australia (Fix #10)
-  'melbourne': ['melbourne', 'victoria', 'vic', 'park hill', '3045', 'vic 3045'],
-  'sydney': ['sydney', 'nsw', 'new south wales'],
-  'brisbane': ['brisbane', 'queensland', 'qld'],
-  'perth': ['perth', 'western australia', 'wa'],
-  'adelaide': ['adelaide', 'south australia', 'sa'],
-  // US
-  'new york': ['new york', 'nyc', 'manhattan'],
-  'san francisco': ['san francisco', 'sf', 'bay area', 'california'],
-  // UK
-  'london': ['london', 'united kingdom', 'uk', 'england'],
-  // Germany
-  'germany': ['germany', 'deutschland', 'berlin', 'munich', 'hamburg', 'frankfurt'],
-  // Generic Remote (Fix #10 - expanded)
-  'remote': ['remote', 'work from home', 'wfh', 'anywhere', 'work from anywhere', 'virtual', 'telecommute'],
+  'remote': ['remote', 'work from home', 'wfh', 'anywhere', 'work from anywhere'],
+  'india': ['india'],
 }
 
-/**
- * Normalize a location string to its canonical form.
- */
 function normalizeLocation(loc: string): string {
   const lower = loc.toLowerCase().trim()
   for (const [canonical, aliases] of Object.entries(LOCATION_ALIASES)) {
-    if (aliases.some((alias) => lower.includes(alias))) {
-      return canonical
-    }
+    if (aliases.some((alias) => lower.includes(alias))) return canonical
   }
   return lower
 }
 
-/**
- * Calculate location match score between a job's location and user's preference.
- * Returns 0-1:
- *   1.0: Exact match
- *   0.9: Partial match (same city group)
- *   0.7: Same country (India)
- *   0.5: Remote when user wants remote
- *   0.3: Remote when user wants a specific city
- *   0:   No match
- */
 export function calculateLocationMatch(jobLocation: string, preferredLocation: string): number {
-  if (!preferredLocation || preferredLocation.trim() === '') return 0.5 // No preference = neutral
-
+  if (!preferredLocation || preferredLocation.trim() === '') return 0.5
   const jobNorm = normalizeLocation(jobLocation)
   const prefNorm = normalizeLocation(preferredLocation)
-
-  // Exact match
   if (jobNorm === prefNorm) return 1.0
-
-  // Partial match — check if job location contains the preferred city
   if (jobNorm.includes(prefNorm) || prefNorm.includes(jobNorm)) return 0.9
-
-  // Same city group (aliases)
   for (const aliases of Object.values(LOCATION_ALIASES)) {
     const jobInGroup = aliases.some((a) => jobNorm.includes(a))
     const prefInGroup = aliases.some((a) => prefNorm.includes(a))
     if (jobInGroup && prefInGroup) return 0.9
   }
-
-  // Remote logic
   const isJobRemote = ['remote', 'work from home', 'wfh', 'anywhere'].some((r) => jobNorm.includes(r))
   const isPrefRemote = ['remote', 'work from home', 'wfh', 'anywhere'].some((r) => prefNorm.includes(r))
-
   if (isJobRemote && isPrefRemote) return 1.0
-  if (isJobRemote && !isPrefRemote) return 0.5 // Remote is a decent fallback for city seekers
-  if (!isJobRemote && isPrefRemote) return 0.2 // Non-remote is poor for remote seekers
-
-  // Same country bonus — works for ANY country, not just India
-  const COUNTRY_ALIASES: Record<string, string[]> = {
-    'india': ['india', 'bangalore', 'mumbai', 'delhi', 'gurgaon', 'pune', 'hyderabad', 'chennai', 'kolkata', 'noida', '+91'],
-    'australia': ['australia', 'melbourne', 'sydney', 'brisbane', 'perth', 'adelaide', 'canberra', 'gold coast', 'vic', 'nsw', 'qld', 'wa', 'sa', '+61', '3045'],
-    'united states': ['united states', 'usa', 'new york', 'san francisco', 'los angeles', 'chicago', 'austin', 'boston', 'texas', 'california', '+1'],
-    'germany': ['germany', 'berlin', 'munich', 'frankfurt', 'hamburg', '+49'],
-    'united kingdom': ['united kingdom', 'uk', 'london', 'england', '+44'],
-  }
-  for (const [, signals] of Object.entries(COUNTRY_ALIASES)) {
-    const jobInCountry = signals.some(s => jobNorm.includes(s.toLowerCase()))
-    const prefInCountry = signals.some(s => prefNorm.includes(s.toLowerCase()))
-    if (jobInCountry && prefInCountry) return 0.7
-  }
-
+  if (isJobRemote && !isPrefRemote) return 0.3
+  if (!isJobRemote && isPrefRemote) return 0.2
+  const isJobIndia = jobNorm.includes('india') || ['bangalore', 'mumbai', 'delhi', 'gurgaon', 'pune', 'hyderabad', 'chennai', 'kolkata', 'noida'].includes(jobNorm)
+  const isPrefIndia = prefNorm.includes('india') || ['bangalore', 'mumbai', 'delhi', 'gurgaon', 'pune', 'hyderabad', 'chennai', 'kolkata', 'noida'].includes(prefNorm)
+  if (isJobIndia && isPrefIndia) return 0.7
   return 0
 }
 
@@ -315,13 +206,25 @@ const SOURCE_PRIORITY: Record<string, number> = {
   'Arbeitnow': 8,
 }
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// ─── FIX: Country to Adzuna API code mapping ─────────────────
+
+const ADZUNA_COUNTRY_MAP: Record<string, string> = {
+  'US': 'us',
+  'UK': 'gb',
+  'IN': 'in',
+  'CA': 'ca',
+  'DE': 'de',
+  'AU': 'au',
+  'FR': 'fr',
+  'NL': 'nl',
+  'BR': 'br',
+  'SG': 'sg',
 }
 
 async function runFetchersInParallel(
   keywords: string[],
-  location: string
+  location: string,
+  userCountry?: string | null
 ): Promise<{
   remotive: JobResult[]
   himalayas: JobResult[]
@@ -332,12 +235,6 @@ async function runFetchersInParallel(
   wework: JobResult[]
   arbeitnow: JobResult[]
 }> {
-  // Run ALL fetchers in parallel with Promise.allSettled
-  // so one slow/failing API doesn't block the others
-  const isIndia = (location || '').toLowerCase().includes('india');
-  const isAustralia = (location || '').toLowerCase().includes('australia') || (location || '').toLowerCase().includes('melbourne') || (location || '').toLowerCase().includes('sydney');
-  const isEU = (location || '').toLowerCase().includes('germany') || (location || '').toLowerCase().includes('europe') || (location || '').toLowerCase().includes('poland');
-
   const [
     remotiveResult,
     himalayasResult,
@@ -351,13 +248,11 @@ async function runFetchersInParallel(
     fetchRemotive(keywords),
     fetchHimalayas(keywords),
     fetchRemoteOK(keywords),
-    fetchAdzuna(keywords, location),
-    fetchJSearch(keywords, location),
-    // Run all fetchers in parallel — no location gating to avoid missing relevant results
-    (fetchInternshala(keywords)),
+    fetchAdzuna(keywords, location, userCountry),
+    fetchJSearch(keywords),
+    fetchInternshala(keywords),
     fetchWeWorkRemotely(keywords),
-    // Arbeitnow: good for global remote roles, always run it
-    (fetchArbeitnow(keywords)),
+    fetchArbeitnow(keywords),
   ])
 
   const extract = (result: PromiseSettledResult<JobResult[]>, name: string): JobResult[] => {
@@ -380,9 +275,6 @@ async function runFetchersInParallel(
 
 // ─── Tier 1: Free API Fetchers ───────────────────────────────
 
-/**
- * Parse RSS XML feed and extract job items.
- */
 async function parseRSSFeed(url: string): Promise<JobResult[]> {
   try {
     const res = await fetch(url, {
@@ -390,43 +282,26 @@ async function parseRSSFeed(url: string): Promise<JobResult[]> {
       signal: AbortSignal.timeout(7000),
     })
     if (!res.ok) return []
-
     const xml = await res.text()
     const $ = cheerio.load(xml, { xmlMode: true })
-
     const items: JobResult[] = []
     $('item').each((_, el) => {
       const title = $(el).find('title').text().trim()
       const link = $(el).find('link').text().trim()
       const description = $(el).find('description').text().trim()
       const postedAt = parseRelativePostedAt(description) || normalizeDate($(el).find('pubDate').text().trim())
-
-      // Extract company from description (often appears as "by CompanyName" or similar)
       const companyMatch = description.match(/by\s+([A-Z][A-Za-z\s&.]+)/)
       const company = companyMatch ? companyMatch[1].trim() : 'Unknown'
-
-      // Extract location from description
       const locationMatch = description.match(/(?:location|based in|in)\s*:?\s*([A-Za-z\s,]+)/i)
-      const location = locationMatch ? locationMatch[1].trim().split(',')[0].trim() : 'remote'
-
-      // Extract stipend/salary (₹ patterns)
+      const location = locationMatch ? locationMatch[1].trim().split(',')[0].trim() : 'India'
       const salaryMatch = description.match(/₹[\d,]+(?:\s*-\s*₹[\d,]+)?(?:\s*\/\s*month)?/i)
       const salary = salaryMatch ? salaryMatch[0] : ''
-
       items.push({
-        title,
-        company,
-        location: location || 'remote',
-        salary,
-        salaryObj: normalizeSalary(salary),
-        url: link,
-        source: 'Internshala',
-        type: 'Internship',
-        description: sanitizeDescription(description),
-        postedAt,
+        title, company, location: location || 'India', salary,
+        salaryObj: normalizeSalary(salary), url: link, source: 'Internshala',
+        type: 'Internship', description: sanitizeDescription(description), postedAt,
       })
     })
-
     return items
   } catch (err) {
     console.error(`[Aggregator] RSS parse failed for ${url}:`, err)
@@ -434,10 +309,10 @@ async function parseRSSFeed(url: string): Promise<JobResult[]> {
   }
 }
 
-/**
- * Map user keywords to Internshala RSS profile slugs.
- */
+// ─── FIX: Added retail, hospitality, trades, healthcare profiles ──
+
 const INTERN_SHALA_PROFILES: Record<string, string> = {
+  // Tech
   'ai': 'artificial-intelligence',
   'artificial intelligence': 'artificial-intelligence',
   'machine learning': 'machine-learning',
@@ -457,14 +332,15 @@ const INTERN_SHALA_PROFILES: Record<string, string> = {
   'cloud': 'cloud-computing',
   'cyber': 'cyber-security',
   'blockchain': 'blockchain',
+  // Design & Media
   'design': 'graphic-design',
   'marketing': 'digital-marketing',
   'content': 'content-writing',
   'video': 'video-editing',
+  // Business & Finance
   'finance': 'finance',
   'hr': 'human-resources',
   'business': 'business-analytics',
-  // Business / Consulting / Finance profiles
   'consulting': 'management',
   'management': 'management',
   'strategy': 'management',
@@ -484,89 +360,57 @@ const INTERN_SHALA_PROFILES: Record<string, string> = {
   'investment': 'finance',
   'banking': 'finance',
   'product': 'product-management',
-  'financial modeling': 'finance',
-  'valuation': 'finance',
-  'business strategy': 'management',
-  'due diligence': 'finance',
-  'business analysis': 'business-analytics',
-  'stakeholder': 'management',
-  'competitive analysis': 'market-research',
-  'presentation': 'management',
-  'client engagement': 'management',
-  'equity research': 'finance',
-  'risk management': 'finance',
-  'compliance': 'finance',
-  'business development': 'business-development',
-  'project management': 'management',
-  'recruiting': 'human-resources',
-  'healthcare': 'healthcare',
-  'product management': 'product-management',
-  'ux': 'design',
-  'user research': 'design',
-  'graphic design': 'graphic-design',
-  'data analysis': 'business-analytics',
-  'statistical': 'data-science',
-  'regression': 'data-science',
-  'retail': 'retail',
-  'retail sales': 'retail',
-  'retail assistant': 'retail',
-  'store assistant': 'retail',
-  'store associate': 'retail',
-  'shop assistant': 'retail',
-  'sales assistant': 'retail',
-  'sales associate': 'sales',
+  // NEW: Retail & Customer Service
+  'retail': 'sales',
   'customer service': 'customer-service',
-  'cashier': 'retail',
-  'cash handling': 'retail',
-  'cash register': 'retail',
-  'pos': 'retail',
-  'point of sale': 'retail',
-  'hospitality': 'hospitality',
-  'food': 'hospitality',
-  'restaurant': 'hospitality',
-  'barista': 'hospitality',
-  'waiter': 'hospitality',
-  'waitress': 'hospitality',
-  'chef': 'hospitality',
-  'cooking': 'hospitality',
-  'food preparation': 'hospitality',
-  'construction': 'operations',
-  'trades': 'operations',
-  'plumbing': 'operations',
-  'electrician': 'operations',
-  'electrical': 'operations',
-  'nursing': 'research',
-  'medical': 'healthcare',
-  'teacher': 'education',
-  'tutoring': 'education',
-  'tutor': 'education',
-  'bookkeeping': 'accounting',
-  'payroll': 'accounting',
+  'cashier': 'finance',
+  'cash handling': 'finance',
+  'retail assistant': 'sales',
+  'store associate': 'sales',
+  'store': 'sales',
+  'fashion': 'fashion',
+  'hospitality': 'hospitality-management',
+  'hotel': 'hospitality-management',
+  'food': 'food-and-beverage',
+  'restaurant': 'food-and-beverage',
+  'barista': 'hospitality-management',
+  'chef': 'food-and-beverage',
+  'receptionist': 'receptionist',
+  'front desk': 'receptionist',
+  // NEW: Trades & Skilled Labor
+  'electrician': 'electrician',
+  'plumbing': 'plumbing',
+  'construction': 'construction',
+  'mechanic': 'automobile',
+  'automotive': 'automobile',
+  'welding': 'welding',
+  'carpentry': 'carpentry',
+  // NEW: Healthcare
+  'nursing': 'nursing',
+  'medical': 'mbbs',
+  'healthcare': 'healthcare',
+  'pharmacy': 'pharmacy',
+  'physiotherapy': 'physiotherapy',
 }
 
 export async function fetchInternshala(keywords: string[]): Promise<JobResult[]> {
   try {
-    // Map keywords to Internshala profile slugs
     const profiles = new Set<string>()
     for (const kw of keywords) {
       const lower = kw.toLowerCase()
-      // Check exact match first
       if (INTERN_SHALA_PROFILES[lower]) {
         profiles.add(INTERN_SHALA_PROFILES[lower])
       } else {
-        // Check partial match
         const match = Object.entries(INTERN_SHALA_PROFILES).find(([key]) => lower.includes(key))
         if (match) {
           profiles.add(match[1])
         } else {
-          // Use keyword directly as profile slug
           profiles.add(lower.replace(/\s+/g, '-'))
         }
       }
     }
 
-    // Fetch all matched RSS feeds in parallel
-    const feedUrls = [...profiles].map(
+    const feedUrls = [...profiles].slice(0, 5).map(
       (profile) => `https://internshala.com/rss/internships/profile-${profile}`
     )
 
@@ -581,10 +425,8 @@ export async function fetchInternshala(keywords: string[]): Promise<JobResult[]>
 export async function fetchRemotive(keywords: string[]): Promise<JobResult[]> {
   const source = 'Remotive'
   try {
-    const remotiveSearch = encodeURIComponent(keywords.join(' '));
+    const remotiveSearch = encodeURIComponent(keywords.join(' '))
     console.error(`[${source}] Fetching: ${keywords.join(', ')}`)
-    
-    // Use the v2 Remotive API endpoint
     const res = await fetch(`https://remotive.com/api/remote-jobs?search=${remotiveSearch}&limit=25`, {
       headers: BROWSER_HEADERS,
       signal: AbortSignal.timeout(7000),
@@ -597,18 +439,11 @@ export async function fetchRemotive(keywords: string[]): Promise<JobResult[]> {
     }
     const data = await res.json()
     const jobs = data.jobs || []
-    
-    // Remotive sometimes returns warning objects mixed with jobs — filter them out
     const realJobs = jobs.filter((job: Record<string, unknown>) => 
       typeof job.title === 'string' && job.title.length > 0 && 
       typeof job.company_name === 'string'
     );
     console.error(`[${source}] Filtered to ${realJobs.length} real jobs (from ${jobs.length} total)`);
-    
-    if (realJobs.length === 0) {
-      console.error(`[${source}] Empty response keys: ${Object.keys(data).join(', ')}`)
-      console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 500)}`)
-    }
     return realJobs.map((job: Record<string, unknown>) => {
       const rawSalary = String(job.salary || '')
       const rawDescription = String(job.description || '')
@@ -616,95 +451,61 @@ export async function fetchRemotive(keywords: string[]): Promise<JobResult[]> {
         title: String(job.title || ''),
         company: String(job.company_name || ''),
         location: String(job.candidate_required_location || job.location || ''),
-        salary: rawSalary,
-        salaryObj: normalizeSalary(rawSalary),
+        salary: rawSalary, salaryObj: normalizeSalary(rawSalary),
         url: String(job.url || job.public_url || ''),
-        source: 'Remotive',
-        type: String(job.job_type || ''),
+        source: 'Remotive', type: String(job.job_type || ''),
         description: sanitizeDescription(rawDescription),
         postedAt: normalizeDate(job.publication_date || job.posted_at || job.created_at),
       }
     })
   } catch (err) {
     console.error(`[${source}] Fetch failed:`, err instanceof Error ? err.message : String(err))
-    if (err instanceof Error && err.stack) console.error(`[${source}] Stack:`, err.stack.split('\n').slice(0, 3).join('\n'))
     return []
   }
 }
 
 export async function fetchHimalayas(keywords: string[]): Promise<JobResult[]> {
-  const source = 'Himalayas'
-  console.error(`[${source}] Himalayas API is deprecated, skipping for now.`);
   return []
 }
 
 export async function fetchRemoteOK(keywords: string[]): Promise<JobResult[]> {
   const source = 'RemoteOK'
   try {
-    console.error(`[${source}] Fetching: ${keywords.join(', ')} | URL: https://remoteok.com/api`)
+    console.error(`[${source}] Fetching: ${keywords.join(', ')}`)
     const res = await fetch('https://remoteok.com/api', {
       headers: BROWSER_HEADERS,
       signal: AbortSignal.timeout(7000),
     })
-    console.error(`[${source}] Response status: ${res.status}`)
-    if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      console.error(`[${source}] Error body (first 500): ${body.substring(0, 500)}`)
-      return []
-    }
+    if (!res.ok) return []
     const text = await res.text()
-    console.error(`[${source}] Response length: ${text.length} chars`)
-    // RemoteOK returns a JSON array (first element is "status", rest are jobs)
     const data = JSON.parse(text)
     const jobs = Array.isArray(data) ? data.slice(1) : []
     console.error(`[${source}] Returned ${jobs.length} raw items`)
-
-    // Filter locally by keywords — match multi-word keywords as phrases
     const keywordSet = keywords.map(k => k.toLowerCase())
     const filtered = jobs.filter((job: Record<string, unknown>) => {
       const title = String(job.position || '').toLowerCase()
       const desc = String(job.description || '').toLowerCase()
-      const tags = Array.isArray(job.tags) 
-        ? job.tags.map((t: unknown) => String(t).toLowerCase()).join(' ')
-        : String(job.tags || '').toLowerCase()
+      const tags = Array.isArray(job.tags) ? (job.tags as string[]).join(' ').toLowerCase() : String(job.tags || '').toLowerCase()
       const allText = `${title} ${desc} ${tags}`
-      
-      // At least one keyword must match
-      return keywordSet.some(k => {
-        if (k.includes(' ')) {
-          // Multi-word keyword: must appear as phrase
-          return allText.includes(k)
-        }
-        // Single-word keyword: use word boundary
-        return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(allText)
-      })
+      return keywordSet.some(k => allText.includes(k))
     })
     console.error(`[${source}] Filtered down to ${filtered.length} items`)
-
-    // Fallback: if strict filtering returns 0 but we have jobs, return first 20
-    if (filtered.length === 0 && jobs.length > 0) {
-      return []
-    }
-
-    return filtered.map((job: Record<string, unknown>) => {
+    return filtered.slice(0, 25).map((job: Record<string, unknown>) => {
       const rawSalary = String(job.salary || '')
       const rawDescription = String(job.description || '')
       return {
         title: String(job.position || ''),
         company: String(job.company || ''),
         location: String(job.location || ''),
-        salary: rawSalary,
-        salaryObj: normalizeSalary(rawSalary),
+        salary: rawSalary, salaryObj: normalizeSalary(rawSalary),
         url: job.url ? (String(job.url).startsWith('http') ? String(job.url) : `https://remoteok.com${job.url}`) : '',
-        source: 'RemoteOK',
-        type: String(job.job_type || ''),
+        source: 'RemoteOK', type: String(job.job_type || ''),
         description: sanitizeDescription(rawDescription),
         postedAt: normalizeDate(job.date || job.epoch),
       }
     })
   } catch (err) {
     console.error(`[${source}] Fetch failed:`, err instanceof Error ? err.message : String(err))
-    if (err instanceof Error && err.stack) console.error(`[${source}] Stack:`, err.stack.split('\n').slice(0, 3).join('\n'))
     return []
   }
 }
@@ -712,62 +513,50 @@ export async function fetchRemoteOK(keywords: string[]): Promise<JobResult[]> {
 export async function fetchWeWorkRemotely(keywords: string[]): Promise<JobResult[]> {
   const source = 'WeWorkRemotely'
   try {
-    // Fetch from multiple categories in parallel
-    const categories = [
+    // Only fetch categories likely to have matching jobs
+    const allCategories = [
       'remote-programming-jobs',
       'remote-customer-service-jobs',
       'remote-sales-jobs',
       'remote-design-jobs',
       'remote-devops-jobs',
-      'remote-product-jobs',
-      'remote-marketing-jobs'
     ]
+    const keywordSet = keywords.map(k => k.toLowerCase())
+    
+    // Pick relevant categories based on keywords
+    let categories = allCategories
+    const needsCS = keywordSet.some(k => ['customer', 'service', 'support', 'retail', 'sales', 'cash', 'store'].some(t => k.includes(t)))
+    const needsTech = keywordSet.some(k => ['python', 'java', 'react', 'javascript', 'frontend', 'backend', 'devops', 'cloud', 'machine', 'data'].some(t => k.includes(t)))
+    const needsDesign = keywordSet.some(k => ['design', 'ui', 'ux', 'graphic', 'brand'].some(t => k.includes(t)))
+    
+    if (needsCS) categories = ['remote-customer-service-jobs', 'remote-sales-jobs']
+    else if (needsDesign) categories = ['remote-design-jobs']
+    else if (needsTech) categories = ['remote-programming-jobs', 'remote-devops-jobs']
+    else categories = allCategories.slice(0, 3) // Default: fetch 3, not 5
 
     console.error(`[${source}] Fetching ${categories.length} categories for: ${keywords.join(', ')}`)
-
     const results = await Promise.all(
       categories.map(async (cat) => {
-        const url = `https://weworkremotely.com/categories/${cat}.json`
         try {
-          const res = await fetch(url, {
+          const res = await fetch(`https://weworkremotely.com/categories/${cat}.json`, {
             headers: BROWSER_HEADERS,
             signal: AbortSignal.timeout(7000),
           })
           if (!res.ok) return []
           const data = await res.json()
           return data.jobs || []
-        } catch {
-          return []
-        }
+        } catch { return [] }
       }),
     )
-
     const allJobs = results.flat()
-    console.error(`[${source}] Returned ${allJobs.length} raw items across ${categories.length} categories`)
-
-    // Filter locally by keywords (broadened: check description and tags too)
-    const keywordSet = keywords.map(k => k.toLowerCase())
     const filtered = allJobs.filter((job: Record<string, unknown>) => {
       const title = String(job.title || '').toLowerCase()
       const desc = String(job.description || '').toLowerCase()
       const company = String(job.company || '').toLowerCase()
-      const allText = `${title} ${desc} ${company}`
-      
-      return keywordSet.some(k => {
-        if (k.includes(' ')) {
-          return allText.includes(k)
-        }
-        return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(allText)
-      })
+      return keywordSet.some(k => `${title} ${desc} ${company}`.includes(k))
     })
-    console.error(`[${source}] Filtered down to ${filtered.length} items`)
-
-    // Fallback: if no keyword matches, return first 20 jobs
-    if (filtered.length === 0) {
-      console.error(`[${source}] No keyword matches, returning empty (no random fallback).`)
-      return []
-    }
-
+    console.error(`[${source}] ${filtered.length} matches from ${allJobs.length} items`)
+    if (filtered.length === 0) return []
     return filtered.map((job: Record<string, unknown>) => {
       const rawSalary = String(job.salary || 'Not specified')
       const rawDescription = String(job.description || '')
@@ -775,19 +564,16 @@ export async function fetchWeWorkRemotely(keywords: string[]): Promise<JobResult
       return {
         title: String(job.title || ''),
         company: String(job.company || ''),
-        location: 'Remote',
-        salary: rawSalary,
+        location: 'Remote', salary: rawSalary,
         salaryObj: normalizeSalary(rawSalary),
         url: jobUrl.startsWith('http') ? jobUrl : `https://weworkremotely.com${jobUrl}`,
-        source: 'WeWorkRemotely',
-        type: 'Full-time',
+        source: 'WeWorkRemotely', type: 'Full-time',
         description: sanitizeDescription(rawDescription),
         postedAt: normalizeDate(job.date || job.published_at || job.created_at),
       }
     })
   } catch (err) {
     console.error(`[${source}] Fetch failed:`, err instanceof Error ? err.message : String(err))
-    if (err instanceof Error && err.stack) console.error(`[${source}] Stack:`, err.stack.split('\n').slice(0, 3).join('\n'))
     return []
   }
 }
@@ -795,110 +581,46 @@ export async function fetchWeWorkRemotely(keywords: string[]): Promise<JobResult
 export async function fetchArbeitnow(keywords: string[]): Promise<JobResult[]> {
   const source = 'Arbeitnow'
   try {
-    console.error(`[${source}] Starting fetch for: ${keywords.join(', ')} | URL: https://arbeitnow.com/api/job-board-api`)
     const res = await fetch('https://arbeitnow.com/api/job-board-api', {
       headers: BROWSER_HEADERS,
       signal: AbortSignal.timeout(7000),
     })
-    console.error(`[${source}] Response status: ${res.status}`)
-    if (!res.ok) {
-      const body = await res.text().catch(() => '')
-      console.error(`[${source}] Error body (first 500): ${body.substring(0, 500)}`)
-      return []
-    }
+    if (!res.ok) return []
     const data = await res.json()
     const jobs = data.data || []
-    console.error(`[${source}] Total jobs before filter: ${jobs.length}`)
-    if (jobs.length === 0) {
-      console.error(`[${source}] Response keys: ${Object.keys(data).join(', ')}`)
-      console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 500)}`)
-    }
-
-    // Filter locally by keywords (title or description must contain at least one keyword)
+    console.error(`[${source}] Total: ${jobs.length}`)
     const keywordSet = keywords.map(k => k.toLowerCase())
     const filtered = jobs.filter((job: Record<string, unknown>) => {
       const title = String(job.title || '').toLowerCase()
       const desc = String(job.description || '').toLowerCase()
-      const allText = `${title} ${desc}`
-      
-      return keywordSet.some(k => {
-        if (k.includes(' ')) {
-          return allText.includes(k)
-        }
-        return new RegExp(`\\b${k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(allText)
-      })
+      return keywordSet.some(k => title.includes(k) || desc.includes(k))
     })
-    console.error(`[${source}] Results after keyword filter: ${filtered.length}`)
-    
-    // Fallback: if no keyword matches, return the 10 most recent jobs as a wide net
-    const jobsToReturn = filtered.length > 0 ? filtered : jobs.slice(0, 10);
-    
-    if (jobsToReturn.length === 0) {
-      return []
-    }
-
-    return jobsToReturn.map((job: Record<string, unknown>) => {
+    console.error(`[${source}] After filter: ${filtered.length}`)
+    if (filtered.length === 0) return []
+    return filtered.map((job: Record<string, unknown>) => {
       const rawSalary = String(job.salary || 'Not specified')
       const rawDescription = String(job.description || '')
       return {
         title: String(job.title || ''),
         company: String(job.company_name || job.company || ''),
-        location: String(job.location || 'Remote'),
-        salary: rawSalary,
+        location: String(job.location || 'Remote'), salary: rawSalary,
         salaryObj: normalizeSalary(rawSalary),
         url: String(job.url || ''),
-        source: 'Arbeitnow',
-        type: String(job.job_type || 'Full-time'),
+        source: 'Arbeitnow', type: String(job.job_type || 'Full-time'),
         description: sanitizeDescription(rawDescription),
         postedAt: normalizeDate(job.created_at || job.created || job.published_at),
       }
     })
   } catch (err) {
     console.error(`[${source}] Fetch failed:`, err instanceof Error ? err.message : String(err))
-    if (err instanceof Error && err.stack) console.error(`[${source}] Stack:`, err.stack.split('\n').slice(0, 3).join('\n'))
     return []
   }
 }
 
 // ─── Tier 2: Authenticated API Fetchers ──────────────────────
 
-// Helper for Adzuna country codes
-function getAdzunaCountryCode(location: string): string {
-  const lower = location.toLowerCase();
-  if (lower.includes('australia') || lower.includes('melbourne') || lower.includes('sydney') || 
-      lower.includes('brisbane') || lower.includes('perth') || lower.includes('adelaide') ||
-      lower.includes('canberra') || lower.includes('gold coast') || lower.includes('victoria') ||
-      lower.includes('new south wales') || lower.includes('queensland') || lower.includes('wa') ||
-      lower.includes('sa') || lower.includes('tas') || lower.includes('nt') || lower.includes('act')) {
-    return 'au';
-  }
-  if (lower.includes('india') || lower.includes('bangalore') || lower.includes('mumbai') || 
-      lower.includes('delhi') || lower.includes('gurgaon') || lower.includes('pune') || 
-      lower.includes('hyderabad') || lower.includes('chennai') || lower.includes('noida') ||
-      lower.includes('kolkata')) {
-    return 'in';
-  }
-  if (lower.includes('united states') || lower.includes(' usa') || lower.includes('new york') || 
-      lower.includes('san francisco') || lower.includes('chicago') || lower.includes('texas') ||
-      lower.includes('california') || lower.includes('remote, us')) {
-    return 'us';
-  }
-  if (lower.includes('germany') || lower.includes('berlin') || lower.includes('munich') || 
-      lower.includes('frankfurt') || lower.includes('hamburg')) {
-    return 'de';
-  }
-  if (lower.includes('united kingdom') || lower.includes('london') || lower.includes('uk') || 
-      lower.includes('manchester') || lower.includes('birmingham')) {
-    return 'gb';
-  }
-  if (lower.includes('canada') || lower.includes('toronto') || lower.includes('vancouver') || 
-      lower.includes('montreal')) {
-    return 'ca';
-  }
-  return 'us'; // Default fallback for unknown or 'remote'
-}
-
-export async function fetchAdzuna(keywords: string[], location: string): Promise<JobResult[]> {
+// FIX: Adzuna now routes to the correct country based on user's location
+export async function fetchAdzuna(keywords: string[], location: string, userCountry?: string | null): Promise<JobResult[]> {
   const source = 'Adzuna'
   try {
     const appId = process.env.ADZUNA_APP_ID
@@ -909,162 +631,118 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
     }
 
     const what = keywords.join(' ')
-    const where = location || ''
-    const singleCountry = getAdzunaCountryCode(location)
+    
+    // Route to the right country based on detected user country
+    const countryCode = userCountry ? (ADZUNA_COUNTRY_MAP[userCountry] || 'us') : 'in'
+    const adzunaLocation = location && location.length > 0 ? location : ''
+    
+    const url = `https://api.adzuna.com/v1/api/jobs/${countryCode}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}${adzunaLocation ? `&where=${encodeURIComponent(adzunaLocation)}` : ''}`
+    console.error(`[${source}] Fetching: "${what}" | Country: ${countryCode} | Location: ${adzunaLocation || 'any'}`)
 
-    // If we detected a specific country, just search that one.
-    // If location is empty/remote, search AU + GB + US in parallel for better coverage.
-    const countries: string[] = (where === '' || where === 'remote')
-      ? ['us', 'au', 'gb']
-      : [singleCountry]
+    const res = await fetch(url, { signal: AbortSignal.timeout(7000) })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.error(`[${source}] Error ${res.status}: ${body.substring(0, 300)}`)
+      return []
+    }
+    const data = await res.json()
+    const results = data.results || []
+    console.error(`[${source}] Returned ${results.length} results`)
 
-    const CURRENCY: Record<string, string> = { in: '₹', au: 'A$', gb: '£', de: '€', ca: 'C$', us: '$' }
+    const currencySymbol = countryCode === 'in' ? '₹' : countryCode === 'au' ? 'A$' : countryCode === 'gb' ? '£' : countryCode === 'de' ? '€' : countryCode === 'ca' ? 'C$' : '$';
 
-    console.error(`[${source}] Searching ${countries.join(',')} for: ${what}${where ? ` | Location: ${where}` : ''}`)
-
-    const allResults = await Promise.all(countries.map(async (country) => {
-      try {
-        const perPage = countries.length === 1 ? 20 : 10
-        const url = `https://api.adzuna.com/v1/api/jobs/${country}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=${perPage}&what=${encodeURIComponent(what)}${where && where !== 'remote' ? `&where=${encodeURIComponent(where)}` : ''}`
-        const res = await fetch(url, { signal: AbortSignal.timeout(8000) })
-        if (!res.ok) {
-          console.error(`[${source}/${country}] Status ${res.status}`)
-          return []
-        }
-        const data = await res.json()
-        const results: Record<string, unknown>[] = data.results || []
-        console.error(`[${source}/${country}] Results: ${results.length}`)
-        const currencySymbol = CURRENCY[country] ?? '$'
-        return results.map((job) => {
-          const rawSalary = job.salary_min && job.salary_max
-            ? `${currencySymbol}${Number(job.salary_min).toLocaleString()} - ${currencySymbol}${Number(job.salary_max).toLocaleString()}`
-            : String(job.salary || '')
-          return {
-            title: String(job.title || ''),
-            company: String((job.company as Record<string, unknown>)?.display_name || job.company || ''),
-            location: String((job.location as Record<string, unknown>)?.display_name || job.location || ''),
-            salary: rawSalary,
-            salaryObj: normalizeSalary(rawSalary),
-            url: String(job.redirect_url || ''),
-            source: 'Adzuna',
-            type: String(job.contract_type || job.contract_time || ''),
-            description: sanitizeDescription(String(job.description || job.adref || '')),
-            postedAt: normalizeDate(job.created || job.publication_date),
-          }
-        })
-      } catch { return [] }
-    }))
-
-    const results = allResults.flat()
-    console.error(`[${source}] Total results across all countries: ${results.length}`)
-    return results
+    return results.map((job: Record<string, unknown>) => {
+      const rawSalary = job.salary_min && job.salary_max
+        ? `${currencySymbol}${Number(job.salary_min).toLocaleString()} - ${currencySymbol}${Number(job.salary_max).toLocaleString()}`
+        : String(job.salary || '')
+      const rawDescription = String(job.description || job.adref || '')
+      return {
+        title: String(job.title || ''),
+        company: String((job.company as Record<string, unknown>)?.display_name || job.company || ''),
+        location: String((job.location as Record<string, unknown>)?.display_name || job.location || ''),
+        salary: rawSalary, salaryObj: normalizeSalary(rawSalary),
+        url: String(job.redirect_url || ''),
+        source: 'Adzuna', type: String(job.contract_type || job.contract_time || ''),
+        description: sanitizeDescription(rawDescription),
+        postedAt: normalizeDate(job.created || job.publication_date),
+      }
+    })
   } catch (err) {
     console.error(`[${source}] Fetch failed:`, err instanceof Error ? err.message : String(err))
-    if (err instanceof Error && err.stack) console.error(`[${source}] Stack:`, err.stack.split('\n').slice(0, 3).join('\n'))
     return []
   }
 }
 
-export async function fetchJSearch(keywords: string[], location?: string): Promise<JobResult[]> {
+// FIX: JSearch fetches 2 pages instead of 1 for more results
+export async function fetchJSearch(keywords: string[]): Promise<JobResult[]> {
   const source = 'JSearch'
   try {
-    // Check JSEARCH_API_KEY first, then fall back to RAPID_API_KEY
     const apiKey = process.env.JSEARCH_API_KEY || process.env.RAPID_API_KEY
     if (!apiKey) {
-      console.error(`[${source}] Skipping: no API key (set JSEARCH_API_KEY or RAPID_API_KEY in env vars)`)
+      console.error(`[${source}] Skipping: no API key configured`)
       return []
     }
 
     const query = keywords.join(' ')
-    const locationParam = location && location !== 'remote' ? ` ${location}` : ''
-    const fullQuery = `${query}${locationParam}`
-
-    // num_pages=2 → up to 20 results; no employment_type filter so retail/hospitality jobs come through
-    const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(fullQuery)}&page=1&num_pages=2`
-    console.error(`[${source}] Fetching: "${fullQuery}"`)
+    // Fetch 2 pages (20 results per page = 40 total) instead of 1 page (20)
+    const url = `https://jsearch.p.rapidapi.com/search?query=${encodeURIComponent(query)}&page=1&num_pages=2`
+    console.error(`[${source}] Fetching: "${query}" (2 pages)`)
 
     const res = await fetch(url, {
       headers: {
         'X-RapidAPI-Key': apiKey,
         'X-RapidAPI-Host': 'jsearch.p.rapidapi.com',
       },
-      signal: AbortSignal.timeout(15000), // 15s — JSearch is slower than other APIs
+      signal: AbortSignal.timeout(15000),
     })
-
-    console.error(`[${source}] Status: ${res.status}`)
     if (!res.ok) {
       const body = await res.text().catch(() => '')
-      console.error(`[${source}] Error: ${body.substring(0, 300)}`)
+      console.error(`[${source}] Error ${res.status}: ${body.substring(0, 300)}`)
       return []
     }
-
     const data = await res.json()
-    const jobs: Record<string, unknown>[] = data.data || []
-    console.error(`[${source}] Got ${jobs.length} jobs`)
-    if (jobs.length === 0) {
-      console.error(`[${source}] Response preview: ${JSON.stringify(data).substring(0, 400)}`)
-    }
+    const jobs = data.data || []
+    console.error(`[${source}] Returned ${jobs.length} results`)
 
-    return jobs.map((job) => {
+    return jobs.map((job: Record<string, unknown>) => {
       const rawSalary = job.job_min_salary && job.job_max_salary
         ? `${job.job_min_salary} - ${job.job_max_salary} ${job.job_salary_period || ''}`
         : String(job.job_salary || '')
-
-      // Build a proper location string from all available fields
-      const city    = String(job.job_city    || '')
-      const state   = String(job.job_state   || '')
-      const country = String(job.job_country || '')
-      const isRemote = Boolean(job.job_is_remote)
-      const locationStr = isRemote
-        ? 'Remote'
-        : [city, state, country].filter(Boolean).join(', ') || 'Remote'
-
+      const rawDescription = String(job.job_description || '')
       return {
-        title:       String(job.job_title     || ''),
-        company:     String(job.employer_name || ''),
-        location:    locationStr,
-        salary:      rawSalary,
-        salaryObj:   normalizeSalary(rawSalary),
-        url:         String(job.job_apply_link || '#'),
-        source:      'JSearch',
-        type:        String(job.job_employment_type || ''),
-        description: sanitizeDescription(String(job.job_description || '')),
-        postedAt:    normalizeDate(job.job_posted_at_datetime_utc || job.job_posted_at),
+        title: String(job.job_title || ''),
+        company: String(job.employer_name || ''),
+        location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || 'Remote',
+        salary: rawSalary, salaryObj: normalizeSalary(rawSalary),
+        url: String(job.job_apply_link || ''),
+        source: 'JSearch', type: String(job.job_employment_type || ''),
+        description: sanitizeDescription(rawDescription),
+        postedAt: normalizeDate(job.job_posted_at_datetime_utc || job.job_posted_at),
       }
     })
   } catch (err) {
     console.error(`[${source}] Fetch failed:`, err instanceof Error ? err.message : String(err))
-    if (err instanceof Error && err.stack) console.error(`[${source}] Stack:`, err.stack.split('\n').slice(0, 3).join('\n'))
     return []
   }
 }
 
 // ─── Main Orchestrator ───────────────────────────────────────
+// FIX: Now accepts optional userCountry for Adzuna routing
 
-export async function aggregateJobs(userQuery: string, preferredLocation?: string): Promise<JobResult[]> {
+export async function aggregateJobs(userQuery: string, preferredLocation?: string, userCountry?: string | null): Promise<JobResult[]> {
   console.log(`[Aggregator] Parsing query: "${userQuery}"`)
   const { keywords, job_type, location: queryLocation } = await parseJobQuery(userQuery)
   const prefLocation = preferredLocation || queryLocation
-  console.log(`[Aggregator] Keywords: ${keywords.join(', ')} | Type: ${job_type} | Location: ${prefLocation}`)
+  console.log(`[Aggregator] Keywords: ${keywords.join(', ')} | Type: ${job_type} | Location: ${prefLocation} | Country: ${userCountry || 'unknown'}`)
 
-  // Fetch all sources in parallel to avoid rate limits and Vercel timeouts
   const {
-    remotive,
-    himalayas,
-    remoteOK,
-    adzuna,
-    jsearch,
-    internshala,
-    wework,
-    arbeitnow,
-  } = await runFetchersInParallel(keywords, prefLocation)
+    remotive, himalayas, remoteOK, adzuna, jsearch, internshala, wework, arbeitnow,
+  } = await runFetchersInParallel(keywords, prefLocation, userCountry)
 
   console.log(`[Aggregator] Results — Remotive: ${remotive.length}, Himalayas: ${himalayas.length}, RemoteOK: ${remoteOK.length}, Adzuna: ${adzuna.length}, JSearch: ${jsearch.length}, Internshala: ${internshala.length}, WeWorkRemotely: ${wework.length}, Arbeitnow: ${arbeitnow.length}`)
 
-  // Combine all results
   const combined = [...remotive, ...himalayas, ...remoteOK, ...adzuna, ...jsearch, ...internshala, ...wework, ...arbeitnow]
 
-  // Sort by recency before deduplication (newest first; unknown dates at bottom)
   combined.sort((a, b) => {
     const aTs = getPostedAtTimestamp(a.postedAt)
     const bTs = getPostedAtTimestamp(b.postedAt)
@@ -1074,56 +752,35 @@ export async function aggregateJobs(userQuery: string, preferredLocation?: strin
     return bTs - aTs
   })
 
-  // Deduplicate by title + company (case-insensitive, trimmed),
-  // keeping the most recent duplicate by postedAt.
   const dedupeMap = new Map<string, JobResult>()
   for (const job of combined) {
     const key = `${job.title.trim().toLowerCase()}|${job.company.trim().toLowerCase()}`
     const existing = dedupeMap.get(key)
-    if (!existing) {
-      dedupeMap.set(key, job)
-      continue
-    }
-
+    if (!existing) { dedupeMap.set(key, job); continue }
     const existingTs = getPostedAtTimestamp(existing.postedAt)
     const currentTs = getPostedAtTimestamp(job.postedAt)
-    const shouldReplace =
-      currentTs !== null && (existingTs === null || currentTs > existingTs)
-
-    if (shouldReplace) {
-      dedupeMap.set(key, job)
-    }
+    if (currentTs !== null && (existingTs === null || currentTs > existingTs)) dedupeMap.set(key, job)
   }
   const deduplicated = [...dedupeMap.values()]
 
-  // Calculate location scores and sort
   const scored = deduplicated.map((job) => ({
     ...job,
     locationScore: calculateLocationMatch(job.location, prefLocation),
   }))
 
   scored.sort((a, b) => {
-    // Primary: location score (descending)
     if (b.locationScore !== a.locationScore) return b.locationScore - a.locationScore
-    // Secondary: postedAt recency (descending; unknown dates at bottom)
     const aTs = getPostedAtTimestamp(a.postedAt)
     const bTs = getPostedAtTimestamp(b.postedAt)
-    if (aTs !== bTs) {
-      if (aTs === null) return 1
-      if (bTs === null) return -1
-      return bTs - aTs
-    }
-    // Tertiary: source priority (lower number = higher priority)
+    if (aTs !== bTs) { if (aTs === null) return 1; if (bTs === null) return -1; return bTs - aTs }
     const aPriority = SOURCE_PRIORITY[a.source] ?? 99
     const bPriority = SOURCE_PRIORITY[b.source] ?? 99
     if (aPriority !== bPriority) return aPriority - bPriority
-    // Quaternary: title alphabetical
     return a.title.localeCompare(b.title)
   })
 
   console.log(`[Aggregator] Combined: ${combined.length} → Deduplicated: ${deduplicated.length} → Sorted: ${scored.length}`)
   
-  // Apply cleanText to EVERY job before returning:
   const cleanedJobs = scored.map(job => ({
     ...job,
     title: cleanText(job.title),
