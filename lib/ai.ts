@@ -9,43 +9,31 @@ export interface ExtractedSkills {
   industries: string[];
   roleTypes: string[];
   location: string;
-  detected_country: string;
 }
 
 export async function extractSkillsFromResume(resumeText: string): Promise<ExtractedSkills> {
   try {
-    const prompt = `You are an expert recruiter and skill extraction AI. Analyze the resume thoroughly.
+    const prompt = `You are a resume analysis engine. Read the resume and extract a professional profile.
 
-CRITICAL: Separate HARD skills from SOFT skills.
-- Hard skills = specific, searchable abilities (Python, financial modeling, SEO, inventory management, cash handling, POS systems, coaching, first aid)
-- Soft skills = generic interpersonal traits (communication, teamwork, leadership, organisation, time management, problem solving, adaptability)
+The resume could be from ANY career field. Do not assume any default industry.
 
-Extract:
-- Hard skills specific to this person's ACTUAL experience (not assumed)
-- Soft skills (keep separate — they are NOT useful for job matching)
-- Experience level (fresher/junior/mid/senior based on years)
-- The PRIMARY industry from their ACTUAL work experience (e.g., "retail" if they worked at a store, "sports" if they coached, "finance" if they did banking)
-- Target role types matching THEIR industry, NOT generic titles. A retail worker gets "retail sales assistant", NOT "business analyst"
-- Location/City from their address or contact info
-- Detect Country based on: Phone prefixes (+61 AU, +91 IN, +1 US, +44 UK). Postcode patterns (3xxx/2xxx AU, 5-6 digits IN/US). School names and terms (Secondary College, Year 11/12 = AU).
-
-Return ONLY this JSON:
+Extract and return JSON:
 {
-  "hard_skills": ["cash handling", "POS systems", "inventory management"],
-  "soft_skills": ["communication", "teamwork"],
-  "experienceLevel": "fresher",
-  "industries": ["retail"],
-  "roleTypes": ["retail sales assistant", "store associate"],
-  "location": "City, Country",
-  "detected_country": "australia"
+  "hard_skills": ["specific, searchable abilities from the resume"],
+  "soft_skills": ["generic interpersonal traits"],
+  "experienceLevel": "fresher or junior or mid or senior",
+  "industries": ["primary industry from their work experience"],
+  "roleTypes": ["3-5 job titles they should search for, based on their actual work"],
+  "location": "city, country from their address"
 }
 
 RULES:
-1. hard_skills must be SPECIFIC and searchable. NO soft skills mixed in. Minimum 2, maximum 10.
-2. soft_skills are for DISPLAY ONLY. They should NOT be used for job matching.
-3. industries must match the ACTUAL work in the resume, not assumed. If they worked at a soccer club, industry is "sports". If they did customer service, industry is "retail".
-4. roleTypes must be INDUSTRY-SPECIFIC, not generic "business analyst" for everyone.
-5. Return ONLY valid JSON, no explanation.`;
+1. hard_skills = specific searchable skills (Python, SEO, AutoCAD, patient care, inventory management). NO soft skills.
+2. soft_skills = generic traits (communication, teamwork, leadership). Separate from hard_skills.
+3. industries = what industry their WORK EXPERIENCE is in. Not what they studied unless they have no work experience.
+4. roleTypes = realistic job titles for this person. Based on WHERE they worked, not just what they know. 3-5 titles.
+5. location = extract from address/contact info.
+6. Return ONLY valid JSON, no explanation.`;
 
     const response = await callAI(prompt, resumeText, {
       model: 'llama-3.3-70b-versatile',
@@ -62,8 +50,7 @@ RULES:
          experienceLevel: parsed.experienceLevel || 'fresher',
          industries: parsed.industries || [],
          roleTypes: parsed.roleTypes || [],
-         location: parsed.location || 'remote',
-         detected_country: parsed.detected_country || 'remote'
+         location: parsed.location || 'India'
        };
     }
   } catch (e) {
@@ -77,8 +64,7 @@ RULES:
     experienceLevel: 'fresher',
     industries: [],
     roleTypes: [],
-    location: 'remote',
-    detected_country: 'remote'
+    location: 'India'
   };
 }
 

@@ -70,24 +70,18 @@ export default function DashboardPage() {
       setResumeText(text);
       
       const extracted = await extractSkillsFromResume(text);
-      
       console.log('=== SKILLS EXTRACTED ===', extracted);
-      
-      // Clear ALL old data before saving new resume data (prevents cross-resume pollution)
-      localStorage.removeItem('userSkills');
-      localStorage.removeItem('userHardSkills');
-      localStorage.removeItem('userSoftSkills');
-      localStorage.removeItem('userRoles');
-      localStorage.removeItem('userExperience');
-      localStorage.removeItem('userLocation');
-      
+
+      // Clear old data first (prevents cross-resume pollution)
+      ['userSkills', 'userHardSkills', 'userSoftSkills', 'userRoles',
+       'userExperience', 'userLocation'].forEach(k => localStorage.removeItem(k));
+
       localStorage.setItem('userHardSkills', JSON.stringify(extracted.hard_skills || []));
       localStorage.setItem('userSoftSkills', JSON.stringify(extracted.soft_skills || []));
       localStorage.setItem('userSkills', JSON.stringify([...(extracted.hard_skills || []), ...(extracted.soft_skills || [])]));
-      localStorage.setItem('userExperience', extracted.experienceLevel || 'student');
+      localStorage.setItem('userExperience', extracted.experienceLevel || 'fresher');
       localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
-      localStorage.setItem('userLocation', extracted.location || 'remote');
-      localStorage.setItem('detectedCountry', extracted.detected_country || 'remote');
+      localStorage.setItem('userLocation', extracted.location || 'India');
       localStorage.setItem('resumeText', text);
       localStorage.setItem('lastUserId', user?.id || 'anonymous');
       localStorage.setItem('resumeTimestamp', String(Date.now()));

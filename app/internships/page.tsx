@@ -134,10 +134,9 @@ function InternshipsContent() {
       localStorage.setItem('userHardSkills', JSON.stringify(extracted.hard_skills || []));
       localStorage.setItem('userSoftSkills', JSON.stringify(extracted.soft_skills || []));
       localStorage.setItem('userSkills', JSON.stringify([...(extracted.hard_skills || []), ...(extracted.soft_skills || [])]));
-      localStorage.setItem('userExperience', extracted.experienceLevel || 'student');
+      localStorage.setItem('userExperience', extracted.experienceLevel || 'fresher');
       localStorage.setItem('userRoles', JSON.stringify(extracted.roleTypes || []));
-      localStorage.setItem('userLocation', extracted.location || 'remote');
-      localStorage.setItem('detectedCountry', extracted.detected_country || 'remote');
+      localStorage.setItem('userLocation', extracted.location || 'India');
 
       await searchJobs(text, extracted.hard_skills || []);
     } catch (err) {
@@ -153,36 +152,28 @@ function InternshipsContent() {
     setError(null);
 
     try {
-      const userLocation = localStorage.getItem('userLocation') || 'remote';
-      // Prefer hard skills for search queries — soft skills match everything and return garbage
-      const userHardSkills = directSkills || JSON.parse(localStorage.getItem('userHardSkills') || localStorage.getItem('userSkills') || '[]');
+      const userLocation = localStorage.getItem('userLocation') || '';
+      const userHardSkills = directSkills || JSON.parse(localStorage.getItem('userHardSkills') || '[]');
       const userSoftSkills = JSON.parse(localStorage.getItem('userSoftSkills') || '[]');
-      const userExperience = localStorage.getItem('userExperience') || 'student';
+      const userExperience = localStorage.getItem('userExperience') || 'fresher';
       const userRoles = JSON.parse(localStorage.getItem('userRoles') || '[]');
-      
-      // Cache Buster to ensure we focus only on the latest resume
-      const resumeVersion = localStorage.getItem('resumeVersion') || Math.random().toString(36).substring(7);
-      if (!localStorage.getItem('resumeVersion')) localStorage.setItem('resumeVersion', resumeVersion);
 
-      // Use first HARD skill or first role as initial query — NOT soft skills like "communication"
       const primarySkill =
-        (Array.isArray(userRoles) && userRoles.length > 0 && String(userRoles[0])) ||
-        (Array.isArray(userHardSkills) && userHardSkills.length > 0 && String(userHardSkills[0])) ||
+        (userRoles.length > 0 && userRoles[0]) ||
+        (userHardSkills.length > 0 && userHardSkills[0]) ||
         'internship';
 
       const res = await fetch(`/api/internships/search`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           resumeText: text,
           location: userLocation,
-          detectedCountry: localStorage.getItem('detectedCountry') || 'remote',
-          skills: userHardSkills,        // Only hard skills for search
-          softSkills: userSoftSkills,     // Soft skills for display only
+          skills: userHardSkills,
+          softSkills: userSoftSkills,
           experience: userExperience,
           preferredRoles: userRoles,
           query: primarySkill,
-          cacheBuster: resumeVersion
         })
       });
 
