@@ -722,7 +722,7 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
       const rawDescription = String(job.description || job.adref || '')
       return {
         title: String(job.title || ''),
-        company: String((job.company as Record<string, unknown>)?.display_name || (typeof job.company === 'string' ? job.company : '') || ''),
+        company: String((job.company as Record<string, unknown>)?.display_name || (typeof job.company === 'string' ? job.company : JSON.stringify(job.company)) || ''),
         location: String((job.location as Record<string, unknown>)?.display_name || job.location || ''),
         salary: rawSalary,
         salaryObj: normalizeSalary(rawSalary),
@@ -844,7 +844,9 @@ export async function aggregateJobs(userQuery: string, preferredLocation?: strin
 
   const dedupeMap = new Map<string, JobResult>()
   for (const job of combined) {
-    const key = `${job.title.trim().toLowerCase()}|${job.company.trim().toLowerCase()}`
+    // Treat similar roles at the same company as duplicates (e.g. "Customer Service Specialist" vs "Consultant")
+    const baseTitle = job.title.trim().toLowerCase().split(/\s+/).slice(0, 2).join(' ')
+    const key = `${baseTitle}|${job.company.trim().toLowerCase()}`
     const existing = dedupeMap.get(key)
     if (!existing) {
       dedupeMap.set(key, job)

@@ -358,10 +358,10 @@ export async function POST(req: NextRequest) {
       return job.matchScore >= 50;
     });
 
-    // FALLBACK: If fewer than 5 good matches, show top 20 anyway
+    // FALLBACK: If fewer than 5 good matches, show top 20 anyway but filter out 0 match scores
     const finalJobs = goodMatches.length >= 5
       ? goodMatches.slice(0, 50)
-      : sorted.slice(0, 20);
+      : sorted.filter(job => job.matchScore > 0).slice(0, 20);
 
     const usingFallback = goodMatches.length < 5;
     console.log(`[Search] Good matches: ${goodMatches.length} | Using fallback: ${usingFallback} | Returning: ${finalJobs.length} (top: ${finalJobs[0]?.matchScore || 0}%)`);
