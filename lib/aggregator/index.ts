@@ -722,7 +722,7 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
       const rawDescription = String(job.description || job.adref || '')
       return {
         title: String(job.title || ''),
-        company: String((job.company as Record<string, unknown>)?.display_name || job.company || ''),
+        company: String((job.company as Record<string, unknown>)?.display_name || (typeof job.company === 'string' ? job.company : '') || ''),
         location: String((job.location as Record<string, unknown>)?.display_name || job.location || ''),
         salary: rawSalary,
         salaryObj: normalizeSalary(rawSalary),
@@ -819,7 +819,19 @@ export async function aggregateJobs(userQuery: string, preferredLocation?: strin
 
   console.log(`[Aggregator] Results — Remotive: ${remotive.length}, Himalayas: ${himalayas.length}, RemoteOK: ${remoteOK.length}, Adzuna: ${adzuna.length}, JSearch: ${jsearch.length}, Internshala: ${internshala.length}, WeWorkRemotely: ${wework.length}, Arbeitnow: ${arbeitnow.length}`)
 
-  const combined = [...remotive, ...himalayas, ...remoteOK, ...adzuna, ...jsearch, ...internshala, ...wework, ...arbeitnow]
+  const combinedRaw = [...remotive, ...himalayas, ...remoteOK, ...adzuna, ...jsearch, ...internshala, ...wework, ...arbeitnow]
+
+  // Filter out obvious scam jobs from certain industries when they use generic keywords like "customer service"
+  const scamKeywords = ['travel', 'tourism', 'holiday', 'vacation', 'resort', 'timeshare'];
+  const combined = combinedRaw.filter(job => {
+    const text = (job.title + ' ' + (job.description || '')).toLowerCase();
+    const isScamTopic = scamKeywords.some(kw => text.includes(kw));
+    // If it mentions customer service AND travel/tourism, it's often a generic fake listing
+    if (isScamTopic && text.includes('customer service')) {
+      return false;
+    }
+    return true;
+  });
 
   combined.sort((a, b) => {
     const aTs = getPostedAtTimestamp(a.postedAt)
