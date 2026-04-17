@@ -17,7 +17,7 @@ export interface ExtractedSkills {
 
 function cleanResumeText(text: string): string {
   return text
-    .replace(/\(Tip:.*?\)/gi, '')
+    .replace(/\(Tip:[\s\S]*?\)/g, '')
     .replace(/\(Optional:.*?\)/gi, '')
     .replace(/\[.*?Tip:.*?\]/gi, '')
     .replace(/Tip:.*?(?:\n|$)/gi, '')
