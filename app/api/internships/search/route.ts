@@ -214,14 +214,23 @@ function scoreJob(job: any, profile: ResumeProfile): number {
     score -= 30;
   }
 
-  if (skillsMatched.length === 0 && rolesMatched.length === 0) {
-    if (/data engineer|ml engineer|devops|sre/.test(jobTitle)) {
-      score -= 15;
-    }
-    if (/compliance|auditor|actuary/.test(jobTitle)) {
-      score -= 15;
-    }
+  // Experience level indicators (Roman numerals II+): moderate penalty
+  if (/\b(?:ii|iii|iv|v|vi|vii|viii|ix|x)\b/.test(jobTitle) && !/intern/.test(jobTitle)) {
     score -= 20;
+  }
+
+  if (skillsMatched.length === 0 && rolesMatched.length === 0) {
+    if (/data engineer|ml engineer|devops|sre|software engineer|frontend|backend|full-stack|full stack|data scientist|developer/.test(jobTitle)) {
+      score -= 25;
+    }
+    if (/compliance|auditor|actuary|hr specialist|human resources specialist|paralegal|procurement/.test(jobTitle)) {
+      score -= 25;
+    }
+    score -= 25;
+  }
+
+  if (skillsMatched.length === 0 && rolesMatched.length === 0 && /military|defense|aerospace/.test(jobText)) {
+    score -= 15;
   }
 
   return Math.max(0, Math.min(Math.round(score), 100));
@@ -367,7 +376,7 @@ export async function POST(req: NextRequest) {
     // FALLBACK: If fewer than 5 good matches, show top 20 anyway but filter out 0 match scores
     const finalJobs = goodMatches.length >= 5
       ? goodMatches.slice(0, 50)
-      : sorted.filter(job => job.matchScore > 0).slice(0, 20);
+      : sorted.filter(job => job.matchScore >= 10).slice(0, 20);
 
     const usingFallback = goodMatches.length < 5;
     console.log(`[Search] Good matches: ${goodMatches.length} | Using fallback: ${usingFallback} | Returning: ${finalJobs.length} (top: ${finalJobs[0]?.matchScore || 0}%)`);
