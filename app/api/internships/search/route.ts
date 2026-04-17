@@ -215,6 +215,12 @@ function scoreJob(job: any, profile: ResumeProfile): number {
   }
 
   if (skillsMatched.length === 0 && rolesMatched.length === 0) {
+    if (/data engineer|ml engineer|devops|sre/.test(jobTitle)) {
+      score -= 15;
+    }
+    if (/compliance|auditor|actuary/.test(jobTitle)) {
+      score -= 15;
+    }
     score -= 20;
   }
 

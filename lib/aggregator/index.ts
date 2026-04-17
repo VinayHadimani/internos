@@ -722,7 +722,7 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
       const rawDescription = String(job.description || job.adref || '')
       return {
         title: String(job.title || ''),
-        company: String((job.company as Record<string, unknown>)?.display_name || (typeof job.company === 'string' ? job.company : JSON.stringify(job.company)) || ''),
+        company: String((job.company as Record<string, unknown>)?.display_name || (typeof job.company === 'string' ? job.company : '') || ''),
         location: String((job.location as Record<string, unknown>)?.display_name || job.location || ''),
         salary: rawSalary,
         salaryObj: normalizeSalary(rawSalary),
