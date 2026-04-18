@@ -271,7 +271,7 @@ export async function POST(req: NextRequest) {
       : (Array.isArray(clientSkills) && clientSkills.length > 0 && clientSkills[0])
         ? String(clientSkills[0])
         : query;
-    const initialJobsPromise = aggregateJobs(initialQuery, userLocation, aiProfile?.industry);
+    const initialJobsPromise = aggregateJobs(initialQuery, userLocation);
 
     const [aiProfileResult, initialJobs] = await Promise.all([aiPromise, initialJobsPromise]);
     let profile: ResumeProfile | null = aiProfileResult;
