@@ -159,6 +159,7 @@ function fallbackExtractProfile(
     soft_skills: softSkills,
     roles: (clientRoles || []).map(String).slice(0, 5),
     industry: 'general',
+    country_code: 'in', // Default fallback
     experience_level: 'student',
     search_keywords: [...new Set(searchKeywords)].slice(0, 5),
   };
