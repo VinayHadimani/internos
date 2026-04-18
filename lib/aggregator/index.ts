@@ -1,6 +1,8 @@
 // AI call removed — parseJobQuery no longer needs it (search route handles AI)
 import * as cheerio from 'cheerio'
 import { normalizeSalary, type SalaryInfo } from '@/lib/utils/salary'
+import { scrapeInternshala } from '@/lib/scrapers/internshala'
+import axios from 'axios'
 
 // Add this helper function at the top:
 function cleanText(text: string): string {
@@ -245,7 +247,8 @@ function delay(ms: number): Promise<void> {
 
 async function runFetchersInParallel(
   keywords: string[],
-  location: string
+  location: string,
+  industry?: string
 ): Promise<{
   remotive: JobResult[]
   himalayas: JobResult[]
@@ -255,7 +258,10 @@ async function runFetchersInParallel(
   internshala: JobResult[]
   wework: JobResult[]
   arbeitnow: JobResult[]
+  jobicy: JobResult[]
 }> {
+  const isTechIndustry = !industry || /software|tech|engineer|developer|computer|data|ai|ml|programming|web|frontend|backend|full-stack|full stack|devops|cloud|cyber|blockchain|system|it|information technology|cs/.test(industry.toLowerCase());
+
   const [
     remotiveResult,
     himalayasResult,
@@ -265,15 +271,17 @@ async function runFetchersInParallel(
     internshalaResult,
     weworkResult,
     arbeitnowResult,
+    jobicyResult,
   ] = await Promise.allSettled([
-    fetchRemotive(keywords),
-    fetchHimalayas(keywords),
-    fetchRemoteOK(keywords),
+    isTechIndustry ? fetchRemotive(keywords) : Promise.resolve([]),
+    isTechIndustry ? fetchHimalayas(keywords) : Promise.resolve([]),
+    isTechIndustry ? fetchRemoteOK(keywords) : Promise.resolve([]),
     fetchAdzuna(keywords, location),
     fetchJSearch(keywords),
     fetchInternshala(keywords),
-    fetchWeWorkRemotely(keywords),
+    isTechIndustry ? fetchWeWorkRemotely(keywords) : Promise.resolve([]),
     fetchArbeitnow(keywords),
+    fetchJobicy(keywords),
   ])
 
   const extract = (result: PromiseSettledResult<JobResult[]>, name: string): JobResult[] => {
@@ -291,6 +299,7 @@ async function runFetchersInParallel(
     internshala: extract(internshalaResult, 'Internshala'),
     wework: extract(weworkResult, 'WeWorkRemotely'),
     arbeitnow: extract(arbeitnowResult, 'Arbeitnow'),
+    jobicy: extract(jobicyResult, 'Jobicy'),
   }
 }
 
@@ -394,30 +403,61 @@ const INTERN_SHALA_PROFILES: Record<string, string> = {
 
 export async function fetchInternshala(keywords: string[]): Promise<JobResult[]> {
   try {
-    const profiles = new Set<string>()
-    for (const kw of keywords) {
-      const lower = kw.toLowerCase()
-      if (INTERN_SHALA_PROFILES[lower]) {
-        profiles.add(INTERN_SHALA_PROFILES[lower])
-      } else {
-        const match = Object.entries(INTERN_SHALA_PROFILES).find(([key]) => lower.includes(key))
-        if (match) {
-          profiles.add(match[1])
-        } else {
-          profiles.add(lower.replace(/\s+/g, '-'))
-        }
-      }
-    }
-
-    const feedUrls = [...profiles].map(
-      (profile) => `https://internshala.com/rss/internships/profile-${profile}`
-    )
-
-    const results = await Promise.all(feedUrls.map(parseRSSFeed))
-    return results.flat()
+    const query = keywords.join(' ');
+    console.log(`[Internshala] Scraping: ${query}`);
+    
+    // Scrape 2 pages for deeper results
+    const results = await scrapeInternshala(query, 2);
+    
+    return results.map(job => ({
+      title: job.title,
+      company: job.company,
+      location: job.location,
+      salary: job.stipend,
+      salaryObj: normalizeSalary(job.stipend),
+      url: job.applyUrl,
+      source: 'Internshala',
+      type: 'Internship',
+      description: sanitizeDescription(job.description),
+      postedAt: undefined, // Scraper doesn't reliably get exact dates yet
+    }));
   } catch (err) {
     console.log('[Aggregator] Internshala fetch failed:', err)
     return []
+  }
+}
+
+export async function fetchJobicy(keywords: string[]): Promise<JobResult[]> {
+  const source = 'Jobicy'
+  try {
+    const query = keywords.join(' ');
+    console.log(`[${source}] Fetching: ${query}`);
+    
+    const res = await fetch(`https://jobicy.com/api/v2/remote-jobs?count=20&tag=${encodeURIComponent(query)}`, {
+      headers: BROWSER_HEADERS,
+      signal: AbortSignal.timeout(5000),
+    });
+    
+    if (!res.ok) return [];
+    
+    const data = await res.json();
+    const jobs = data.jobs || [];
+    
+    return jobs.map((job: any) => ({
+      title: String(job.jobTitle || ''),
+      company: String(job.companyName || ''),
+      location: String(job.jobGeo || 'Remote'),
+      salary: '', // Jobicy doesn't standardized salary in API
+      salaryObj: null,
+      url: String(job.url || ''),
+      source: 'Jobicy',
+      type: String(job.jobType || 'Full-time'),
+      description: sanitizeDescription(job.jobDescription || ''),
+      postedAt: normalizeDate(job.pubDate),
+    }));
+  } catch (err) {
+    console.log(`[${source}] Fetch failed:`, err instanceof Error ? err.message : String(err));
+    return [];
   }
 }
 
@@ -800,7 +840,7 @@ export async function fetchJSearch(keywords: string[]): Promise<JobResult[]> {
 
 // ─── Main Orchestrator ───────────────────────────────────────
 
-export async function aggregateJobs(userQuery: string, preferredLocation?: string): Promise<JobResult[]> {
+export async function aggregateJobs(userQuery: string, preferredLocation?: string, industry?: string): Promise<JobResult[]> {
   console.log(`[Aggregator] Parsing query: "${userQuery}"`)
   const { keywords, job_type, location: queryLocation } = await parseJobQuery(userQuery)
   const prefLocation = preferredLocation || queryLocation
@@ -815,11 +855,12 @@ export async function aggregateJobs(userQuery: string, preferredLocation?: strin
     internshala,
     wework,
     arbeitnow,
-  } = await runFetchersInParallel(keywords, prefLocation)
+    jobicy,
+  } = await runFetchersInParallel(keywords, prefLocation, industry)
 
-  console.log(`[Aggregator] Results — Remotive: ${remotive.length}, Himalayas: ${himalayas.length}, RemoteOK: ${remoteOK.length}, Adzuna: ${adzuna.length}, JSearch: ${jsearch.length}, Internshala: ${internshala.length}, WeWorkRemotely: ${wework.length}, Arbeitnow: ${arbeitnow.length}`)
+  console.log(`[Aggregator] Results — Remotive: ${remotive.length}, Himalayas: ${himalayas.length}, RemoteOK: ${remoteOK.length}, Adzuna: ${adzuna.length}, JSearch: ${jsearch.length}, Internshala: ${internshala.length}, WeWorkRemotely: ${wework.length}, Arbeitnow: ${arbeitnow.length}, Jobicy: ${jobicy.length}`)
 
-  const combinedRaw = [...remotive, ...himalayas, ...remoteOK, ...adzuna, ...jsearch, ...internshala, ...wework, ...arbeitnow]
+  const combinedRaw = [...remotive, ...himalayas, ...remoteOK, ...adzuna, ...jsearch, ...internshala, ...wework, ...arbeitnow, ...jobicy]
 
   // Filter out obvious scam jobs from certain industries when they use generic keywords like "customer service"
   const scamKeywords = ['travel', 'tourism', 'holiday', 'vacation', 'resort', 'timeshare'];

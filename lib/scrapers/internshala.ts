@@ -44,47 +44,48 @@ async function scrapePage(url: string): Promise<Internship[]> {
     const $ = cheerio.load(html);
 
     // Each internship card
-    $('.internship_meta, .individual_internship, .container-fluid').each((_, el) => {
+    $('.internship_meta, .individual_internship, .container-fluid, .internship-card').each((_, el) => {
       const card = $(el);
 
       // Try multiple selectors for title
-      const title = card.find('.job-internship-name, .profile, h3 a, .heading_4_5 a').first().text().trim()
-        || card.find('a.job-title-href').text().trim();
+      const title = card.find('.job-internship-name, .profile, h3 a, .heading_4_5 a, a.job-title-href').first().text().trim()
+        || card.find('a.job-title-href').text().trim()
+        || card.find('.heading_4_5').text().trim();
 
-      if (!title) return; // Skip empty cards
+      if (!title || title.toLowerCase().includes('internship') && title.length < 5) return; // Skip empty/invalid cards
 
       // Company
-      const company = card.find('.company_name, .company-name, .heading_6 a').first().text().trim()
+      const company = card.find('.company_name, .company-name, .heading_6 a, .company_and_premium').first().text().trim()
         || 'Company';
 
       // Location
-      const location = card.find('.location_link, .locations, .location_name').first().text().trim()
+      const location = card.find('.location_link, .locations, .location_name, #location_names').first().text().trim()
         || 'remote';
 
       // Stipend
-      const stipend = card.find('.stipend, .salary').first().text().trim()
+      const stipend = card.find('.stipend, .salary, .stipend_container').first().text().trim()
         || 'Unpaid';
 
       // Duration
-      const duration = card.find('.duration, .other_detail_item span').filter((_, el) =>
+      const duration = card.find('.duration, .other_detail_item span, .item_body').filter((_, el) =>
         $(el).text().toLowerCase().includes('month')
       ).first().text().trim() || 'Not specified';
 
       // Apply link
-      let applyUrl = card.find('a.view_detail_button, a[href*="/internship/detail/"]').attr('href') || '';
+      let applyUrl = card.find('a.view_detail_button, a[href*="/internship/detail/"], a[href*="/job/detail/"]').attr('href') || '';
       if (applyUrl && !applyUrl.startsWith('http')) {
         applyUrl = `${BASE_URL}${applyUrl}`;
       }
 
       // Skills
       const skills: string[] = [];
-      card.find('.round_tabs_container a, .skill_tag, .tags a, .skill-tag').each((_, skill) => {
+      card.find('.round_tabs, .round_tabs_container a, .skill_tag, .tags a, .skill-tag').each((_, skill) => {
         const skillText = $(skill).text().trim();
-        if (skillText) skills.push(skillText);
+        if (skillText && !skills.includes(skillText)) skills.push(skillText);
       });
 
       // Deadline
-      const deadline = card.find('.apply_by .item_body, .deadline').first().text().trim()
+      const deadline = card.find('.apply_by .item_body, .deadline, .item_body').first().text().trim()
         || 'Open';
 
       internships.push({

@@ -58,26 +58,26 @@ Analyze the resume and return JSON with EXACTLY these fields:
   "roles": ["list of 3-5 job titles this person should search for"],
   "industry": "primary industry from their actual work experience",
   "experience_level": "fresher or junior or mid or senior",
-  "search_keywords": ["list of 4-6 search phrases to type into a job board"]
+  "search_keywords": ["list of 6-8 search phrases to type into a job board"]
 }
 
 RULES FOR EACH FIELD:
 
-1. hard_skills — ONLY specific, searchable abilities. Examples: "Python", "financial modeling", "SEO", "inventory management", "AutoCAD", "patient care", "lesson planning", "cash handling", "operating cash register". NEVER include generic traits like "communication" or "leadership" here. For entry-level workers with no technical skills, include basic abilities like "cash handling", "basic math", "Microsoft Office".
+1. hard_skills — ONLY specific, searchable abilities. Examples: "Python", "financial modeling", "SEO", "inventory management", "AutoCAD", "patient care", "lesson planning", "cash handling", "operating cash register", "food preparation". NEVER include generic traits like "communication" or "leadership" here. For entry-level workers with no technical skills, include basic abilities like "cash handling", "basic math", "customer service".
 
 2. soft_skills — Generic interpersonal traits for display only. Examples: "communication", "teamwork", "leadership", "problem-solving". These are NOT used for job matching.
 
 3. roles — Job titles this person would realistically apply for. Base this on their WORK EXPERIENCE and EDUCATION, not just their skills. A retail worker gets "retail sales assistant", "store supervisor". A nursing student gets "registered nurse", "clinical assistant". Include 3-5 roles ordered by relevance.
 
-4. industry — The ONE industry that best describes their work experience. Look at WHERE they worked, not just what they studied. Someone who worked at a grocery store is in "retail". Someone who worked at a clipboard is in "sports and recreation". Keep it to a short phrase.
+4. industry — The ONE industry that best describes their work experience. Look at WHERE they worked, not just what they studied. Someone who worked at a grocery store is in "retail". Someone who worked at a sports club is in "sports and recreation". Keep it to a short phrase.
 
-5. search_keywords — Phrases you would actually type into Indeed or LinkedIn job search. These should combine industry + role + skill. NEVER use soft skills as search terms. ALWAYS use 2-4 word phrases. Include 4-6 keywords. Examples: ["retail sales assistant", "sports store associate", "customer service representative"], ["software engineering internship", "full stack developer intern"].
+5. search_keywords — Phrases you would actually type into Indeed or LinkedIn job search. These should combine industry + role + skill. NEVER use soft skills as search terms. ALWAYS use 2-4 word phrases. Include 6-8 keywords. Examples: ["retail sales assistant", "sports store associate", "customer service representative", "inventory clerk"], ["software engineering internship", "full stack developer intern", "frontend react developer"].
 
 6. MOST IMPORTANT: Read the resume holistically. Look at job titles, company names, project descriptions, education, extracurriculars, AND career objective TOGETHER to determine what this person does.
 
 7. If the resume has a "Career Objective" or "Objective" section, READ IT CAREFULLY. It usually states exactly what kind of job the person wants. Use that information for roles, industry, and search_keywords.
 
-8. NO-HARD-SKILL HANDLING: If the person is a student with no technical skills, do NOT leave hard_skills empty. Put whatever specific abilities they mention — "cash handling", "operating cash register", "serving customers", "basic math" are all valid hard skills for an entry-level worker.
+8. NO-HARD-SKILL HANDLING: If the person is a student with no technical skills, do NOT leave hard_skills empty. Put whatever specific abilities they mention — "cash handling", "operating cash register", "serving customers", "basic math", "food preparation", "event coordination" are all valid hard skills for an entry-level worker.
 
 Return ONLY valid JSON. No explanation.`;
 
@@ -271,11 +271,10 @@ export async function POST(req: NextRequest) {
       : (Array.isArray(clientSkills) && clientSkills.length > 0 && clientSkills[0])
         ? String(clientSkills[0])
         : query;
-    const initialJobsPromise = aggregateJobs(initialQuery, userLocation);
+    const initialJobsPromise = aggregateJobs(initialQuery, userLocation, aiProfile?.industry);
 
-    const [aiProfile, initialJobs] = await Promise.all([aiPromise, initialJobsPromise]);
-
-    let profile: ResumeProfile | null = aiProfile;
+    const [aiProfileResult, initialJobs] = await Promise.all([aiPromise, initialJobsPromise]);
+    const profile: ResumeProfile | null = aiProfileResult;
 
     if (!profile) {
       console.log('[Search] AI unavailable, using minimal fallback');
@@ -305,8 +304,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // CRITICAL: Limit to 2 queries to avoid Vercel timeout
-    let uniqueQueries = [...new Set(searchQueries)].slice(0, 2);
+    // CRITICAL: Limit to 4 queries to increase volume while keeping latency reasonable
+    let uniqueQueries = [...new Set(searchQueries)].slice(0, 4);
 
     const hasInternshipQuery = uniqueQueries.some(q =>
       /internship|job|role|assistant|position|associate/.test(q.toLowerCase())
@@ -323,7 +322,7 @@ export async function POST(req: NextRequest) {
     // STEP 3: Fetch additional jobs for remaining queries (ALL IN PARALLEL)
     const additionalPromises = uniqueQueries
       .filter(q => q.toLowerCase() !== initialQuery.toLowerCase())
-      .map(q => aggregateJobs(q, userLocation));
+      .map(q => aggregateJobs(q, userLocation, profile!.industry));
 
     console.log(`[Search] Fetching ${additionalPromises.length} additional query batches...`);
     const additionalResults = await Promise.all(additionalPromises);
