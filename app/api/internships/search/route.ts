@@ -274,7 +274,7 @@ export async function POST(req: NextRequest) {
     const initialJobsPromise = aggregateJobs(initialQuery, userLocation, aiProfile?.industry);
 
     const [aiProfileResult, initialJobs] = await Promise.all([aiPromise, initialJobsPromise]);
-    const profile: ResumeProfile | null = aiProfileResult;
+    let profile: ResumeProfile | null = aiProfileResult;
 
     if (!profile) {
       console.log('[Search] AI unavailable, using minimal fallback');
