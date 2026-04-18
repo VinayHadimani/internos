@@ -248,7 +248,8 @@ function delay(ms: number): Promise<void> {
 async function runFetchersInParallel(
   keywords: string[],
   location: string,
-  industry?: string
+  industry?: string,
+  country?: string
 ): Promise<{
   remotive: JobResult[]
   himalayas: JobResult[]
@@ -261,6 +262,9 @@ async function runFetchersInParallel(
   jobicy: JobResult[]
 }> {
   const isTechIndustry = !industry || /software|tech|engineer|developer|computer|data|ai|ml|programming|web|frontend|backend|full-stack|full stack|devops|cloud|cyber|blockchain|system|it|information technology|cs/.test(industry.toLowerCase());
+  
+  // Normalize country code (default to 'in' for current primary user base, or 'us' for global)
+  const targetCountry = (country || 'in').toLowerCase();
 
   const [
     remotiveResult,
@@ -276,9 +280,9 @@ async function runFetchersInParallel(
     isTechIndustry ? fetchRemotive(keywords) : Promise.resolve([]),
     isTechIndustry ? fetchHimalayas(keywords) : Promise.resolve([]),
     isTechIndustry ? fetchRemoteOK(keywords) : Promise.resolve([]),
-    fetchAdzuna(keywords, location),
+    fetchAdzuna(keywords, location, targetCountry),
     fetchJSearch(keywords),
-    fetchInternshala(keywords),
+    targetCountry === 'in' ? fetchInternshala(keywords) : Promise.resolve([]),
     isTechIndustry ? fetchWeWorkRemotely(keywords) : Promise.resolve([]),
     fetchArbeitnow(keywords),
     fetchJobicy(keywords),
@@ -726,7 +730,7 @@ export async function fetchArbeitnow(keywords: string[]): Promise<JobResult[]> {
 
 // ─── Tier 2: Authenticated API Fetchers ──────────────────────
 
-export async function fetchAdzuna(keywords: string[], location: string): Promise<JobResult[]> {
+export async function fetchAdzuna(keywords: string[], location: string, country: string = 'in'): Promise<JobResult[]> {
   const source = 'Adzuna'
   try {
     const appId = process.env.ADZUNA_APP_ID
@@ -737,9 +741,14 @@ export async function fetchAdzuna(keywords: string[], location: string): Promise
     }
 
     const what = keywords.join(' ')
-    const where = location || 'India'
-    const url = `https://api.adzuna.com/v1/api/jobs/in/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}&where=${encodeURIComponent(where)}`
-    console.log(`[${source}] Starting fetch for: ${keywords.join(', ')} | Location: ${where}`)
+    const where = location || ''
+    
+    // Adzuna supports: at, au, br, ca, ch, de, es, fr, gb, in, it, mx, nl, nz, pl, ru, sg, us, za
+    const supportedCountries = ['at', 'au', 'br', 'ca', 'ch', 'de', 'es', 'fr', 'gb', 'in', 'it', 'mx', 'nl', 'nz', 'pl', 'ru', 'sg', 'us', 'za'];
+    const adzunaCountry = supportedCountries.includes(country.toLowerCase()) ? country.toLowerCase() : 'in';
+
+    const url = `https://api.adzuna.com/v1/api/jobs/${adzunaCountry}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}&where=${encodeURIComponent(where)}`
+    console.log(`[${source}] Starting fetch for: ${keywords.join(', ')} | Country: ${adzunaCountry} | Location: ${where}`)
 
     const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
     console.log(`[${source}] Response status: ${res.status}`)
@@ -840,11 +849,11 @@ export async function fetchJSearch(keywords: string[]): Promise<JobResult[]> {
 
 // ─── Main Orchestrator ───────────────────────────────────────
 
-export async function aggregateJobs(userQuery: string, preferredLocation?: string, industry?: string): Promise<JobResult[]> {
+export async function aggregateJobs(userQuery: string, preferredLocation?: string, industry?: string, country?: string): Promise<JobResult[]> {
   console.log(`[Aggregator] Parsing query: "${userQuery}"`)
   const { keywords, job_type, location: queryLocation } = await parseJobQuery(userQuery)
   const prefLocation = preferredLocation || queryLocation
-  console.log(`[Aggregator] Keywords: ${keywords.join(', ')} | Type: ${job_type} | Location: ${prefLocation}`)
+  console.log(`[Aggregator] Keywords: ${keywords.join(', ')} | Type: ${job_type} | Location: ${prefLocation} | Country: ${country}`)
 
   const {
     remotive,
@@ -856,7 +865,7 @@ export async function aggregateJobs(userQuery: string, preferredLocation?: strin
     wework,
     arbeitnow,
     jobicy,
-  } = await runFetchersInParallel(keywords, prefLocation, industry)
+  } = await runFetchersInParallel(keywords, prefLocation, industry, country)
 
   console.log(`[Aggregator] Results — Remotive: ${remotive.length}, Himalayas: ${himalayas.length}, RemoteOK: ${remoteOK.length}, Adzuna: ${adzuna.length}, JSearch: ${jsearch.length}, Internshala: ${internshala.length}, WeWorkRemotely: ${wework.length}, Arbeitnow: ${arbeitnow.length}, Jobicy: ${jobicy.length}`)
 

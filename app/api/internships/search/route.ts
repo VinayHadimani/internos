@@ -17,6 +17,7 @@ interface ResumeProfile {
   soft_skills: string[];
   roles: string[];
   industry: string;
+  country_code: string; // ISO 3166-1 alpha-2 (e.g., 'in', 'us', 'au')
   experience_level: string;
   search_keywords: string[];
 }
@@ -57,6 +58,7 @@ Analyze the resume and return JSON with EXACTLY these fields:
   "soft_skills": ["list of generic interpersonal skills found in the resume"],
   "roles": ["list of 3-5 job titles this person should search for"],
   "industry": "primary industry from their actual work experience",
+  "country_code": "2-letter ISO country code (e.g. 'in', 'us', 'au', 'gb', 'ca') detected from address or phone",
   "experience_level": "fresher or junior or mid or senior",
   "search_keywords": ["list of 6-8 search phrases to type into a job board"]
 }
@@ -203,10 +205,33 @@ function scoreJob(job: any, profile: ResumeProfile): number {
   // 15%: Junior/intern bonus (only if something matched)
   if (skillsMatched.length > 0 || rolesMatched.length > 0) {
     if (/intern|entry|trainee|junior|graduate|fresher/.test(jobTitle)) {
-      score += 10;
+      score += 15;
     } else {
       score += 5;
     }
+  }
+
+  // 🌍 Country Match (CRITICAL for non-tech)
+  const jobLoc = (job.location || '').toLowerCase();
+  const userCountry = (profile.country_code || '').toLowerCase();
+  
+  const countryCodes: Record<string, string[]> = {
+    'in': ['india', 'bangalore', 'mumbai', 'delhi', 'chennai', 'hyderabad', 'pune', 'gurgaon', 'noida', 'kolkata'],
+    'au': ['australia', 'sydney', 'melbourne', 'brisbane', 'perth', 'adelaide', 'gold coast'],
+    'us': ['usa', 'united states', 'new york', 'california', 'texas', 'san francisco', 'austin'],
+    'gb': ['uk', 'united kingdom', 'london', 'manchester', 'birmingham'],
+    'ca': ['canada', 'toronto', 'vancouver', 'montreal']
+  };
+
+  const isRemote = /remote|anywhere|wfh|work from home/.test(jobLoc);
+  const userCountryKeywords = countryCodes[userCountry] || [userCountry];
+  const isMatchCountry = userCountryKeywords.some(k => jobLoc.includes(k));
+
+  if (isMatchCountry) {
+    score += 10;
+  } else if (!isRemote) {
+    // Heavy penalty for non-remote cross-country jobs
+    score -= 40;
   }
 
   // Penalties
@@ -271,7 +296,12 @@ export async function POST(req: NextRequest) {
       : (Array.isArray(clientSkills) && clientSkills.length > 0 && clientSkills[0])
         ? String(clientSkills[0])
         : query;
-    const initialJobsPromise = aggregateJobs(initialQuery, userLocation);
+    // We can't pass industry/country to the initial batch yet because AI hasn't finished.
+    // However, we can guess the country from the userLocation string if provided.
+    const guessCountry = userLocation.toLowerCase().includes('india') ? 'in' : 
+                         userLocation.toLowerCase().includes('australia') ? 'au' : 
+                         userLocation.toLowerCase().includes('usa') ? 'us' : undefined;
+    const initialJobsPromise = aggregateJobs(initialQuery, userLocation, undefined, guessCountry);
 
     const [aiProfileResult, initialJobs] = await Promise.all([aiPromise, initialJobsPromise]);
     let profile: ResumeProfile | null = aiProfileResult;
@@ -322,7 +352,7 @@ export async function POST(req: NextRequest) {
     // STEP 3: Fetch additional jobs for remaining queries (ALL IN PARALLEL)
     const additionalPromises = uniqueQueries
       .filter(q => q.toLowerCase() !== initialQuery.toLowerCase())
-      .map(q => aggregateJobs(q, userLocation, profile!.industry));
+      .map(q => aggregateJobs(q, userLocation, profile!.industry, profile!.country_code));
 
     console.log(`[Search] Fetching ${additionalPromises.length} additional query batches...`);
     const additionalResults = await Promise.all(additionalPromises);
@@ -386,6 +416,7 @@ export async function POST(req: NextRequest) {
       total: finalJobs.length,
       detected_skills: [...(profile.hard_skills || []), ...(profile.soft_skills || [])],
       detected_domains: [profile.industry],
+      detected_country: profile.country_code,
       target_roles: profile.roles,
       jobs: finalJobs,
       count: finalJobs.length

@@ -178,6 +178,7 @@ function InternshipsContent() {
         if (data.profile?.hard_skills) localStorage.setItem('userHardSkills', JSON.stringify(data.profile.hard_skills));
         if (data.profile?.soft_skills) localStorage.setItem('userSoftSkills', JSON.stringify(data.profile.soft_skills));
         if (data.profile?.experience_level) localStorage.setItem('userExperienceLevel', data.profile.experience_level);
+        if (data.detected_country) localStorage.setItem('userCountry', data.detected_country);
 
         // Clean up raw resume text after results are displayed
         if (!hasCleanedUpRef.current) {
@@ -379,41 +380,51 @@ function InternshipsContent() {
                         )}
                         
                         <div className="flex flex-wrap items-center gap-2 mt-3">
-                          {job.locationMatch && (
-                            <span className="text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">📍 Location Match</span>
-                          )}
                           {(() => {
                             const userLoc = (localStorage.getItem('userLocation') || 'remote').toLowerCase();
+                            const userCountry = (localStorage.getItem('userCountry') || '').toLowerCase();
                             const jobLoc = (job.location || '').toLowerCase();
-                            const userParts = userLoc.split(',').map(s => s.trim());
-                            const userCity = userParts[0];
-                            const userCountry = userParts[userParts.length - 1];
-
+                            
                             const getFlagEmoji = (loc: string) => {
                               const l = loc.toLowerCase();
-                              if (l.includes('australia')) return '🇦🇺';
-                              if (l.includes('india')) return '🇮🇳';
-                              if (l.includes('united states') || l.includes('usa')) return '🇺🇸';
-                              if (l.includes('united kingdom') || l.includes('uk')) return '🇬🇧';
-                              if (l.includes('germany')) return '🇩🇪';
-                              if (l.includes('canada')) return '🇨🇦';
+                              if (l.includes('australia') || l.includes('sydney') || l.includes('melbourne')) return '🇦🇺';
+                              if (l.includes('india') || l.includes('bangalore') || l.includes('mumbai') || l.includes('delhi')) return '🇮🇳';
+                              if (l.includes('united states') || l.includes('usa') || l.includes('us')) return '🇺🇸';
+                              if (l.includes('united kingdom') || l.includes('uk') || l.includes('london')) return '🇬🇧';
+                              if (l.includes('germany') || l.includes('berlin')) return '🇩🇪';
+                              if (l.includes('canada') || l.includes('toronto')) return '🇨🇦';
                               if (l.includes('remote')) return '🌐';
                               return '📍';
                             };
 
-                            const isRemote = jobLoc.includes('remote');
-                            const sameCity = userCity && jobLoc.includes(userCity.toLowerCase());
-                            const sameCountry = userCountry && jobLoc.includes(userCountry.toLowerCase());
+                            const isRemote = jobLoc.includes('remote') || jobLoc.includes('anywhere') || jobLoc.includes('wfh');
+                            
+                            // Country detection mapping
+                            const countryKeywords: Record<string, string[]> = {
+                              'in': ['india', 'bangalore', 'mumbai', 'delhi', 'chennai', 'hyderabad', 'pune'],
+                              'au': ['australia', 'sydney', 'melbourne', 'brisbane', 'perth'],
+                              'us': ['usa', 'united states', 'new york', 'california', 'texas'],
+                              'gb': ['uk', 'united kingdom', 'london'],
+                              'ca': ['canada', 'toronto', 'vancouver']
+                            };
+
+                            const isUserFromCountry = (c: string) => userCountry === c || userLoc.includes(c) || (countryKeywords[c] || []).some(k => userLoc.includes(k));
+                            const isJobInCountry = (c: string) => jobLoc.includes(c) || (countryKeywords[c] || []).some(k => jobLoc.includes(k));
 
                             if (isRemote) {
                               return <span className="text-xs font-medium px-2 py-1 bg-green-500/10 text-green-400 rounded-lg border border-green-500/20">🌐 Remote Match</span>;
-                            } else if (sameCity) {
-                              return <span className="text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">{getFlagEmoji(jobLoc)} {userCity} Match</span>;
-                            } else if (sameCountry) {
-                              return <span className="text-xs font-medium px-2 py-1 bg-orange-500/10 text-orange-400 rounded-lg border border-orange-500/20">{getFlagEmoji(jobLoc)} {userCountry} Match</span>;
-                            } else {
-                              return <span className="text-xs font-medium px-2 py-1 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20">{getFlagEmoji(jobLoc)} International</span>;
                             }
+
+                            // Check all supported countries
+                            for (const code of Object.keys(countryKeywords)) {
+                              if (isUserFromCountry(code) && isJobInCountry(code)) {
+                                const flag = getFlagEmoji(code === 'au' ? 'australia' : code === 'in' ? 'india' : code === 'us' ? 'usa' : code === 'gb' ? 'uk' : 'canada');
+                                return <span className="text-xs font-medium px-2 py-1 bg-blue-500/10 text-blue-400 rounded-lg border border-blue-500/20">{flag} Local Match</span>;
+                              }
+                            }
+
+                            // If countries definitely differ
+                            return <span className="text-xs font-medium px-2 py-1 bg-purple-500/10 text-purple-400 rounded-lg border border-purple-500/20">{getFlagEmoji(jobLoc)} International</span>;
                           })()}
                         </div>
                       </div>
