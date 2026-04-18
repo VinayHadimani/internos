@@ -741,11 +741,17 @@ export async function fetchAdzuna(keywords: string[], location: string, country:
     }
 
     const what = keywords.join(' ')
-    const where = location || ''
+    let where = location || ''
     
-    // Adzuna supports: at, au, br, ca, ch, de, es, fr, gb, in, it, mx, nl, nz, pl, ru, sg, us, za
+    // Adzuna supports regional sites: at, au, br, ca, ch, de, es, fr, gb, in, it, mx, nl, nz, pl, ru, sg, us, za
     const supportedCountries = ['at', 'au', 'br', 'ca', 'ch', 'de', 'es', 'fr', 'gb', 'in', 'it', 'mx', 'nl', 'nz', 'pl', 'ru', 'sg', 'us', 'za'];
     const adzunaCountry = supportedCountries.includes(country.toLowerCase()) ? country.toLowerCase() : 'in';
+
+    // 🚩 FIX: If we are searching a non-IN site but 'where' is still set to 'India' (the global default), 
+    // clear it so we find jobs relevant to the regional site generally.
+    if (adzunaCountry !== 'in' && where.toLowerCase() === 'india') {
+      where = '';
+    }
 
     const url = `https://api.adzuna.com/v1/api/jobs/${adzunaCountry}/search/1?app_id=${appId}&app_key=${appKey}&results_per_page=20&what=${encodeURIComponent(what)}&where=${encodeURIComponent(where)}`
     console.log(`[${source}] Starting fetch for: ${keywords.join(', ')} | Country: ${adzunaCountry} | Location: ${where}`)

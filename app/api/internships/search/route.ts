@@ -231,8 +231,8 @@ function scoreJob(job: any, profile: ResumeProfile): number {
   if (isMatchCountry) {
     score += 10;
   } else if (!isRemote) {
-    // Heavy penalty for non-remote cross-country jobs
-    score -= 40;
+    // 🚩 SOFTENED: Heavy penalty for non-remote cross-country jobs
+    score -= 25;
   }
 
   // Penalties
@@ -280,7 +280,7 @@ export async function POST(req: NextRequest) {
     } = body;
 
     const resumeText: string = body.resumeText || '';
-    const userLocation = bodyLocation || 'India';
+    const userLocation = bodyLocation || ''; // 🚩 FIX: Stop forcing 'India' default globally
 
     console.log('[Search] === START ===');
 
@@ -385,28 +385,41 @@ export async function POST(req: NextRequest) {
     // Sort by score descending
     const sorted = scoredJobs.sort((a, b) => b.matchScore - a.matchScore);
 
-    // Filter: minimum 20% relevance + location preference
+    // Filter: minimum relevance + location preference
     const goodMatches = sorted.filter(job => {
-      if (job.matchScore < 20) return false;
+      // 🚩 RELAXED: Minimum relevance threshold
+      if (job.matchScore < 10) return false;
       const jobLoc = (job.location || '').toLowerCase();
-      const userLoc = (userLocation || 'india').toLowerCase();
-      if (jobLoc.includes('remote') || jobLoc.includes('anywhere') || jobLoc.includes('wfh')) {
-        return job.matchScore >= 25;
+      const userLoc = (userLocation || '').toLowerCase();
+      
+      const isRemote = jobLoc.includes('remote') || jobLoc.includes('anywhere') || jobLoc.includes('wfh') || jobLoc.includes('work from home');
+      
+      if (isRemote) {
+        return job.matchScore >= 15;
       }
-      if (jobLoc.includes(userLoc)) return true;
-      if (userLoc.includes('india') && (
-        jobLoc.includes('india') || jobLoc.includes('bangalore') || jobLoc.includes('bengaluru') ||
-        jobLoc.includes('mumbai') || jobLoc.includes('delhi') || jobLoc.includes('pune') ||
-        jobLoc.includes('chennai') || jobLoc.includes('hyderabad') || jobLoc.includes('noida') ||
-        jobLoc.includes('gurgaon') || jobLoc.includes('kolkata')
-      )) return true;
-      return job.matchScore >= 50;
+      
+      if (userLoc && jobLoc.includes(userLoc)) return true;
+      
+      // Keep results that are definitely in the same detected country
+      const userCountry = (profile!.country_code || '').toLowerCase();
+      const countryCodes: Record<string, string[]> = {
+        'in': ['india', 'bangalore', 'mumbai', 'delhi', 'chennai', 'hyderabad', 'pune'],
+        'au': ['australia', 'sydney', 'melbourne', 'brisbane', 'perth'],
+        'us': ['usa', 'united states', 'new york', 'california', 'texas'],
+        'gb': ['uk', 'united kingdom', 'london'],
+        'ca': ['canada', 'toronto', 'vancouver']
+      };
+      const countryKeywords = countryCodes[userCountry] || [userCountry];
+      if (countryKeywords.some(k => jobLoc.includes(k))) return true;
+
+      // International fallback
+      return job.matchScore >= 40;
     });
 
-    // FALLBACK: If fewer than 5 good matches, show top 20 anyway but filter out 0 match scores
+    // FALLBACK: If fewer than 5 good matches, show top 40 anyway but filter out near-zero match scores
     const finalJobs = goodMatches.length >= 5
-      ? goodMatches.slice(0, 50)
-      : sorted.filter(job => job.matchScore >= 10).slice(0, 20);
+      ? goodMatches.slice(0, 60)
+      : sorted.filter(job => job.matchScore >= 5).slice(0, 40);
 
     const usingFallback = goodMatches.length < 5;
     console.log(`[Search] Good matches: ${goodMatches.length} | Using fallback: ${usingFallback} | Returning: ${finalJobs.length} (top: ${finalJobs[0]?.matchScore || 0}%)`);
